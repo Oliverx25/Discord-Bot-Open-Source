@@ -7,16 +7,15 @@ import type {
   DiscordAuditTargetKind,
   DiscordAuditTone,
 } from "@adobos/shared";
+import { AuditLogEvent } from "discord.js";
 import {
-  AuditLogEvent,
-  type Client,
-  DiscordAPIError,
-  type Guild,
-  type GuildAuditLogsEntry,
-  type User,
-} from "discord.js";
+  type AuditLogChange,
+  type AuditLogEntryData,
+  type AuditLogUserRef,
+  type BotGateway,
+  BotGatewayError,
+} from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
-import { resolveMembersBatch, resolveUserPreview } from "#lib/discordMember.js";
 import { consolidateAuditLogs } from "./consolidateAuditLogs.js";
 import { ModerationError } from "./discord.js";
 
@@ -356,30 +355,15 @@ const CHANGE_KEY_LABELS: Record<string, string> = {
   $remove: "Roles removed",
 };
 
-function resolveGuild(bot: Client, guildId?: string): Guild {
-  if (!bot.isReady()) {
-    throw new ModerationError(
-      "The Discord bot is not connected.",
-      503,
-      "BOT_NOT_READY",
-    );
-  }
-
-  const id = (guildId ?? "").trim();
-  if (!id) {
-    throw new ModerationError("Missing guildId.", 400, "MISSING_GUILD_ID");
-  }
-
-  const guild = bot.guilds.cache.get(id);
-  if (!guild) {
-    throw new ModerationError(
-      "The bot is not in that server.",
-      404,
-      "GUILD_NOT_FOUND",
-    );
-  }
-
-  return guild;
+/** Contexto resuelto para mapear una página de audit log a la respuesta del panel. */
+interface AuditMapContext {
+  guildId: string;
+  guildName: string;
+  users: Map<string, AuditLogUserRef>;
+  /** channelId → nombre. */
+  channels: Map<string, string>;
+  /** roleId → { nombre, color hex }. */
+  roles: Map<string, { name: string; color: string }>;
 }
 
 function stringifyValue(value: unknown): string {
@@ -411,13 +395,12 @@ function stringifyValue(value: unknown): string {
   }
 }
 
-function flattenChanges(entry: GuildAuditLogsEntry): DiscordAuditChangeItem[] {
-  const changes = entry.changes ?? [];
+function flattenChanges(changes: AuditLogChange[]): DiscordAuditChangeItem[] {
   return changes.map((change) => {
     const key = String(change.key);
     const label = CHANGE_KEY_LABELS[key] ?? key;
-    const oldValue = stringifyValue(change.old);
-    const newValue = stringifyValue(change.new);
+    const oldValue = stringifyValue(change.oldValue);
+    const newValue = stringifyValue(change.newValue);
 
     let summary: string;
     if (key === "$add") {
@@ -444,94 +427,30 @@ function flattenChanges(entry: GuildAuditLogsEntry): DiscordAuditChangeItem[] {
 }
 
 function resolveTarget(
-  guild: Guild,
-  entry: GuildAuditLogsEntry,
+  entry: AuditLogEntryData,
   meta: ActionMeta,
+  ctx: AuditMapContext,
 ): DiscordAuditTarget {
-  const targetId = entry.targetId ?? null;
-  const target = entry.target as
-    | {
-        id?: string;
-        username?: string;
-        globalName?: string | null;
-        name?: string;
-        type?: number;
-      }
-    | null
-    | undefined;
-
-  if (target) {
-    if (typeof target.username === "string") {
-      return {
-        id: target.id ?? targetId,
-        kind: "user",
-        label: `@${target.username}`,
-      };
-    }
-    if (typeof target.name === "string") {
-      if (meta.targetKind === "channel" || typeof target.type === "number") {
-        return {
-          id: target.id ?? targetId,
-          kind: "channel",
-          label: `#${target.name}`,
-        };
-      }
-      if (meta.targetKind === "role") {
-        return {
-          id: target.id ?? targetId,
-          kind: "role",
-          label: `@${target.name}`,
-        };
-      }
-      if (meta.targetKind === "guild") {
-        return {
-          id: target.id ?? targetId,
-          kind: "guild",
-          label: target.name,
-        };
-      }
-      return {
-        id: target.id ?? targetId,
-        kind: meta.targetKind,
-        label: target.name,
-      };
-    }
-  }
+  const targetId = entry.targetId;
 
   if (targetId) {
-    const member = guild.members.cache.get(targetId);
-    if (member) {
-      return {
-        id: targetId,
-        kind: "user",
-        label: `@${member.user.username}`,
-      };
+    const user = ctx.users.get(targetId);
+    if (user) {
+      return { id: targetId, kind: "user", label: `@${user.username}` };
     }
-    const channel = guild.channels.cache.get(targetId);
-    if (channel) {
-      return {
-        id: targetId,
-        kind: "channel",
-        label: `#${channel.name}`,
-      };
+    const channelName = ctx.channels.get(targetId);
+    if (channelName) {
+      return { id: targetId, kind: "channel", label: `#${channelName}` };
     }
-    const role = guild.roles.cache.get(targetId);
+    const role = ctx.roles.get(targetId);
     if (role) {
-      return {
-        id: targetId,
-        kind: "role",
-        label: `@${role.name}`,
-      };
+      return { id: targetId, kind: "role", label: `@${role.name}` };
     }
-    return {
-      id: targetId,
-      kind: meta.targetKind,
-      label: `ID ${targetId}`,
-    };
+    return { id: targetId, kind: meta.targetKind, label: `ID ${targetId}` };
   }
 
   if (meta.targetKind === "guild") {
-    return { id: guild.id, kind: "guild", label: guild.name };
+    return { id: ctx.guildId, kind: "guild", label: ctx.guildName };
   }
 
   return { id: null, kind: "unknown", label: "—" };
@@ -545,8 +464,8 @@ function actionKeyName(action: number): string {
 }
 
 function resolveAuditRoleRef(
-  guild: Guild,
   item: unknown,
+  roles: AuditMapContext["roles"],
 ): { id: string; name: string; color: string } | null {
   if (!item || typeof item !== "object") return null;
   const raw = item as { id?: unknown; name?: unknown };
@@ -561,30 +480,17 @@ function resolveAuditRoleRef(
     typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : null;
 
   if (id) {
-    const cached = guild.roles.cache.get(id);
-    if (cached) {
-      return {
-        id: cached.id,
-        name: cached.name,
-        color: cached.hexColor,
-      };
-    }
-    // Rol ya no está en el servidor (o caché fría).
-    return {
-      id,
-      name: fallbackName ?? "Deleted Role",
-      color: "#000000",
-    };
+    const known = roles.get(id);
+    if (known) return { id, name: known.name, color: known.color };
+    // Rol ya no está en el servidor.
+    return { id, name: fallbackName ?? "Deleted Role", color: "#000000" };
   }
 
   if (fallbackName) {
-    const byName = guild.roles.cache.find((role) => role.name === fallbackName);
-    if (byName) {
-      return {
-        id: byName.id,
-        name: byName.name,
-        color: byName.hexColor,
-      };
+    for (const [roleId, role] of roles) {
+      if (role.name === fallbackName) {
+        return { id: roleId, name: role.name, color: role.color };
+      }
     }
     return { id: fallbackName, name: fallbackName, color: "#000000" };
   }
@@ -593,18 +499,15 @@ function resolveAuditRoleRef(
 }
 
 /** Discord API: `$add`/`$remove` llevan el array de roles parciales en `new` (a veces en `old`). */
-function rolePartialListFromChange(change: {
-  new?: unknown;
-  old?: unknown;
-}): unknown[] {
-  if (Array.isArray(change.new)) return change.new;
-  if (Array.isArray(change.old)) return change.old;
+function rolePartialListFromChange(change: AuditLogChange): unknown[] {
+  if (Array.isArray(change.newValue)) return change.newValue;
+  if (Array.isArray(change.oldValue)) return change.oldValue;
   return [];
 }
 
 function extractRoleRefsFromRaw(
-  guild: Guild,
-  entry: GuildAuditLogsEntry,
+  entry: AuditLogEntryData,
+  roles: AuditMapContext["roles"],
 ): {
   added: Array<{ id: string; name: string; color: string }>;
   removed: Array<{ id: string; name: string; color: string }>;
@@ -614,11 +517,11 @@ function extractRoleRefsFromRaw(
   const seenAdd = new Set<string>();
   const seenRem = new Set<string>();
 
-  for (const change of entry.changes ?? []) {
+  for (const change of entry.changes) {
     const key = String(change.key);
     if (key === "$add") {
       for (const item of rolePartialListFromChange(change)) {
-        const ref = resolveAuditRoleRef(guild, item);
+        const ref = resolveAuditRoleRef(item, roles);
         if (!ref || seenAdd.has(ref.id)) continue;
         seenAdd.add(ref.id);
         added.push(ref);
@@ -626,7 +529,7 @@ function extractRoleRefsFromRaw(
     }
     if (key === "$remove") {
       for (const item of rolePartialListFromChange(change)) {
-        const ref = resolveAuditRoleRef(guild, item);
+        const ref = resolveAuditRoleRef(item, roles);
         if (!ref || seenRem.has(ref.id)) continue;
         seenRem.add(ref.id);
         removed.push(ref);
@@ -637,52 +540,54 @@ function extractRoleRefsFromRaw(
   return { added, removed };
 }
 
-function mapEntry(guild: Guild, entry: GuildAuditLogsEntry): DiscordAuditEntry {
+function mapEntry(
+  entry: AuditLogEntryData,
+  ctx: AuditMapContext,
+): DiscordAuditEntry {
   const meta =
-    ACTION_META[entry.action as AuditLogEvent] ??
+    ACTION_META[entry.actionType as AuditLogEvent] ??
     ({
-      label: actionKeyName(entry.action),
+      label: actionKeyName(entry.actionType),
       category: "server" as const,
       tone: "neutral" as const,
       targetKind: "unknown" as const,
     } satisfies ActionMeta);
 
-  const changes = flattenChanges(entry);
+  const changes = flattenChanges(entry.changes);
   const reason = entry.reason?.trim() || null;
   const changesSummaryParts = [
     ...changes.map((item) => item.summary),
     reason ? `Reason: ${reason}` : null,
   ].filter(Boolean) as string[];
 
-  const executorUser = entry.executor as User | null;
-  const executorPreview = executorUser
-    ? resolveUserPreview(guild, executorUser, 64)
-    : null;
+  const executor = entry.executorId
+    ? ctx.users.get(entry.executorId)
+    : undefined;
   const mapped: DiscordAuditEntry = {
     id: entry.id,
-    createdAt: entry.createdAt.toISOString(),
-    action: entry.action,
-    actionKey: actionKeyName(entry.action),
+    createdAt: entry.createdAt,
+    action: entry.actionType,
+    actionKey: actionKeyName(entry.actionType),
     actionLabel: meta.label,
     category: meta.category,
     tone: meta.tone,
-    executor: executorPreview
+    executor: executor
       ? {
-          id: executorPreview.userId,
-          username: executorPreview.username,
-          displayName: executorPreview.displayName,
-          avatarUrl: executorPreview.avatarUrl,
+          id: executor.id,
+          username: executor.username,
+          displayName: executor.displayName,
+          avatarUrl: executor.avatarUrl,
         }
       : null,
-    target: resolveTarget(guild, entry, meta),
+    target: resolveTarget(entry, meta, ctx),
     reason,
     changes,
     changesSummary:
       changesSummaryParts.length > 0 ? changesSummaryParts.join(" · ") : "—",
   };
 
-  if (entry.action === AuditLogEvent.MemberRoleUpdate) {
-    const roles = extractRoleRefsFromRaw(guild, entry);
+  if (entry.actionType === AuditLogEvent.MemberRoleUpdate) {
+    const roles = extractRoleRefsFromRaw(entry, ctx.roles);
     mapped.addedRoles = roles.added;
     mapped.removedRoles = roles.removed;
     if (roles.added.length > 0 && roles.removed.length === 0) {
@@ -704,7 +609,7 @@ function mapEntry(guild: Guild, entry: GuildAuditLogsEntry): DiscordAuditEntry {
 }
 
 export async function fetchDiscordAuditLog(
-  bot: Client,
+  gateway: BotGateway,
   options: {
     guildId?: string;
     limit?: number;
@@ -712,66 +617,71 @@ export async function fetchDiscordAuditLog(
     actionType?: number;
   } = {},
 ): Promise<DiscordAuditLogResponse> {
-  const guild = resolveGuild(bot, options.guildId);
-  const safeLimit = Math.max(
-    1,
-    Math.min(100, Math.round(options.limit ?? 100)),
-  );
-
-  const fetchOptions: {
-    limit: number;
-    user?: string;
-    type?: AuditLogEvent;
-  } = { limit: safeLimit };
-
-  if (options.userId?.trim()) {
-    const userId = options.userId.trim();
-    if (!/^\d{17,20}$/.test(userId)) {
-      throw new ModerationError("Invalid userId.", 400, "INVALID_IDS");
-    }
-    fetchOptions.user = userId;
+  if (!gateway.isReady()) {
+    throw new ModerationError(
+      "The Discord bot is not connected.",
+      503,
+      "BOT_NOT_READY",
+    );
   }
-
-  if (
+  const guildId = (options.guildId ?? "").trim();
+  if (!guildId) {
+    throw new ModerationError("Missing guildId.", 400, "MISSING_GUILD_ID");
+  }
+  const userId = options.userId?.trim() || undefined;
+  if (userId && !/^\d{17,20}$/.test(userId)) {
+    throw new ModerationError("Invalid userId.", 400, "INVALID_IDS");
+  }
+  const actionType =
     options.actionType != null &&
     Number.isFinite(options.actionType) &&
     options.actionType >= 1
-  ) {
-    fetchOptions.type = options.actionType as AuditLogEvent;
-  }
+      ? options.actionType
+      : undefined;
 
   try {
-    const logs = await guild.fetchAuditLogs(fetchOptions);
-    const executorIds = [
-      ...new Set(
-        [...logs.entries.values()]
-          .map((entry) => entry.executorId ?? entry.executor?.id)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ];
-    if (executorIds.length > 0) {
-      await resolveMembersBatch(guild, bot, executorIds, 64);
+    const [guild, page, channels, roles] = await Promise.all([
+      gateway.getGuild(guildId),
+      gateway.fetchAuditLog(guildId, {
+        limit: options.limit,
+        userId,
+        actionType,
+      }),
+      gateway.listChannels(guildId),
+      gateway.listRoles(guildId),
+    ]);
+    if (!guild) {
+      throw new ModerationError(
+        "The bot is not in that server.",
+        404,
+        "GUILD_NOT_FOUND",
+      );
     }
-    const rawEntries = [...logs.entries.values()].map((entry) =>
-      mapEntry(guild, entry),
-    );
-    const entries = consolidateAuditLogs(rawEntries);
+
+    const ctx: AuditMapContext = {
+      guildId,
+      guildName: guild.name,
+      users: new Map(page.users.map((user) => [user.id, user])),
+      channels: new Map(channels.map((channel) => [channel.id, channel.name])),
+      roles: new Map(
+        roles.map((role) => [
+          role.id,
+          { name: role.name, color: role.hexColor },
+        ]),
+      ),
+    };
+
+    const rawEntries = page.entries.map((entry) => mapEntry(entry, ctx));
 
     return {
-      entries,
+      entries: consolidateAuditLogs(rawEntries),
       fetchedAt: new Date().toISOString(),
     };
   } catch (error: unknown) {
-    if (error instanceof DiscordAPIError) {
-      if (error.code === 50013 || error.status === 403) {
-        throw new ModerationError(
-          "Missing the «View Audit Log» permission. Grant View Audit Log to the bot.",
-          403,
-          "MISSING_PERMISSIONS",
-        );
-      }
-    }
     if (error instanceof ModerationError) throw error;
+    if (error instanceof BotGatewayError) {
+      throw new ModerationError(error.message, error.status, error.code);
+    }
     logger.error({ err: error }, "Failed to fetch audit log:");
     throw new ModerationError(
       "Couldn't fetch the Discord audit log.",

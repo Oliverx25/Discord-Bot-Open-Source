@@ -1,4 +1,3 @@
-import type { Client } from "discord.js";
 import { Router } from "express";
 import { z } from "zod";
 import type { BotGateway } from "#core/discord/botGateway.js";
@@ -24,7 +23,7 @@ import {
 
 const snowflakeIdParams = z.object({ id: snowflake });
 
-/** Rutas de solo lectura — vía `BotGateway` (funcionan en el rol `api`). */
+/** Rutas de moderación del panel — todas vía `BotGateway` (rol `api` incluido). */
 export function moderationReadRoutes(gateway: BotGateway): Router {
   const router = Router();
 
@@ -100,21 +99,11 @@ export function moderationReadRoutes(gateway: BotGateway): Router {
     }),
   );
 
-  return router;
-}
-
-/**
- * Ruta que todavía necesita `Client`: `/discord-audit` (mapEntry resuelve
- * nombres de entidades del guild desde la caché). Se porta luego.
- */
-export function moderationRoutes(bot: Client): Router {
-  const router = Router();
-
   router.get(
     "/discord-audit",
     defineRoute({ query: discordAuditQuerySchema }, async (req, res, valid) => {
       res.json(
-        await fetchDiscordAuditLog(bot, {
+        await fetchDiscordAuditLog(gateway, {
           guildId: guildIdOf(req),
           limit: valid.query.limit ?? 100,
           userId: valid.query.userId,

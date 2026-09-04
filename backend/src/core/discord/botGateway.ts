@@ -157,6 +157,41 @@ export interface ChannelOverwrite {
   deny: string;
 }
 
+/** Un cambio dentro de una entrada de audit log (valores crudos de Discord). */
+export interface AuditLogChange {
+  key: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+}
+
+/** Usuario referenciado por el audit log (ejecutor u objetivo). */
+export interface AuditLogUserRef {
+  id: string;
+  username: string;
+  globalName: string | null;
+  displayName: string;
+  avatarUrl: string;
+}
+
+/** Una entrada de audit log — datos planos, sin resolver nombres de entidades. */
+export interface AuditLogEntryData {
+  id: string;
+  /** `AuditLogEvent` numérico. */
+  actionType: number;
+  executorId: string | null;
+  targetId: string | null;
+  reason: string | null;
+  /** ISO8601 (derivado del snowflake). */
+  createdAt: string;
+  changes: AuditLogChange[];
+}
+
+export interface AuditLogPage {
+  entries: AuditLogEntryData[];
+  /** Usuarios referenciados en la página (para resolver ejecutor/objetivo). */
+  users: AuditLogUserRef[];
+}
+
 /** Jerarquía + permisos del bot sobre un miembro concreto (para `/action`). */
 export interface MemberActionability {
   /** El objetivo es el propio bot. */
@@ -456,6 +491,14 @@ export interface BotGateway {
       reason?: string;
     },
   ): Promise<string | null>;
+  /**
+   * Audit log de Discord (crudo). Lanza `BotGatewayError` 403 `MISSING_PERMISSIONS`
+   * si el bot no tiene «View Audit Log».
+   */
+  fetchAuditLog(
+    guildId: string,
+    opts?: { limit?: number; userId?: string; actionType?: number },
+  ): Promise<AuditLogPage>;
 
   // — Overwrites de canal (anti-raid lockdown, tickets) —
   /** Overwrites de un canal del guild. `null` si el canal no existe / no es del guild. */
