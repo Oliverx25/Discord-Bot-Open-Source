@@ -172,20 +172,21 @@ El punto 0.7 va **antes** de Stripe: primero la capa de permisos de features, lu
 
 ## Runtime (mismo binario, distinto `ADOBO_ROLE`)
 
-Un solo binario; `ADOBO_ROLE` decide qué corre. Default `all` = Express + gateway + crons en 1 proceso (dev / nodo único, `docker-compose.prod.yml`).
+Un solo binario; `ADOBO_ROLE` decide qué corre — **obligatorio, sin default**, solo acepta
+`api | gateway | worker`. No hay modo de nodo único: `docker-compose.yml` (dev) y
+`docker-compose.prod.yml` (prod) despliegan siempre los tres roles sobre Postgres + Redis.
 
-| rol | HTTP | Client discord.js | jobs de cola | `REDIS_URL` |
+| rol | HTTP | Client discord.js | jobs de cola | `REDIS_URL` / `DISCORD_TOKEN` |
 |---|---|---|---|---|
-| `all` | ✅ panel+API | ✅ login | ✅ (o inline sin Redis) | opcional |
-| `api` | ✅ panel+API | ❌ — REST vía `RestGateway` (+ caché read-through Redis) | ❌ | **obligatorio** |
-| `gateway` | health only | ✅ login · atiende eventos/interacciones · calienta la caché Redis | ❌ | **obligatorio** |
-| `worker` | health only | ❌ — REST vía `RestGateway` | ✅ consumidor BullMQ | **obligatorio** |
+| `api` | ✅ panel+API | ❌ — REST vía `RestGateway` (+ caché read-through Redis) | ❌ | **obligatorios** |
+| `gateway` | health only | ✅ login · atiende eventos/interacciones · calienta la caché Redis | ❌ | **obligatorios** |
+| `worker` | health only | ❌ — REST vía `RestGateway` | ✅ consumidor BullMQ | **obligatorios** |
 
-Topología partida: **`docker-compose.split.yml`** (`postgres` + `redis` + `migrate` one-shot + `gateway` + `worker` + `backend`=api escalable + `frontend`). Solo hace falta pasados ~2.5k guilds o si querés escalar el panel aparte.
+Topología split: **`docker-compose.prod.yml`** (`postgres` + `redis` + `migrate` one-shot + `gateway` + `worker` + `backend`=api escalable + `frontend`). Es la única topología de producción; el rol `api` escala aparte del `gateway` desde el día uno.
 
 | Disparador | Qué hacer | Estado |
 |---|---|---|
-| El panel necesita N réplicas HTTP | `docker compose -f docker-compose.split.yml up -d --scale backend=N` | **Hecho** — el rol `api` no tiene Client; todo por `BotGateway` |
+| El panel necesita N réplicas HTTP | `docker compose -f docker-compose.prod.yml up -d --scale backend=N` | **Hecho** — el rol `api` no tiene Client; todo por `BotGateway` |
 | 2+ APIs y rate limit / XP / blackjack cruzados | `REDIS_URL` → `RedisStore` (L1+L2+pub/sub) + store de `express-rate-limit` | **Hecho (P2.16/P2.20)** |
 | Cron/schedulers como cuello de botella del líder único | `core/queue/` (BullMQ) + `jobs.ts` productor/consumidor con `FOR UPDATE SKIP LOCKED` (`claimed_until`) | **Hecho (P2.17)** |
 | Una query lenta retiene una conexión | `statement_timeout=15s`, `idle_in_transaction_session_timeout=30s`, pool por rol | **Hecho (P2.21)** |
@@ -197,7 +198,7 @@ Topología partida: **`docker-compose.split.yml`** (`postgres` + `redis` + `migr
 - **Interno (1 proceso):** `SHARD_COUNT=N` → `Client({ shards: [0..N-1], shardCount: N })`.
 - **Multi-proceso:** cada contenedor `gateway` recibe `SHARDS` (rango `0-3` o lista `0,2,4`) + `SHARD_TOTAL`. discord.js entrega a cada proceso solo los eventos/interacciones de sus shards — **sin routing entre procesos**. Los jobs que produzcan llegan al `worker` único por BullMQ.
 - El rol `api` no abre gateway: lee de Redis/Postgres y, en miss, REST de Discord (`RestGateway`, `core/discord/discordCache.ts`); el `gateway` mantiene esas claves calientes (`core/discord/cacheWarmer.ts`).
-- La frontera es la **interfaz `BotGateway`** (`core/discord/botGateway.ts`): `LocalClientGateway` (Client vivo, roles `all`/`gateway`) y `RestGateway` (REST + caché, roles `api`/`worker`). Ninguna ruta HTTP ni scheduler recibe ya un `Client`.
+- La frontera es la **interfaz `BotGateway`** (`core/discord/botGateway.ts`): `LocalClientGateway` (Client vivo, solo rol `gateway`) y `RestGateway` (REST + caché, roles `api`/`worker`). Ninguna ruta HTTP ni scheduler recibe ya un `Client`.
 
 Ejemplo — 16 shards en 2 contenedores:
 

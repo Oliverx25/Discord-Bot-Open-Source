@@ -4,6 +4,10 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # Smoke test completo de ambas topologías (nightly, no bloquea PRs).
+    - cron: "0 7 * * *"
 
 jobs:
   check:
@@ -23,3 +27,67 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # Fase 3 (PLAN_FINAL_2026.md): dos Compose, tres roles, sin ADOBO_ROLE=all.
+      - run: node scripts/check-runtime-topology.mjs
+      - name: docker compose config (dev)
+        run: docker compose config --quiet
+      - name: docker compose config (prod)
+        run: docker compose -f docker-compose.prod.yml config --quiet
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+      # Solo compila las imágenes (sin arrancarlas ni secretos de Discord).
+      # El smoke test completo (up + login real) vive en el job `smoke-full`.
+      - name: build dev image
+        run: docker compose build install
+      - name: build prod image
+        run: docker compose -f docker-compose.prod.yml build gateway
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+
+  # Smoke test completo con boot real de gateway/worker/backend (login a
+  # Discord incluido). Requiere secretos reales -> solo en main, manual o
+  # nightly, nunca en PRs de forks ni en cada push a develop.
+  smoke-full:
+    # Requiere los secretos CI_DISCORD_TOKEN / CI_DISCORD_CLIENT_ID /
+    # CI_DISCORD_CLIENT_SECRET / CI_SESSION_SECRET / CI_POSTGRES_PASSWORD en
+    # el repo (Settings → Secrets → Actions) con un bot de prueba dedicado.
+    # Sin ellos el job se omite en vez de fallar en rojo cada noche.
+    if: ${{ secrets.CI_DISCORD_TOKEN != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Los servicios de docker-compose.prod.yml leen DISCORD_*/SESSION_SECRET/
+      # PUBLIC_APP_URL/CORS_ORIGIN por `env_file: [.env]` dentro del contenedor,
+      # no por `environment:` del job — sin este archivo real no llegan.
+      - name: write .env from secrets
+        run: |
+          cat > .env <<ENVEOF
+          SESSION_SECRET=${{ secrets.CI_SESSION_SECRET }}
+          PUBLIC_APP_URL=http://localhost:3000
+          CORS_ORIGIN=http://localhost:3000
+          DISCORD_CLIENT_ID=${{ secrets.CI_DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET=${{ secrets.CI_DISCORD_CLIENT_SECRET }}
+          DISCORD_TOKEN=${{ secrets.CI_DISCORD_TOKEN }}
+          ENVEOF
+      - name: build prod images
+        run: docker compose -f docker-compose.prod.yml build
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+      - name: up prod stack
+        run: docker compose -f docker-compose.prod.yml up -d
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+      - name: wait for health
+        run: |
+          for _ in $(seq 1 30); do
+            curl --fail http://localhost:3000/api/health && exit 0
+            sleep 2
+          done
+          echo "backend nunca respondió healthy" >&2
+          exit 1
+      - name: logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs --no-color
+      - name: down
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v

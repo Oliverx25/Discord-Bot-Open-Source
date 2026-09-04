@@ -14,12 +14,41 @@ Las comunidades de Discord actuales dependen de múltiples bots de terceros para
 
 ### 2. Arquitectura del Sistema e Infraestructura
 
-El sistema se orquesta con Docker Compose en **tres servicios**: PostgreSQL, backend (Discord + API) y frontend (panel).
+El sistema se orquesta con Docker Compose en topología **split**: el mismo binario backend corre
+como tres procesos independientes (`gateway`, `worker`, `api`) sobre PostgreSQL + Redis, más el
+frontend (panel). No existe un modo de nodo único: `ADOBO_ROLE` es obligatorio y solo acepta
+`api | gateway | worker`.
 
-* **Entorno de Desarrollo:** Computadora local (OrbStack / Docker Desktop). Astro en `:4321` hace proxy same-origin a la API.
-* **Entorno de Producción:** TrueNAS SCALE u otro host. nginx publica el panel y proxifica `/api`, `/auth` y `/uploads`; Postgres y el backend no se exponen al host.
+* **Entorno de Desarrollo:** Computadora local (OrbStack / Docker Desktop). Astro en `:4321` hace proxy same-origin a la API (servicio `backend`, rol `api`).
+* **Entorno de Producción:** TrueNAS SCALE u otro host. nginx publica el panel y proxifica `/api`, `/auth` y `/uploads`; Postgres, Redis y los procesos backend no se exponen al host.
 * **Estrategia de Compilación:** `docker buildx` para canvas nativo en ARM64 (dev) y AMD64 (prod).
-* **Orquestación:** `docker-compose.yml` (dev), `docker-compose.prod.yml` (nodo único `ADOBO_ROLE=all`) y `docker-compose.split.yml` (topología partida gateway / api / worker — ver ROADMAP § Runtime).
+* **Orquestación:** dos únicos Compose — `docker-compose.yml` (dev, hot reload) y `docker-compose.prod.yml` (prod) — ambos con los mismos tres roles de proceso backend.
+
+#### Comandos
+
+```bash
+# Desarrollo (hot reload, puerto 4321 = panel, 3000 = API)
+docker compose up --build
+
+# Producción (build una sola vez; nginx publica FRONTEND_PORT, default 3000)
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Escalar réplicas de la API en producción (el rol `api` no tiene Client Discord)
+docker compose -f docker-compose.prod.yml up -d --scale backend=3
+```
+
+#### Roles del proceso backend
+
+| rol | HTTP | Client discord.js | jobs de cola (BullMQ) | `REDIS_URL` / `DISCORD_TOKEN` |
+|---|---|---|---|---|
+| `api` | panel + API completa | ❌ — REST vía `RestGateway` | ❌ | obligatorios |
+| `gateway` | solo health | ✅ login · eventos/interacciones · calienta caché Redis | ❌ | obligatorios |
+| `worker` | solo health | ❌ — REST vía `RestGateway` | ✅ consumidor BullMQ | obligatorios |
+
+**Sharding:** un solo `gateway` sirve hasta ~2.5k guilds (`SHARD_COUNT=auto` interno). Para más,
+desplegar N contenedores `gateway` con `SHARDS` (rango disjunto, ej. `0-7` / `8-15`) y el mismo
+`SHARD_TOTAL` en todos — nunca solapar rangos ni reusar el mismo `DISCORD_TOKEN` en dos gateways
+con el mismo shard.
 
 ---
 
@@ -103,10 +132,9 @@ adobos-bot/
 adobos-bot/
 ├── .env                        # Variables globales (Discord Token, Puertos)
 ├── .gitignore
-├── Dockerfile                  # Backend de producción (API + bot)
-├── docker-compose.yml          # Dev: postgres + backend + frontend
-├── docker-compose.prod.yml     # Prod nodo único (ADOBO_ROLE=all)
-├── docker-compose.split.yml    # Prod partido: gateway / api / worker sobre Redis
+├── Dockerfile                  # Imagen backend (misma imagen para gateway/worker/api)
+├── docker-compose.yml          # Dev: postgres + redis + gateway/worker/backend + frontend
+├── docker-compose.prod.yml     # Prod: mismos roles split, sin hot reload
 ├── docker/                     # Dockerfile.dev, Dockerfile.frontend, nginx.conf
 ├── package.json                # Define los workspaces ("backend" y "frontend")
 │
