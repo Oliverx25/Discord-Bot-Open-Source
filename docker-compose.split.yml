@@ -2,8 +2,18 @@
 # independientes sobre Redis + BullMQ + Postgres. El binario es el mismo
 # (imagen `adobos-backend:latest`); `ADOBO_ROLE` decide qué corre.
 #
-#   docker compose -f docker-compose.split.yml up -d --build
+#   docker compose -f docker-compose.split.yml build          # construye 1 vez
+#   docker compose -f docker-compose.split.yml up -d
 #   docker compose -f docker-compose.split.yml up -d --scale backend=3   # N api
+#
+# IMPORTANTE: solo `gateway` declara `build:` — las otras 3 (`migrate`, `worker`,
+# `backend`) referencian la misma imagen `adobos-backend:latest` YA construida.
+# Si las 4 declararan `build:` a la vez, Compose (Bake) las construiría en
+# paralelo desde el mismo Dockerfile y los stages intermedios se pisan entre sí
+# (visto en la práctica: "COPY --from=shared-build ...: not found" / builds
+# canceladas a mitad). Si corrés `up --build`, incluí siempre `gateway` en la
+# lista de servicios (o mejor, `build` sin filtro) para que la imagen exista
+# antes de que arranquen los demás.
 #
 # vs `docker-compose.prod.yml` (nodo único `ADOBO_ROLE=all`): esta variante
 # solo hace falta pasados ~2.5k guilds o si querés escalar el panel aparte.
@@ -11,12 +21,6 @@
 # `.env` (junto a este fichero) debe traer al menos:
 #   POSTGRES_PASSWORD, SESSION_SECRET, PUBLIC_APP_URL, CORS_ORIGIN,
 #   DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN
-
-x-backend-image: &backend-image
-  build:
-    context: .
-    dockerfile: Dockerfile
-  image: adobos-backend:latest
 
 x-backend-env: &backend-env
   NODE_ENV: production
@@ -72,9 +76,10 @@ services:
     networks: [adobos]
 
   # One-shot: aplica migraciones Drizzle y sale. Los servicios de app esperan
-  # a que termine (evita que N réplicas migren a la vez).
+  # a que termine (evita que N réplicas migren a la vez). Sin `build:` — usa
+  # la imagen que construye `gateway`.
   migrate:
-    <<: *backend-image
+    image: adobos-backend:latest
     restart: "no"
     command: ["node", "dist/db/migrate.js"]
     env_file: [.env]
@@ -86,8 +91,12 @@ services:
 
   # Discord gateway. Un proceso (o N con SHARDS/SHARD_TOTAL disjuntos —
   # ver `createClient.ts`). Único con Client vivo; calienta la caché de Redis.
+  # Única build canónica de `adobos-backend:latest` — ver nota arriba.
   gateway:
-    <<: *backend-image
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: adobos-backend:latest
     restart: unless-stopped
     env_file: [.env]
     environment:
@@ -108,8 +117,9 @@ services:
     networks: [adobos]
 
   # Worker: consumidores de cola (envíos, borrados, polling). Sin Client — REST.
+  # Sin `build:` — usa la imagen que construye `gateway`.
   worker:
-    <<: *backend-image
+    image: adobos-backend:latest
     restart: unless-stopped
     env_file: [.env]
     environment:
@@ -128,8 +138,9 @@ services:
 
   # Panel + REST. Sin Client — lee de Redis/Postgres; en miss, REST de Discord.
   # Escalable: `--scale backend=N` (nginx round-robin por DNS de Compose).
+  # Sin `build:` — usa la imagen que construye `gateway`.
   backend:
-    <<: *backend-image
+    image: adobos-backend:latest
     restart: unless-stopped
     env_file: [.env]
     environment:
@@ -146,6 +157,9 @@ services:
     stop_grace_period: 20s
     expose:
       - "3000"
+    # Para probar el split sin `frontend`, descomentá y `curl localhost:3000/api/health`.
+    # ports:
+    #   - "3000:3000"
     networks: [adobos]
 
   frontend:
