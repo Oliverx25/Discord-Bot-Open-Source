@@ -1,5 +1,5 @@
-import type { Client } from "discord.js";
 import { Router } from "express";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { defineRoute } from "#core/http/validate.js";
 import { getAutoJoinRoles, saveAutoJoinRoles } from "../autoJoin.js";
@@ -10,7 +10,7 @@ import {
 } from "./schema.js";
 
 /** Rutas unificadas: /api/roles/* */
-export function rolesRoutes(bot: Client): Router {
+export function rolesRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   /** GET /api/roles/auto — config de roles al unirse */
@@ -27,7 +27,7 @@ export function rolesRoutes(bot: Client): Router {
     defineRoute({ body: saveAutoJoinRolesSchema }, async (req, res, valid) => {
       const result = await saveAutoJoinRoles(
         { ...valid.body, guildId: guildIdOf(req) },
-        bot,
+        gateway,
       );
       res.status(200).json(result);
     }),
@@ -39,7 +39,7 @@ export function rolesRoutes(bot: Client): Router {
     defineRoute(
       { body: createAutoRoleLegacySchema },
       async (req, res, valid) => {
-        const result = await createAutoRoleSetup(bot, {
+        const result = await createAutoRoleSetup(gateway, {
           ...valid.body,
           guildId: guildIdOf(req),
         });

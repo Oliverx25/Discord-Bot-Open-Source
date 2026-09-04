@@ -1,4 +1,3 @@
-import type { Client } from "discord.js";
 import { Router } from "express";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { defineRoute } from "#core/http/validate.js";
@@ -8,7 +7,7 @@ import {
 } from "../domain/auto-delete.js";
 import { updateAutoDeleteConfigSchema } from "./schema.js";
 
-export function autoDeleteRoutes(_bot: Client): Router {
+export function autoDeleteRoutes(): Router {
   const router = Router();
 
   /** GET /api/auto-delete/config */

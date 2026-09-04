@@ -5,6 +5,7 @@ import {
   canAssignAutorole,
 } from "@adobos/shared";
 import type { Client, Guild, Role } from "discord.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { AutoRoleError } from "./errors.js";
 
 function snapshot(role: Role): AutoroleRoleSnapshot {
@@ -103,6 +104,45 @@ export async function assertAssignableRoleIds(
   const unique = [...new Set(roleIds.filter(Boolean))];
   for (const id of unique) {
     await assertAssignableRole(guild, id);
+  }
+}
+
+/**
+ * Igual que `assertAssignableRoleIds` pero a través del puerto `BotGateway`
+ * (rol `api`, sin gateway vivo). Usa `getRoleAdminContext` para la jerarquía.
+ */
+export async function assertAssignableRoleIdsViaGateway(
+  gateway: BotGateway,
+  guildId: string,
+  roleIds: string[],
+): Promise<void> {
+  if (!gateway.isReady()) {
+    throw new AutoRoleError("The bot is not connected.", 503, "BOT_NOT_READY");
+  }
+  const ctx = await gateway.getRoleAdminContext(guildId);
+  if (!ctx) {
+    throw new AutoRoleError(
+      "The bot is not in that server.",
+      404,
+      "GUILD_NOT_FOUND",
+    );
+  }
+  const byId = new Map(ctx.roles.map((role) => [role.id, role]));
+  const unique = [...new Set(roleIds.filter(Boolean))];
+  for (const id of unique) {
+    const role = byId.get(id);
+    const snap: AutoroleRoleSnapshot | null = role
+      ? { id: role.id, managed: role.managed, position: role.position }
+      : null;
+    const reason = autoroleAssignDenyReason(
+      snap,
+      guildId,
+      ctx.bot.highestPosition,
+    );
+    if (reason) {
+      const info = messageForReason(reason, role?.name);
+      throw new AutoRoleError(info.message, info.status, info.code);
+    }
   }
 }
 

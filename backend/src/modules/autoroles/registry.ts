@@ -12,42 +12,33 @@ import type {
   UpdateAutoroleMappingRequest,
   UpdateAutoroleMappingResponse,
 } from "@adobos/shared";
-import {
-  AUTOROLE_BUTTONS_MAX,
-  autoroleMappingLimit,
-  isAutoroleSendChannelType,
-} from "@adobos/shared";
+import { AUTOROLE_BUTTONS_MAX, autoroleMappingLimit } from "@adobos/shared";
 import {
   ActionRowBuilder,
-  type AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
-  type Client,
-  DiscordAPIError,
-  type EmbedBuilder,
-  type Message,
-  type SendableChannels,
   StringSelectMenuBuilder,
-  type TextChannel,
 } from "discord.js";
 import { and, desc, eq } from "drizzle-orm";
-import {
-  fetchChannelInGuild,
-  rethrowAsChannelError,
-} from "#core/http/channelScope.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
+import { BotGatewayError } from "#core/discord/botGateway.js";
+import { attachmentsToOutgoingFiles } from "#core/discord/outgoing.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
 import {
   deleteReactionRolesForMessage,
-  emojiKeyToResolvable,
   upsertReactionRoles,
 } from "#db/reaction-roles.js";
 import { autorolesRegistry, guildSettings } from "#db/schema.js";
 import { getEmbedTemplate } from "#modules/messages/templates/service.js";
 import { buildEmbedFromPayload } from "#modules/moderation/dm.js";
-import { assertAssignableRoleIds } from "./assignable.js";
+import { assertAssignableRoleIdsViaGateway } from "./assignable.js";
 import { AutoRoleError } from "./errors.js";
-import { createAutoRoleSetup, normalizeEmojiKey } from "./http/controller.js";
+import {
+  createAutoRoleSetup,
+  normalizeEmojiKey,
+  placeReactionsViaGateway,
+} from "./http/controller.js";
 
 const BUTTON_STYLE_MAP: Record<
   NonNullable<AutoroleMappingItem["style"]>,
@@ -94,7 +85,10 @@ async function ensureGuildRow(guildId: string): Promise<void> {
 }
 
 function isUnknownMessage(error: unknown): boolean {
-  return error instanceof DiscordAPIError && error.code === 10008;
+  return (
+    error instanceof BotGatewayError &&
+    (error.code === "MESSAGE_NOT_FOUND" || error.code === "CHANNEL_NOT_FOUND")
+  );
 }
 
 function parseMappings(raw: string): AutoroleMappingItem[] {
@@ -265,32 +259,13 @@ async function upsertRegistry(input: {
   return inserted.id;
 }
 
-async function resolveChannel(
-  bot: Client,
-  channelId: string,
-  expectedGuildId: string,
-): Promise<SendableChannels & TextChannel> {
-  let channel: Awaited<ReturnType<typeof fetchChannelInGuild>>;
-  try {
-    channel = await fetchChannelInGuild(bot, channelId, expectedGuildId);
-  } catch (error: unknown) {
-    rethrowAsChannelError(
-      error,
-      (message, status, code) => new AutoRoleError(message, status, code),
-    );
-  }
-  if (
-    !isAutoroleSendChannelType(channel.type) ||
-    !channel.isTextBased() ||
-    !("send" in channel)
-  ) {
-    throw new AutoRoleError(
-      "The channel does not support text messages.",
-      400,
-      "CHANNEL_NOT_TEXT",
-    );
-  }
-  return channel as SendableChannels & TextChannel;
+function componentsToJSON(
+  rows: (
+    | ActionRowBuilder<ButtonBuilder>
+    | ActionRowBuilder<StringSelectMenuBuilder>
+  )[],
+): unknown[] {
+  return rows.map((row) => row.toJSON());
 }
 
 function buildButtonComponents(mappings: AutoroleMappingItem[]) {
@@ -361,12 +336,16 @@ function buildSelectComponents(mappings: AutoroleMappingItem[]) {
 }
 
 async function applyComponentsOrReactions(
-  message: Message,
-  type: AutoroleRegistryType,
-  mappings: AutoroleMappingItem[],
+  gateway: BotGateway,
   guildId: string,
   channelId: string,
+  messageId: string,
+  type: AutoroleRegistryType,
+  mappings: AutoroleMappingItem[],
 ): Promise<void> {
+  // Confirma que el mensaje sigue existiendo (lanza MESSAGE_NOT_FOUND si no).
+  await gateway.fetchMessage(guildId, channelId, messageId);
+
   if (type === "REACTIONS") {
     const reactionMappings = mappings
       .filter((m) => m.emojiKey)
@@ -381,34 +360,39 @@ async function applyComponentsOrReactions(
         "EMPTY_EMOJI",
       );
     }
-    await deleteReactionRolesForMessage(message.id);
+    await deleteReactionRolesForMessage(messageId);
     await upsertReactionRoles(
       reactionMappings.map((m) => ({
         guildId,
         channelId,
-        messageId: message.id,
+        messageId,
         emojiKey: normalizeEmojiKey(m.emojiKey),
         roleId: m.roleId,
       })),
     );
-    for (const mapping of reactionMappings) {
-      const emoji = emojiKeyToResolvable(normalizeEmojiKey(mapping.emojiKey));
-      if (!emoji) continue;
-      await message.react(emoji).catch(() => undefined);
-    }
-    await message.edit({ components: [] }).catch(() => undefined);
+    await placeReactionsViaGateway(
+      gateway,
+      guildId,
+      channelId,
+      messageId,
+      reactionMappings.map((m) => m.emojiKey),
+    );
+    await gateway
+      .editMessage(guildId, channelId, messageId, { components: [] })
+      .catch(() => undefined);
     return;
   }
 
-  const components =
+  const components = componentsToJSON(
     type === "SELECT"
       ? buildSelectComponents(mappings)
-      : buildButtonComponents(mappings);
-  await message.edit({ components });
+      : buildButtonComponents(mappings),
+  );
+  await gateway.editMessage(guildId, channelId, messageId, { components });
 }
 
 export async function listActiveAutoroles(
-  bot: Client,
+  gateway: BotGateway,
   guildIdRaw?: string,
 ): Promise<ListActiveAutorolesResponse> {
   const guildId = resolveGuildId(guildIdRaw);
@@ -418,29 +402,28 @@ export async function listActiveAutoroles(
     .where(eq(autorolesRegistry.guildId, guildId))
     .orderBy(desc(autorolesRegistry.createdAt));
 
-  const guild = bot.guilds.cache.get(guildId);
-  const botUserId = bot.user?.id ?? null;
-
   const entries = await Promise.all(
     rows.map(async (row) => {
-      const channel = guild?.channels.cache.get(row.channelId);
-      const channelName =
-        channel && "name" in channel ? String(channel.name) : null;
+      const channel = await gateway
+        .getChannel(guildId, row.channelId)
+        .catch(() => null);
+      const channelName = channel?.name ?? null;
 
       let isBotAuthor: boolean | null = null;
       let orphaned = false;
 
       try {
-        const textChannel = await resolveChannel(bot, row.channelId, guildId);
-        const message = await textChannel.messages.fetch(row.messageId);
-        isBotAuthor = Boolean(botUserId && message.author.id === botUserId);
+        const message = await gateway.fetchMessage(
+          guildId,
+          row.channelId,
+          row.messageId,
+        );
+        isBotAuthor = message.isBotAuthor;
       } catch (error: unknown) {
         if (isUnknownMessage(error)) {
           orphaned = true;
-          isBotAuthor = null;
-        } else {
-          isBotAuthor = null;
         }
+        isBotAuthor = null;
       }
 
       return toEntry({
@@ -456,10 +439,10 @@ export async function listActiveAutoroles(
 }
 
 export async function createAutoroleCompact(
-  bot: Client,
+  gateway: BotGateway,
   input: CreateAutoroleCompactRequest,
 ): Promise<CreateAutoRoleResponse> {
-  if (!bot.isReady()) {
+  if (!gateway.isReady()) {
     throw new AutoRoleError("The bot is not connected.", 503, "BOT_NOT_READY");
   }
 
@@ -467,8 +450,8 @@ export async function createAutoroleCompact(
   const channelId = assertSnowflake(input.channelId, "channelId");
   const type = input.type;
   const mappings = normalizeMappings(input.mappings, type);
-  await assertAssignableRoleIds(
-    bot,
+  await assertAssignableRoleIdsViaGateway(
+    gateway,
     guildId,
     mappings.map((mapping) => mapping.roleId),
   );
@@ -531,7 +514,7 @@ export async function createAutoroleCompact(
 
   // SELECT usa filas de botones en createAutoRoleSetup vía buttonMappings;
   // luego reescribimos components a select en registry apply.
-  const result = await createAutoRoleSetup(bot, {
+  const result = await createAutoRoleSetup(gateway, {
     mode: type === "REACTIONS" ? "reactions" : "buttons",
     guildId,
     channelId,
@@ -558,9 +541,9 @@ export async function createAutoroleCompact(
   });
 
   if (type === "SELECT") {
-    const channel = await resolveChannel(bot, channelId, guildId);
-    const message = await channel.messages.fetch(result.messageId);
-    await message.edit({ components: buildSelectComponents(mappings) });
+    await gateway.editMessage(guildId, channelId, result.messageId, {
+      components: componentsToJSON(buildSelectComponents(mappings)),
+    });
   }
 
   const registryId = await upsertRegistry({
@@ -576,7 +559,7 @@ export async function createAutoroleCompact(
 }
 
 export async function updateAutoroleMapping(
-  bot: Client,
+  gateway: BotGateway,
   idRaw: number,
   input: UpdateAutoroleMappingRequest,
   guildIdRaw?: string,
@@ -601,22 +584,21 @@ export async function updateAutoroleMapping(
 
   const type = row.type as AutoroleRegistryType;
   const mappings = normalizeMappings(input.mappings, type);
-  await assertAssignableRoleIds(
-    bot,
+  await assertAssignableRoleIdsViaGateway(
+    gateway,
     guildId,
     mappings.map((mapping) => mapping.roleId),
   );
-  const channel = await resolveChannel(bot, row.channelId, guildId);
 
   let orphaned = false;
   try {
-    const message = await channel.messages.fetch(row.messageId);
     await applyComponentsOrReactions(
-      message,
-      type,
-      mappings,
+      gateway,
       guildId,
       row.channelId,
+      row.messageId,
+      type,
+      mappings,
     );
   } catch (error: unknown) {
     if (isUnknownMessage(error)) {
@@ -664,7 +646,7 @@ export async function updateAutoroleMapping(
 }
 
 export async function updateAutoroleContent(
-  bot: Client,
+  gateway: BotGateway,
   idRaw: number,
   input: UpdateAutoroleContentRequest,
   guildIdRaw?: string,
@@ -683,13 +665,16 @@ export async function updateAutoroleContent(
     throw new AutoRoleError("Record not found.", 404, "NOT_FOUND");
   }
 
-  const channel = await resolveChannel(bot, row.channelId, guildId);
   let orphaned = false;
   let isBotAuthor: boolean | null = null;
 
   try {
-    const message = await channel.messages.fetch(row.messageId);
-    isBotAuthor = Boolean(bot.user && message.author.id === bot.user.id);
+    const message = await gateway.fetchMessage(
+      guildId,
+      row.channelId,
+      row.messageId,
+    );
+    isBotAuthor = message.isBotAuthor;
 
     if (!isBotAuthor) {
       throw new AutoRoleError(
@@ -701,8 +686,8 @@ export async function updateAutoroleContent(
 
     const patch: {
       content?: string;
-      embeds?: EmbedBuilder[];
-      files?: AttachmentBuilder[];
+      embeds?: unknown[];
+      files?: { name: string; data: Buffer }[];
     } = {};
 
     // Partimos del embed existente para no perder campos no enviados.
@@ -712,17 +697,17 @@ export async function updateAutoroleContent(
           title: existing.title ?? undefined,
           description: existing.description ?? undefined,
           url: existing.url ?? undefined,
-          color: existing.hexColor ?? undefined,
-          authorName: existing.author?.name ?? undefined,
-          authorIconUrl: existing.author?.iconURL ?? undefined,
-          thumbnailUrl: existing.thumbnail?.url ?? undefined,
-          imageUrl: existing.image?.url ?? undefined,
-          footerText: existing.footer?.text ?? undefined,
-          footerIconUrl: existing.footer?.iconURL ?? undefined,
+          color: existing.color ?? undefined,
+          authorName: existing.authorName ?? undefined,
+          authorIconUrl: existing.authorIconUrl ?? undefined,
+          thumbnailUrl: existing.thumbnailUrl ?? undefined,
+          imageUrl: existing.imageUrl ?? undefined,
+          footerText: existing.footerText ?? undefined,
+          footerIconUrl: existing.footerIconUrl ?? undefined,
           timestamp: Boolean(existing.timestamp),
-          content: message.content ?? undefined,
+          content: message.content || undefined,
         }
-      : { content: message.content ?? undefined };
+      : { content: message.content || undefined };
 
     const nextEmbed: EmbedPayload = {
       ...baseEmbed,
@@ -739,7 +724,7 @@ export async function updateAutoroleContent(
       const built = buildEmbedFromPayload(nextEmbed);
       patch.content = built.content ?? nextEmbed.content ?? "";
       if (built.builder) {
-        patch.embeds = [built.builder];
+        patch.embeds = [built.builder.toJSON()];
       } else if (message.embeds.length > 0 && input.embed) {
         // El formulario vació el cuerpo del embed → quitar embeds.
         const onlyContent =
@@ -754,10 +739,17 @@ export async function updateAutoroleContent(
           patch.embeds = [];
         }
       }
-      if (built.files.length > 0) {
-        patch.files = built.files;
+      const files = attachmentsToOutgoingFiles(built.files);
+      if (files) {
+        patch.files = files;
       }
-      await message.edit(patch);
+      const edited = await gateway.editMessage(
+        guildId,
+        row.channelId,
+        row.messageId,
+        patch,
+      );
+      if (edited.orphaned) orphaned = true;
     }
   } catch (error: unknown) {
     if (error instanceof AutoRoleError) throw error;
@@ -805,7 +797,7 @@ export async function updateAutoroleContent(
 }
 
 export async function deleteAutorole(
-  bot: Client,
+  gateway: BotGateway,
   idRaw: number,
   guildIdRaw?: string,
 ): Promise<DeleteAutoroleResponse> {
@@ -825,13 +817,21 @@ export async function deleteAutorole(
 
   let orphaned = false;
   try {
-    const channel = await resolveChannel(bot, row.channelId, guildId);
-    const message = await channel.messages.fetch(row.messageId);
+    // Confirma que el mensaje existe (lanza MESSAGE_NOT_FOUND si no).
+    await gateway.fetchMessage(guildId, row.channelId, row.messageId);
     if (row.type === "REACTIONS") {
       await deleteReactionRolesForMessage(row.messageId);
-      await message.reactions.removeAll().catch(() => undefined);
+      await gateway
+        .clearReactions(row.channelId, row.messageId)
+        .catch(() => undefined);
     } else {
-      await message.edit({ components: [] });
+      const edited = await gateway.editMessage(
+        guildId,
+        row.channelId,
+        row.messageId,
+        { components: [] },
+      );
+      if (edited.orphaned) orphaned = true;
     }
   } catch (error: unknown) {
     if (isUnknownMessage(error)) {

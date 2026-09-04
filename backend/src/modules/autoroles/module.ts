@@ -157,10 +157,12 @@ export const autorolesModule: AdobosModule = {
       void handleAutoroleSelect(interaction);
     });
     ctx.button("autorole_", (interaction) => handleAutoroleButton(interaction));
-    ctx.route("/api/autoroles", autoroleRoutes(ctx.client), {
+    ctx.route("/api/autoroles", autoroleRoutes(ctx.botGateway), {
       feature: "autoroles",
     });
-    ctx.route("/api/roles", rolesRoutes(ctx.client), { feature: "autoroles" });
+    ctx.route("/api/roles", rolesRoutes(ctx.botGateway), {
+      feature: "autoroles",
+    });
   },
 };
 

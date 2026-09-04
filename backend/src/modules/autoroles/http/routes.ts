@@ -1,12 +1,9 @@
-import { isAutoroleSendChannelType } from "@adobos/shared";
-import type { Client } from "discord.js";
 import { Router } from "express";
-import { fetchChannelInGuild } from "#core/http/channelScope.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { idParams } from "#core/http/schemas.js";
 import { defineRoute, parse } from "#core/http/validate.js";
 import { logger } from "#core/log.js";
-import { emojiKeyToResolvable } from "#db/reaction-roles.js";
 import {
   createAutoroleCompact,
   deleteAutorole,
@@ -17,7 +14,8 @@ import {
 import {
   AutoRoleError,
   createAutoRoleSetup,
-  normalizeEmojiKey,
+  placeReactionsViaGateway,
+  resolveSendableChannelId,
   saveReactionRoleMappings,
 } from "./controller.js";
 import {
@@ -28,14 +26,14 @@ import {
   updateAutoroleMappingSchema,
 } from "./schema.js";
 
-export function autoroleRoutes(bot: Client): Router {
+export function autoroleRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   /** GET /api/autoroles/active */
   router.get(
     "/active",
     defineRoute({}, async (req, res) => {
-      res.json(await listActiveAutoroles(bot, guildIdOf(req)));
+      res.json(await listActiveAutoroles(gateway, guildIdOf(req)));
     }),
   );
 
@@ -50,42 +48,31 @@ export function autoroleRoutes(bot: Client): Router {
         mappings: valid.body.mappings,
       };
 
-      const channel = await fetchChannelInGuild(
-        bot,
+      const channelId = await resolveSendableChannelId(
+        gateway,
         payload.channelId,
         payload.guildId,
       );
-      if (
-        !channel.isTextBased() ||
-        !("messages" in channel) ||
-        !isAutoroleSendChannelType(channel.type)
-      ) {
-        throw new AutoRoleError(
-          "The channel does not support text messages.",
-          400,
-          "CHANNEL_NOT_TEXT",
-        );
-      }
-      const message = await channel.messages
-        .fetch(payload.messageId)
-        .catch(() => null);
-      if (!message) {
-        throw new AutoRoleError(
-          "That message was not found in the channel.",
-          404,
-          "MESSAGE_NOT_FOUND",
-        );
-      }
+      await gateway
+        .fetchMessage(payload.guildId, channelId, payload.messageId)
+        .catch(() => {
+          throw new AutoRoleError(
+            "That message was not found in the channel.",
+            404,
+            "MESSAGE_NOT_FOUND",
+          );
+        });
 
-      const result = await saveReactionRoleMappings(payload, bot);
+      const result = await saveReactionRoleMappings(payload, gateway);
 
       try {
-        for (const mapping of payload.mappings) {
-          const key = normalizeEmojiKey(mapping.emojiKey.trim());
-          const emoji = emojiKeyToResolvable(key);
-          if (!emoji) continue;
-          await message.react(emoji).catch(() => undefined);
-        }
+        await placeReactionsViaGateway(
+          gateway,
+          payload.guildId,
+          channelId,
+          payload.messageId,
+          payload.mappings.map((mapping) => mapping.emojiKey),
+        );
       } catch (error: unknown) {
         logger.warn(
           { err: error },
@@ -104,7 +91,7 @@ export function autoroleRoutes(bot: Client): Router {
       const raw = req.body as Record<string, unknown> | undefined;
       if (raw && typeof raw.type === "string") {
         const payload = parse(createAutoroleCompactSchema, raw);
-        const result = await createAutoroleCompact(bot, {
+        const result = await createAutoroleCompact(gateway, {
           ...payload,
           guildId: guildIdOf(req),
         });
@@ -113,7 +100,7 @@ export function autoroleRoutes(bot: Client): Router {
       }
 
       const payload = parse(createAutoRoleLegacySchema, raw);
-      const result = await createAutoRoleSetup(bot, {
+      const result = await createAutoRoleSetup(gateway, {
         ...payload,
         guildId: guildIdOf(req),
       });
@@ -128,7 +115,7 @@ export function autoroleRoutes(bot: Client): Router {
       { params: idParams, body: updateAutoroleMappingSchema },
       async (req, res, valid) => {
         const result = await updateAutoroleMapping(
-          bot,
+          gateway,
           valid.params.id,
           valid.body,
           guildIdOf(req),
@@ -145,7 +132,7 @@ export function autoroleRoutes(bot: Client): Router {
       { params: idParams, body: updateAutoroleContentSchema },
       async (req, res, valid) => {
         const result = await updateAutoroleContent(
-          bot,
+          gateway,
           valid.params.id,
           valid.body,
           guildIdOf(req),
@@ -162,7 +149,7 @@ export function autoroleRoutes(bot: Client): Router {
       { params: idParams, body: updateAutoroleContentSchema },
       async (req, res, valid) => {
         const result = await updateAutoroleContent(
-          bot,
+          gateway,
           valid.params.id,
           valid.body,
           guildIdOf(req),
@@ -176,7 +163,11 @@ export function autoroleRoutes(bot: Client): Router {
   router.delete(
     "/delete/:id",
     defineRoute({ params: idParams }, async (req, res, valid) => {
-      const result = await deleteAutorole(bot, valid.params.id, guildIdOf(req));
+      const result = await deleteAutorole(
+        gateway,
+        valid.params.id,
+        guildIdOf(req),
+      );
       res.json(result);
     }),
   );

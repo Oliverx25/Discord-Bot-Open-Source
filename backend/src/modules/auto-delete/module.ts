@@ -35,7 +35,7 @@ export const autoDeleteModule: AdobosModule = {
     });
     onShutdown("auto-delete:scheduled-rules", () => stopAllAutoDeleteJobs());
 
-    ctx.route("/api/auto-delete", autoDeleteRoutes(ctx.client), {
+    ctx.route("/api/auto-delete", autoDeleteRoutes(), {
       feature: "auto-delete",
     });
     registerAutoDeleteListeners(ctx);
