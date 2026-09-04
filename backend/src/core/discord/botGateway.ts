@@ -5,7 +5,9 @@
  * (`LocalClientGateway`). Devuelve **datos planos** — ningún tipo discord.js
  * cruza la frontera.
  *
- * Se amplía por oleadas: hoy cubre las lecturas de guild-assets.
+ * Cubre lecturas y escrituras. Las escrituras son una única implementación REST
+ * en `BaseGateway` (heredada por ambos adaptadores); las lecturas las resuelve
+ * cada adaptador a su manera (caché del Client vivo / REST + Redis).
  */
 
 export interface GuildSummary {

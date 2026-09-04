@@ -7,7 +7,9 @@ import type {
   StringSelectMenuInteraction,
 } from "discord.js";
 import { LocalClientGateway } from "../discord/localClientGateway.js";
+import { RestGateway } from "../discord/restGateway.js";
 import { logger } from "../log.js";
+import { runtimeRole } from "../runtime/index.js";
 import type {
   AdobosModule,
   AutocompleteHandler,
@@ -124,7 +126,11 @@ export function createModuleRegistry(
     let currentModuleId = "?";
     const ctx: ModuleContext = {
       client,
-      botGateway: new LocalClientGateway(client),
+      // El rol `api` no tiene gateway vivo: habla con Discord por REST.
+      botGateway:
+        runtimeRole() === "api"
+          ? new RestGateway()
+          : new LocalClientGateway(client),
       on(event, handler) {
         pendingEvents.push({
           once: false,
