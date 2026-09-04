@@ -14,6 +14,7 @@ import {
   type VoiceState,
 } from "discord.js";
 import { BoundedTtlMap } from "#core/cache/boundedTtlMap.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { logger } from "#core/log.js";
 import {
   addUserXp,
@@ -188,7 +189,10 @@ export async function syncLevelsProgress(input: {
   newLevel: number;
   xp: number;
 }): Promise<void> {
-  await scheduleLiveLeaderboardRefresh(input.client, input.guildId);
+  await scheduleLiveLeaderboardRefresh(
+    new LocalClientGateway(input.client),
+    input.guildId,
+  );
   if (input.newLevel <= input.previousLevel) return;
 
   const guild =

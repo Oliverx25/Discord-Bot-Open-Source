@@ -1,5 +1,6 @@
 import { applyLevelsTokens, embedColorToInt } from "@adobos/shared";
-import { type Client, EmbedBuilder, type TextChannel } from "discord.js";
+import { ChannelType, EmbedBuilder } from "discord.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { registerJob } from "#core/lifecycle.js";
 import { logger } from "#core/log.js";
 import {
@@ -28,33 +29,20 @@ function medals(rank: number): string {
   return `**#${rank}**`;
 }
 
-async function resolveDisplayName(
-  client: Client,
-  guildId: string,
-  userId: string,
-): Promise<string> {
-  const guild = client.guilds.cache.get(guildId);
-  const member = await guild?.members.fetch(userId).catch(() => null);
-  if (member) return member.displayName;
-  const user = await client.users.fetch(userId).catch(() => null);
-  return user?.username ?? userId;
-}
-
 export async function buildLiveLeaderboardEmbed(
-  client: Client,
+  gateway: BotGateway,
   guildId: string,
 ): Promise<EmbedBuilder> {
   const rows = await getTopUserXpRows(guildId, 10);
-  const lines: string[] = [];
-
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i]!;
-    const name = await resolveDisplayName(client, guildId, row.userId);
-    const rank = i + 1;
-    lines.push(
-      `${medals(rank)} | <@${row.userId}> | ${name} | Level **${row.level}** | \`${row.xp.toLocaleString("es-MX")} XP\``,
-    );
-  }
+  const names = await gateway.resolveMembers(
+    guildId,
+    rows.map((row) => row.userId),
+  );
+  const lines = rows.map((row, index) => {
+    const rank = index + 1;
+    const name = names.get(row.userId)?.displayName ?? row.userId;
+    return `${medals(rank)} | <@${row.userId}> | ${name} | Level **${row.level}** | \`${row.xp.toLocaleString("es-MX")} XP\``;
+  });
 
   const config = await getLevelsConfigCached(guildId);
   const total = await getLeaderboardTotal(guildId);
@@ -76,16 +64,15 @@ export async function buildLiveLeaderboardEmbed(
     .setTimestamp(new Date());
 
   if (config.leaderboardShowThumbnail) {
-    const guild = client.guilds.cache.get(guildId);
-    const icon = guild?.iconURL({ size: 256 });
-    if (icon) embed.setThumbnail(icon);
+    const guild = await gateway.getGuild(guildId);
+    if (guild?.iconUrl) embed.setThumbnail(guild.iconUrl);
   }
 
   return embed;
 }
 
 async function flushLiveLeaderboard(
-  client: Client,
+  gateway: BotGateway,
   guildId: string,
 ): Promise<void> {
   if (!dirtyGuilds.has(guildId)) return;
@@ -98,7 +85,7 @@ async function flushLiveLeaderboard(
     debounceTimers.set(
       guildId,
       setTimeout(() => {
-        void flushLiveLeaderboard(client, guildId);
+        void flushLiveLeaderboard(gateway, guildId);
       }, wait),
     );
     return;
@@ -110,33 +97,42 @@ async function flushLiveLeaderboard(
     return;
   }
 
-  const channel = await client.channels
-    .fetch(config.liveLeaderboardChannelId)
-    .catch(() => null);
-  if (!channel || !channel.isTextBased() || channel.isDMBased()) {
+  const channel = await gateway.getChannel(
+    guildId,
+    config.liveLeaderboardChannelId,
+  );
+  if (
+    !channel ||
+    (channel.type !== ChannelType.GuildText &&
+      channel.type !== ChannelType.GuildAnnouncement)
+  ) {
     dirtyGuilds.delete(guildId);
     return;
   }
 
-  const textChannel = channel as TextChannel;
-  const embed = await buildLiveLeaderboardEmbed(client, guildId);
+  const embed = await buildLiveLeaderboardEmbed(gateway, guildId);
   const rows = await getTopUserXpRows(guildId, 10);
   const fp = topFingerprint(rows);
+  const payload = { embeds: [embed.toJSON()] };
 
   try {
-    if (config.liveLeaderboardMessageId) {
-      const existing = await textChannel.messages
-        .fetch(config.liveLeaderboardMessageId)
-        .catch(() => null);
-      if (existing) {
-        await existing.edit({ embeds: [embed] });
-      } else {
-        const sent = await textChannel.send({ embeds: [embed] });
-        await setLiveLeaderboardMessageId(guildId, sent.id);
-      }
-    } else {
-      const sent = await textChannel.send({ embeds: [embed] });
-      await setLiveLeaderboardMessageId(guildId, sent.id);
+    let messageId = config.liveLeaderboardMessageId;
+    if (messageId) {
+      const { orphaned } = await gateway.editMessage(
+        guildId,
+        config.liveLeaderboardChannelId,
+        messageId,
+        payload,
+      );
+      if (orphaned) messageId = null;
+    }
+    if (!messageId) {
+      const sent = await gateway.sendMessage(
+        guildId,
+        config.liveLeaderboardChannelId,
+        payload,
+      );
+      await setLiveLeaderboardMessageId(guildId, sent.messageId);
     }
 
     lastFingerprint.set(guildId, fp);
@@ -155,7 +151,7 @@ async function flushLiveLeaderboard(
  * El edit real va con debounce + intervalo mínimo de 5 min.
  */
 export async function scheduleLiveLeaderboardRefresh(
-  client: Client,
+  gateway: BotGateway,
   guildId: string,
 ): Promise<void> {
   const config = await getLevelsConfigCached(guildId);
@@ -166,7 +162,6 @@ export async function scheduleLiveLeaderboardRefresh(
   const prev = lastFingerprint.get(guildId);
   if (prev !== undefined && prev === fp) return;
 
-  // Primera vez o Top cambió
   if (prev === undefined) {
     lastFingerprint.set(guildId, fp);
   }
@@ -177,36 +172,30 @@ export async function scheduleLiveLeaderboardRefresh(
   debounceTimers.set(
     guildId,
     setTimeout(() => {
-      void flushLiveLeaderboard(client, guildId);
+      void flushLiveLeaderboard(gateway, guildId);
     }, DEBOUNCE_MS),
   );
 
-  await ensureFlushInterval(client);
+  ensureFlushInterval(gateway);
 }
 
-/** Fuerza un refresh (p. ej. al cambiar el canal en el dashboard). */
+/** Fuerza un refresh inmediato (p. ej. al cambiar el canal en el dashboard). */
 export async function forceLiveLeaderboardRefresh(
-  client: Client,
+  gateway: BotGateway,
   guildId: string,
 ): Promise<void> {
   dirtyGuilds.add(guildId);
   lastEditAt.delete(guildId);
   clearTimeout(debounceTimers.get(guildId));
-  debounceTimers.set(
-    guildId,
-    setTimeout(() => {
-      void flushLiveLeaderboard(client, guildId);
-    }, 1_500),
-  );
-  await ensureFlushInterval(client);
+  await flushLiveLeaderboard(gateway, guildId);
 }
 
-async function ensureFlushInterval(client: Client): Promise<void> {
+function ensureFlushInterval(gateway: BotGateway): void {
   if (flushIntervalStarted) return;
   flushIntervalStarted = true;
   const timer = setInterval(() => {
     for (const guildId of [...dirtyGuilds]) {
-      void flushLiveLeaderboard(client, guildId);
+      void flushLiveLeaderboard(gateway, guildId);
     }
   }, MIN_EDIT_INTERVAL_MS);
   registerJob("levels:live-leaderboard-flush", timer);

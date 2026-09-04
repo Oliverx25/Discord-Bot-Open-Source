@@ -2,12 +2,11 @@ import type {
   LevelsLeaderboardEntry,
   LevelsLeaderboardResponse,
 } from "@adobos/shared";
-import type { Client } from "discord.js";
 import { Router } from "express";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { leaderboardQuerySchema } from "#core/http/schemas.js";
 import { defineRoute } from "#core/http/validate.js";
-import { resolveMembersBatch } from "#lib/discordMember.js";
 import {
   getLeaderboardTotal,
   getLevelsConfig,
@@ -18,19 +17,15 @@ import { forceLiveLeaderboardRefresh } from "../liveLeaderboard.js";
 import { updateLevelsConfigSchema } from "./schema.js";
 
 async function resolveLeaderboardEntries(
-  bot: Client,
+  gateway: BotGateway,
   guildId: string,
   limit: number,
 ): Promise<LevelsLeaderboardResponse> {
   const rows = await listLeaderboardRows(guildId, limit);
   const total = await getLeaderboardTotal(guildId);
-  const guild =
-    bot.guilds.cache.get(guildId) ??
-    (await bot.guilds.fetch(guildId).catch(() => null));
 
-  const resolved = await resolveMembersBatch(
-    guild,
-    bot,
+  const resolved = await gateway.resolveMembers(
+    guildId,
     rows.map((row) => row.userId),
   );
 
@@ -50,7 +45,7 @@ async function resolveLeaderboardEntries(
   return { entries, total };
 }
 
-export function levelsRoutes(bot: Client): Router {
+export function levelsRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   /** GET /api/levels/config */
@@ -76,7 +71,7 @@ export function levelsRoutes(bot: Client): Router {
           before.liveLeaderboardChannelId &&
         config.liveLeaderboardChannelId
       ) {
-        await forceLiveLeaderboardRefresh(bot, config.guildId);
+        await forceLiveLeaderboardRefresh(gateway, config.guildId);
       }
 
       res.json({ config });
@@ -89,7 +84,7 @@ export function levelsRoutes(bot: Client): Router {
     defineRoute({ query: leaderboardQuerySchema }, async (req, res, valid) => {
       const limit = valid.query.limit ?? 100;
       const payload = await resolveLeaderboardEntries(
-        bot,
+        gateway,
         guildIdOf(req),
         limit,
       );
