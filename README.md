@@ -19,7 +19,7 @@ El sistema se orquesta con Docker Compose en **tres servicios**: PostgreSQL, bac
 * **Entorno de Desarrollo:** Computadora local (OrbStack / Docker Desktop). Astro en `:4321` hace proxy same-origin a la API.
 * **Entorno de Producción:** TrueNAS SCALE u otro host. nginx publica el panel y proxifica `/api`, `/auth` y `/uploads`; Postgres y el backend no se exponen al host.
 * **Estrategia de Compilación:** `docker buildx` para canvas nativo en ARM64 (dev) y AMD64 (prod).
-* **Orquestación:** `docker-compose.yml` (dev, hot reload) y `docker-compose.prod.yml` (imágenes multi-etapa).
+* **Orquestación:** `docker-compose.yml` (dev), `docker-compose.prod.yml` (nodo único `ADOBO_ROLE=all`) y `docker-compose.split.yml` (topología partida gateway / api / worker — ver ROADMAP § Runtime).
 
 ---
 
@@ -105,7 +105,8 @@ adobos-bot/
 ├── .gitignore
 ├── Dockerfile                  # Backend de producción (API + bot)
 ├── docker-compose.yml          # Dev: postgres + backend + frontend
-├── docker-compose.prod.yml     # Prod: postgres interno + backend + nginx
+├── docker-compose.prod.yml     # Prod nodo único (ADOBO_ROLE=all)
+├── docker-compose.split.yml    # Prod partido: gateway / api / worker sobre Redis
 ├── docker/                     # Dockerfile.dev, Dockerfile.frontend, nginx.conf
 ├── package.json                # Define los workspaces ("backend" y "frontend")
 │

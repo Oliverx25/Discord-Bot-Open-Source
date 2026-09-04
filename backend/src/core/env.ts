@@ -35,6 +35,8 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().optional(),
   LOG_PRETTY: z.string().optional(),
   SHARD_COUNT: z.string().optional(),
+  SHARDS: z.string().optional(),
+  SHARD_TOTAL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_PRO: z.string().optional(),
@@ -60,6 +62,8 @@ export interface AppEnv {
   LOG_LEVEL?: string;
   LOG_PRETTY?: string;
   SHARD_COUNT?: string;
+  SHARDS?: string;
+  SHARD_TOTAL?: string;
 }
 
 let cached: AppEnv | null = null;
@@ -131,6 +135,8 @@ export function loadEnv(): AppEnv {
     LOG_LEVEL: raw.LOG_LEVEL,
     LOG_PRETTY: raw.LOG_PRETTY,
     SHARD_COUNT: raw.SHARD_COUNT,
+    SHARDS: raw.SHARDS,
+    SHARD_TOTAL: raw.SHARD_TOTAL,
   };
   return cached;
 }

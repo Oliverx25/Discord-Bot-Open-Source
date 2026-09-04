@@ -1,0 +1,170 @@
+# Producción — topología PARTIDA: gateway / api / worker como servicios
+# independientes sobre Redis + BullMQ + Postgres. El binario es el mismo
+# (imagen `adobos-backend:latest`); `ADOBO_ROLE` decide qué corre.
+#
+#   docker compose -f docker-compose.split.yml up -d --build
+#   docker compose -f docker-compose.split.yml up -d --scale backend=3   # N api
+#
+# vs `docker-compose.prod.yml` (nodo único `ADOBO_ROLE=all`): esta variante
+# solo hace falta pasados ~2.5k guilds o si querés escalar el panel aparte.
+#
+# `.env` (junto a este fichero) debe traer al menos:
+#   POSTGRES_PASSWORD, SESSION_SECRET, PUBLIC_APP_URL, CORS_ORIGIN,
+#   DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN
+
+x-backend-image: &backend-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: adobos-backend:latest
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  PORT: 3000
+  SERVE_STATIC: "false"
+  DATABASE_URL: postgresql://adobos:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/adobos
+  REDIS_URL: redis://redis:6379
+  DATA_DIR: /data
+  NODE_OPTIONS: --dns-result-order=ipv4first
+
+x-healthcheck: &health
+  test:
+    [
+      "CMD",
+      "node",
+      "-e",
+      "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+    ]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 25s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: adobos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: adobos
+    volumes:
+      - adobos_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adobos -d adobos"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [adobos]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    volumes:
+      - adobos_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [adobos]
+
+  # One-shot: aplica migraciones Drizzle y sale. Los servicios de app esperan
+  # a que termine (evita que N réplicas migren a la vez).
+  migrate:
+    <<: *backend-image
+    restart: "no"
+    command: ["node", "dist/db/migrate.js"]
+    env_file: [.env]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [adobos]
+
+  # Discord gateway. Un proceso (o N con SHARDS/SHARD_TOTAL disjuntos —
+  # ver `createClient.ts`). Único con Client vivo; calienta la caché de Redis.
+  gateway:
+    <<: *backend-image
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      <<: *backend-env
+      ADOBO_ROLE: gateway
+      # Multi-proceso: descomentar y desplegar N `gateway` con rangos disjuntos.
+      # SHARDS: "0-7"
+      # SHARD_TOTAL: "16"
+    volumes:
+      - ./data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck: *health
+    stop_grace_period: 20s
+    networks: [adobos]
+
+  # Worker: consumidores de cola (envíos, borrados, polling). Sin Client — REST.
+  worker:
+    <<: *backend-image
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      <<: *backend-env
+      ADOBO_ROLE: worker
+    volumes:
+      - ./data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck: *health
+    stop_grace_period: 20s
+    networks: [adobos]
+
+  # Panel + REST. Sin Client — lee de Redis/Postgres; en miss, REST de Discord.
+  # Escalable: `--scale backend=N` (nginx round-robin por DNS de Compose).
+  backend:
+    <<: *backend-image
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      <<: *backend-env
+      ADOBO_ROLE: api
+    volumes:
+      - ./data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck: *health
+    stop_grace_period: 20s
+    expose:
+      - "3000"
+    networks: [adobos]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: adobos-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [adobos]
+
+volumes:
+  adobos_pgdata:
+  adobos_redisdata:
+
+networks:
+  adobos:
+    driver: bridge

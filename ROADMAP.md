@@ -170,26 +170,41 @@ El punto 0.7 va **antes** de Stripe: primero la capa de permisos de features, lu
 
 ---
 
-## Runtime (mismos binario, distinto `ADOBO_ROLE`)
+## Runtime (mismo binario, distinto `ADOBO_ROLE`)
 
-Compose sigue en `all` (Express + gateway + crons, 1 proceso).
+Un solo binario; `ADOBO_ROLE` decide qué corre. Default `all` = Express + gateway + crons en 1 proceso (dev / nodo único, `docker-compose.prod.yml`).
 
-| Disparador | Qué hacer |
-|---|---|
-| El panel necesita N réplicas HTTP | `ADOBO_ROLE=api` detrás del proxy + **un** `gateway` + **un** `worker`. El worker usa advisory lock Postgres. |
-| 2+ APIs y rate limit / XP / blackjack cruzados | **Hecho (P2.16/P2.20):** `REDIS_URL` → `RedisStore` (L1+L2+pub/sub) + store compartido de `express-rate-limit`. Sin `REDIS_URL`, todo sigue en memoria. |
-| Cron/schedulers como cuello de botella del líder único | **Hecho (P2.17):** `core/queue/` (BullMQ) + `jobs.ts` productor/consumidor con `FOR UPDATE SKIP LOCKED` (`claimed_until`). El líder solo produce; N `worker` consumen. Sin `REDIS_URL` → inline. |
-| Una query lenta retiene una conexión | **Hecho (P2.21):** `statement_timeout=15s`, `idle_in_transaction_session_timeout=30s`, pool por rol (`api`=8, `gateway`/`worker`=6, `all`=12; `DB_POOL_MAX` sobreescribe). |
-| ~2.500 guilds o CPU del websocket | `ShardingManager` en el proceso gateway. El API no abre el gateway. |
-| gateway + worker a la vez | No: ambos hacen `bot.login`. REST dedicado en el worker es el siguiente paso. |
+| rol | HTTP | Client discord.js | jobs de cola | `REDIS_URL` |
+|---|---|---|---|---|
+| `all` | ✅ panel+API | ✅ login | ✅ (o inline sin Redis) | opcional |
+| `api` | ✅ panel+API | ❌ — REST vía `RestGateway` (+ caché read-through Redis) | ❌ | **obligatorio** |
+| `gateway` | health only | ✅ login · atiende eventos/interacciones · calienta la caché Redis | ❌ | **obligatorio** |
+| `worker` | health only | ❌ — REST vía `RestGateway` | ✅ consumidor BullMQ | **obligatorio** |
 
-### P2.19 — Sharding multi-proceso (pendiente, no urgente)
+Topología partida: **`docker-compose.split.yml`** (`postgres` + `redis` + `migrate` one-shot + `gateway` + `worker` + `backend`=api escalable + `frontend`). Solo hace falta pasados ~2.5k guilds o si querés escalar el panel aparte.
 
-Hoy: sharding **interno** (`Client({ shards: SHARD_COUNT })`) — todos los shards en un proceso. Aguanta hasta ~2.500 guilds; luego los shards compiten por una CPU.
+| Disparador | Qué hacer | Estado |
+|---|---|---|
+| El panel necesita N réplicas HTTP | `docker compose -f docker-compose.split.yml up -d --scale backend=N` | **Hecho** — el rol `api` no tiene Client; todo por `BotGateway` |
+| 2+ APIs y rate limit / XP / blackjack cruzados | `REDIS_URL` → `RedisStore` (L1+L2+pub/sub) + store de `express-rate-limit` | **Hecho (P2.16/P2.20)** |
+| Cron/schedulers como cuello de botella del líder único | `core/queue/` (BullMQ) + `jobs.ts` productor/consumidor con `FOR UPDATE SKIP LOCKED` (`claimed_until`) | **Hecho (P2.17)** |
+| Una query lenta retiene una conexión | `statement_timeout=15s`, `idle_in_transaction_session_timeout=30s`, pool por rol | **Hecho (P2.21)** |
+| `worker` sin gateway vivo | `RestGateway` (token) para todo side-effect de job; lease `claimed_until` en auto-delete; `rememberBotMessageDeletes` por Redis | **Hecho** |
+| ~2.500 guilds o CPU del websocket | N contenedores `gateway` con `SHARDS`/`SHARD_TOTAL` disjuntos | **Hecho** — ver abajo |
 
-Para ir a multi-proceso (`ShardingManager` o `discord-hybrid-sharding`) hay que romper el acoplamiento **`bot: Client` en las rutas HTTP**: hoy cada `modules/*/http/routes.ts` recibe el `Client` y hace `bot.guilds.fetch()`, `channel.send()`, `member.fetch()`… El rol `api` no tendría gateway, así que necesita hablar con los shards por un **broker** (`@discordjs/brokers` sobre Redis, o la propia cola): el `api` publica intents ("envía mensaje X", "dame el canal Y") y el `gateway`/`worker` los ejecutan.
+### P2.19 — Sharding multi-proceso — **hecho**
 
-Trabajo cuando toque: (1) interfaz `BotGateway` con el subconjunto de operaciones que usan las rutas; (2) `RedisBrokerGateway` que la implemente vía Redis; (3) `LocalGateway` (el `Client` directo) para el rol `all`; (4) inyectar la interfaz, no el `Client`, en `createApp` y en los `deliver*`. ~25 ficheros de rutas + los envíos de los schedulers (ya encapsulados en `jobs.ts`).
+- **Interno (1 proceso):** `SHARD_COUNT=N` → `Client({ shards: [0..N-1], shardCount: N })`.
+- **Multi-proceso:** cada contenedor `gateway` recibe `SHARDS` (rango `0-3` o lista `0,2,4`) + `SHARD_TOTAL`. discord.js entrega a cada proceso solo los eventos/interacciones de sus shards — **sin routing entre procesos**. Los jobs que produzcan llegan al `worker` único por BullMQ.
+- El rol `api` no abre gateway: lee de Redis/Postgres y, en miss, REST de Discord (`RestGateway`, `core/discord/discordCache.ts`); el `gateway` mantiene esas claves calientes (`core/discord/cacheWarmer.ts`).
+- La frontera es la **interfaz `BotGateway`** (`core/discord/botGateway.ts`): `LocalClientGateway` (Client vivo, roles `all`/`gateway`) y `RestGateway` (REST + caché, roles `api`/`worker`). Ninguna ruta HTTP ni scheduler recibe ya un `Client`.
+
+Ejemplo — 16 shards en 2 contenedores:
+
+```yaml
+gateway-a: { environment: { ADOBO_ROLE: gateway, SHARDS: "0-7",  SHARD_TOTAL: "16" } }
+gateway-b: { environment: { ADOBO_ROLE: gateway, SHARDS: "8-15", SHARD_TOTAL: "16" } }
+```
 
 ### P2.18 — Trabajo pesado de interacción → job
 
