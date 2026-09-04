@@ -2,6 +2,7 @@ import type { REST } from "@discordjs/rest";
 import { Routes } from "discord.js";
 import { cache } from "#core/cache/store.js";
 import { env } from "#core/env.js";
+import { safeImageFetch } from "#core/http/safeImageFetch.js";
 import {
   type AutoModRuleInput,
   BotGatewayError,
@@ -134,18 +135,23 @@ const MAGIC: [string, number[]][] = [
   ["image/jpeg", [0xff, 0xd8, 0xff]],
 ];
 
+/**
+ * SEC-02: `avatar` puede venir de `serverAvatarUrl` (panel, string http(s)
+ * arbitraria) — nunca `fetch()` directo. `safeImageFetch` bloquea SSRF,
+ * limita tamaño/redirects y ya valida magic bytes reales.
+ */
 async function toImageDataUri(avatar: Buffer | string): Promise<string> {
-  let buf: Buffer;
   if (typeof avatar === "string") {
-    const res = await fetch(avatar);
-    buf = Buffer.from(await res.arrayBuffer());
-  } else {
-    buf = avatar;
+    const { buffer, contentType } = await safeImageFetch(avatar, {
+      maxBytes: 8 * 1024 * 1024,
+      timeoutMs: 12_000,
+    });
+    return `data:${contentType};base64,${buffer.toString("base64")}`;
   }
   const mime =
-    MAGIC.find(([, sig]) => sig.every((b, i) => buf[i] === b))?.[0] ??
+    MAGIC.find(([, sig]) => sig.every((b, i) => avatar[i] === b))?.[0] ??
     "image/png";
-  return `data:${mime};base64,${buf.toString("base64")}`;
+  return `data:${mime};base64,${avatar.toString("base64")}`;
 }
 
 /**

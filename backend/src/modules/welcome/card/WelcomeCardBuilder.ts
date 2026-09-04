@@ -17,6 +17,7 @@ import {
   loadImage,
   type SKRSContext2D,
 } from "@napi-rs/canvas";
+import { safeImageFetch } from "#core/http/safeImageFetch.js";
 import { logger } from "#core/log.js";
 import { resolvePublicUploadPath } from "#lib/dataPaths.js";
 
@@ -98,19 +99,17 @@ export interface BuildWelcomeCardOptions {
   textColor?: string;
 }
 
-async function fetchImageBuffer(url: string): Promise<Buffer> {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "AdobosBot/1.0 (+welcome-card)" },
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!response.ok) {
-    throw new Error(`Couldn't download image (${response.status})`);
-  }
-  return Buffer.from(await response.arrayBuffer());
-}
-
+/**
+ * SEC-02: `backgroundUrl` y `user.avatarUrl` llegan de configuración de guild
+ * (panel) / Discord respectivamente — nunca `fetch()` directo. `safeImageFetch`
+ * bloquea SSRF (loopback/privadas/link-local), limita tamaño y redirects, y
+ * valida magic bytes reales antes de que lleguen a `loadImage`.
+ */
 async function loadRemoteImage(url: string): Promise<Image> {
-  const buffer = await fetchImageBuffer(url);
+  const { buffer } = await safeImageFetch(url, {
+    maxBytes: 8 * 1024 * 1024,
+    timeoutMs: 12_000,
+  });
   return loadImage(buffer);
 }
 
