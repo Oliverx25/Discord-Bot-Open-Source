@@ -1,5 +1,6 @@
 import type { REST } from "@discordjs/rest";
 import { Routes } from "discord.js";
+import { cache } from "#core/cache/store.js";
 import { env } from "#core/env.js";
 import {
   type AutoModRuleInput,
@@ -15,7 +16,21 @@ import {
   type SentMessageResult,
   type UpdateRoleInput,
 } from "./botGateway.js";
+import { discordCacheKey } from "./discordCache.js";
 import { getDiscordRest } from "./rest.js";
+
+/**
+ * Invalida claves de la caché read-through de `RestGateway`. Fire-and-forget:
+ * un fallo de caché no debe romper la escritura. `RedisStore.del` propaga la
+ * invalidación por pub/sub a las demás réplicas `api`.
+ */
+function bustDiscordCache(...keys: string[]): void {
+  for (const key of keys) {
+    void cache()
+      .del(key)
+      .catch(() => undefined);
+  }
+}
 
 interface DiscordWebhook {
   id: string;
@@ -164,13 +179,17 @@ export abstract class BaseGateway {
   // ─────────── Canales ───────────
 
   async deleteChannel(
-    _guildId: string,
+    guildId: string,
     channelId: string,
     reason?: string,
   ): Promise<void> {
     await this.restClient()
       .delete(Routes.channel(channelId), { reason })
       .catch(() => undefined);
+    bustDiscordCache(
+      discordCacheKey.channel(channelId),
+      discordCacheKey.channels(guildId),
+    );
   }
 
   async putChannelOverwrite(
@@ -185,6 +204,7 @@ export abstract class BaseGateway {
         reason: input.reason,
       },
     );
+    bustDiscordCache(discordCacheKey.channel(channelId));
   }
 
   async deleteChannelOverwrite(
@@ -195,6 +215,7 @@ export abstract class BaseGateway {
     await this.restClient()
       .delete(Routes.channelPermission(channelId, overwriteId), { reason })
       .catch(() => undefined);
+    bustDiscordCache(discordCacheKey.channel(channelId));
   }
 
   async createChannel(
@@ -225,6 +246,7 @@ export abstract class BaseGateway {
       parent_id?: string | null;
       position?: number;
     };
+    bustDiscordCache(discordCacheKey.channels(guildId));
     return {
       id: created.id,
       name: created.name ?? input.name,
@@ -320,6 +342,7 @@ export abstract class BaseGateway {
       body: { permission_overwrites: overwrites },
       reason,
     });
+    bustDiscordCache(discordCacheKey.channel(channelId));
   }
 
   async setChannelSlowmode(
@@ -334,6 +357,7 @@ export abstract class BaseGateway {
       },
       reason,
     });
+    bustDiscordCache(discordCacheKey.channel(channelId));
   }
 
   async createInvite(
@@ -548,6 +572,7 @@ export abstract class BaseGateway {
         })
         .catch(() => undefined);
     }
+    bustDiscordCache(discordCacheKey.roles(guildId));
     return toRoleDetail(role);
   }
 
@@ -568,6 +593,7 @@ export abstract class BaseGateway {
       Routes.guildRole(guildId, roleId),
       { body, reason: patch.reason },
     )) as APIRoleLite;
+    bustDiscordCache(discordCacheKey.roles(guildId));
     return toRoleDetail(role);
   }
 
@@ -579,6 +605,7 @@ export abstract class BaseGateway {
     await this.restClient().delete(Routes.guildRole(guildId, roleId), {
       reason,
     });
+    bustDiscordCache(discordCacheKey.roles(guildId));
   }
 
   async setRolePositions(
@@ -590,6 +617,7 @@ export abstract class BaseGateway {
       body: positions.map((p) => ({ id: p.roleId, position: p.position })),
       reason,
     })) as APIRoleLite[];
+    bustDiscordCache(discordCacheKey.roles(guildId));
     return roles
       .filter((r) => r.id !== guildId)
       .map(toRoleDetail)
@@ -605,6 +633,7 @@ export abstract class BaseGateway {
     await this.restClient().patch(Routes.guildMember(guildId, "@me"), {
       body: { nick: nickname },
     });
+    bustDiscordCache(discordCacheKey.botProfile(guildId));
   }
 
   async setBotGuildAvatar(
@@ -616,6 +645,7 @@ export abstract class BaseGateway {
         ? { avatar: null }
         : { avatar: await toImageDataUri(avatar) };
     await this.restClient().patch(Routes.guildMember(guildId, "@me"), { body });
+    bustDiscordCache(discordCacheKey.botProfile(guildId));
   }
 
   // ─────────── Reacciones ───────────

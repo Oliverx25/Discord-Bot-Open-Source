@@ -1,5 +1,6 @@
 import { CDN } from "@discordjs/rest";
 import { PermissionFlagsBits, Routes } from "discord.js";
+import { cache } from "#core/cache/store.js";
 import { BaseGateway } from "./baseGateway.js";
 import type {
   AuditLogPage,
@@ -24,6 +25,7 @@ import type {
   UserInfo,
 } from "./botGateway.js";
 import { BotGatewayError } from "./botGateway.js";
+import { DISCORD_CACHE_TTL, discordCacheKey } from "./discordCache.js";
 
 const cdn = new CDN();
 const AVATAR = { extension: "png", size: 256 } as const;
@@ -127,13 +129,40 @@ function toMemberInfo(guildId: string, member: APIMember): MemberInfo {
 }
 
 /**
- * `BotGateway` sin gateway vivo: todas las lecturas por REST (con caché L2 de
- * Redis vía `CacheStore` a medio plazo). Las escrituras las hereda de
- * `BaseGateway`. Lo usa el rol `api`.
+ * `BotGateway` sin gateway vivo: lecturas por REST con caché read-through
+ * (L1 por proceso + L2 Redis vía `CacheStore`) para las lecturas caras y de
+ * cambio lento — ver `discordCache.ts`. Miembros/mensajes/bans/audit no se
+ * cachean. Las escrituras las hereda de `BaseGateway` (e invalidan las claves
+ * relacionadas). Lo usa el rol `api`.
  */
 export class RestGateway extends BaseGateway implements BotGateway {
   isReady(): boolean {
     return true;
+  }
+
+  /**
+   * Read-through: L1 (por proceso) + L2 (Redis) vía `CacheStore`. En miss llama
+   * `loader` (REST) y cachea. `null` es un valor cacheable válido (canal/guild
+   * inexistente) — se distingue de `undefined` (miss).
+   */
+  private async cached<T>(
+    key: string,
+    ttlMs: number,
+    loader: () => Promise<T>,
+  ): Promise<T> {
+    const hit = await cache().get<T>(key);
+    if (hit !== undefined) return hit;
+    const value = await loader();
+    await cache().set(key, value, ttlMs);
+    return value;
+  }
+
+  getBotGuildIds(): Promise<string[]> {
+    return this.cached(
+      discordCacheKey.botGuildIds(),
+      DISCORD_CACHE_TTL.botGuildIds,
+      () => super.getBotGuildIds(),
+    );
   }
 
   private async guildRoles(guildId: string): Promise<APIRole[]> {
@@ -142,99 +171,135 @@ export class RestGateway extends BaseGateway implements BotGateway {
     )) as APIRole[];
   }
 
-  async getGuild(guildId: string): Promise<GuildSummary | null> {
-    try {
-      const guild = (await this.restClient().get(Routes.guild(guildId))) as {
-        id: string;
-        name: string;
-        icon?: string | null;
-      };
-      const roles = await this.guildRoles(guildId);
-      const booster = roles.find((r) => r.tags?.premium_subscriber_role);
-      return {
-        id: guild.id,
-        name: guild.name,
-        iconUrl: guild.icon
-          ? cdn.icon(guild.id, guild.icon, { extension: "png", size: 256 })
-          : null,
-        boosterRoleId: booster?.id ?? null,
-      };
-    } catch {
-      return null;
-    }
+  getGuild(guildId: string): Promise<GuildSummary | null> {
+    return this.cached(
+      discordCacheKey.guild(guildId),
+      DISCORD_CACHE_TTL.guild,
+      async () => {
+        try {
+          const guild = (await this.restClient().get(
+            Routes.guild(guildId),
+          )) as { id: string; name: string; icon?: string | null };
+          const roles = await this.guildRoles(guildId);
+          const booster = roles.find((r) => r.tags?.premium_subscriber_role);
+          return {
+            id: guild.id,
+            name: guild.name,
+            iconUrl: guild.icon
+              ? cdn.icon(guild.id, guild.icon, { extension: "png", size: 256 })
+              : null,
+            boosterRoleId: booster?.id ?? null,
+          };
+        } catch {
+          return null;
+        }
+      },
+    );
   }
 
-  async listChannels(guildId: string): Promise<ChannelSummary[]> {
-    const channels = (await this.restClient().get(
-      Routes.guildChannels(guildId),
-    )) as APIChannel[];
-    return channels.map((c) => ({
-      id: c.id,
-      name: c.name ?? "",
-      type: c.type,
-      parentId: c.parent_id ?? null,
-      position: c.position ?? 0,
-    }));
+  listChannels(guildId: string): Promise<ChannelSummary[]> {
+    return this.cached(
+      discordCacheKey.channels(guildId),
+      DISCORD_CACHE_TTL.channels,
+      async () => {
+        const channels = (await this.restClient().get(
+          Routes.guildChannels(guildId),
+        )) as APIChannel[];
+        return channels.map((c) => ({
+          id: c.id,
+          name: c.name ?? "",
+          type: c.type,
+          parentId: c.parent_id ?? null,
+          position: c.position ?? 0,
+        }));
+      },
+    );
   }
 
-  async listRoles(guildId: string): Promise<RoleSummary[]> {
-    return (await this.guildRoles(guildId)).map((r) => ({
-      id: r.id,
-      name: r.name,
-      color: r.color,
-      hexColor: hex(r.color),
-      position: r.position,
-      managed: r.managed,
-    }));
+  listRoles(guildId: string): Promise<RoleSummary[]> {
+    return this.cached(
+      discordCacheKey.roles(guildId),
+      DISCORD_CACHE_TTL.roles,
+      async () =>
+        (await this.guildRoles(guildId)).map((r) => ({
+          id: r.id,
+          name: r.name,
+          color: r.color,
+          hexColor: hex(r.color),
+          position: r.position,
+          managed: r.managed,
+        })),
+    );
   }
 
-  async listEmojis(guildId: string): Promise<EmojiSummary[]> {
-    const emojis = (await this.restClient().get(
-      Routes.guildEmojis(guildId),
-    )) as { id: string | null; name: string | null; animated?: boolean }[];
-    return emojis
-      .filter((e): e is { id: string; name: string; animated?: boolean } =>
-        Boolean(e.id && e.name),
-      )
-      .map((e) => ({
-        id: e.id,
-        name: e.name,
-        animated: Boolean(e.animated),
-        url: cdn.emoji(e.id, { extension: e.animated ? "gif" : "png" }),
-      }));
+  listEmojis(guildId: string): Promise<EmojiSummary[]> {
+    return this.cached(
+      discordCacheKey.emojis(guildId),
+      DISCORD_CACHE_TTL.emojis,
+      async () => {
+        const emojis = (await this.restClient().get(
+          Routes.guildEmojis(guildId),
+        )) as { id: string | null; name: string | null; animated?: boolean }[];
+        return emojis
+          .filter((e): e is { id: string; name: string; animated?: boolean } =>
+            Boolean(e.id && e.name),
+          )
+          .map((e) => ({
+            id: e.id,
+            name: e.name,
+            animated: Boolean(e.animated),
+            url: cdn.emoji(e.id, { extension: e.animated ? "gif" : "png" }),
+          }));
+      },
+    );
   }
 
-  async listStickers(guildId: string): Promise<StickerSummary[]> {
-    const stickers = (await this.restClient().get(
-      Routes.guildStickers(guildId),
-    )) as {
-      id: string;
-      name: string;
-      description: string | null;
-      format_type: number;
-    }[];
-    return stickers.map((s) => ({
-      id: s.id,
-      name: s.name,
-      description: s.description,
-      format: String(s.format_type),
-      url: cdn.sticker(s.id, "png"),
-    }));
+  listStickers(guildId: string): Promise<StickerSummary[]> {
+    return this.cached(
+      discordCacheKey.stickers(guildId),
+      DISCORD_CACHE_TTL.stickers,
+      async () => {
+        const stickers = (await this.restClient().get(
+          Routes.guildStickers(guildId),
+        )) as {
+          id: string;
+          name: string;
+          description: string | null;
+          format_type: number;
+        }[];
+        return stickers.map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          format: String(s.format_type),
+          url: cdn.sticker(s.id, "png"),
+        }));
+      },
+    );
   }
 
   private async channelInGuild(
     guildId: string,
     channelId: string,
   ): Promise<APIChannel | null> {
-    try {
-      const channel = (await this.restClient().get(
-        Routes.channel(channelId),
-      )) as APIChannel;
-      if (channel.guild_id && channel.guild_id !== guildId) return null;
-      return channel;
-    } catch {
-      return null;
-    }
+    // Se cachea el canal **crudo** por channelId (pre-filtro de guild): un canal
+    // pertenece a un solo guild, así que la clave no colisiona entre guilds.
+    const raw = await this.cached<APIChannel | null>(
+      discordCacheKey.channel(channelId),
+      DISCORD_CACHE_TTL.channel,
+      async () => {
+        try {
+          return (await this.restClient().get(
+            Routes.channel(channelId),
+          )) as APIChannel;
+        } catch {
+          return null;
+        }
+      },
+    );
+    if (!raw) return null;
+    if (raw.guild_id && raw.guild_id !== guildId) return null;
+    return raw;
   }
 
   async getChannel(
@@ -629,32 +694,38 @@ export class RestGateway extends BaseGateway implements BotGateway {
     }));
   }
 
-  async getBotProfile(guildId: string): Promise<BotProfileSummary> {
-    const [guild, me] = await Promise.all([
-      this.getGuild(guildId),
-      this.rawMember(guildId, "@me"),
-    ]);
-    if (!guild || !me) {
-      throw Object.assign(new Error("Bot not in guild"), {
-        status: 404,
-        code: "GUILD_NOT_FOUND",
-      });
-    }
-    return {
-      guildId,
-      guildName: guild.name,
-      nickname: me.nick ?? "",
-      displayName: displayName(me.user, me.nick),
-      username: me.user.username,
-      tag: me.user.discriminator
-        ? `${me.user.username}#${me.user.discriminator}`
-        : me.user.username,
-      serverAvatarUrl: me.avatar
-        ? cdn.guildMemberAvatar(guildId, me.user.id, me.avatar, AVATAR)
-        : null,
-      globalAvatarUrl: userAvatarUrl(me.user),
-      hasServerAvatar: Boolean(me.avatar),
-    };
+  getBotProfile(guildId: string): Promise<BotProfileSummary> {
+    return this.cached(
+      discordCacheKey.botProfile(guildId),
+      DISCORD_CACHE_TTL.botProfile,
+      async () => {
+        const [guild, me] = await Promise.all([
+          this.getGuild(guildId),
+          this.rawMember(guildId, "@me"),
+        ]);
+        if (!guild || !me) {
+          throw Object.assign(new Error("Bot not in guild"), {
+            status: 404,
+            code: "GUILD_NOT_FOUND",
+          });
+        }
+        return {
+          guildId,
+          guildName: guild.name,
+          nickname: me.nick ?? "",
+          displayName: displayName(me.user, me.nick),
+          username: me.user.username,
+          tag: me.user.discriminator
+            ? `${me.user.username}#${me.user.discriminator}`
+            : me.user.username,
+          serverAvatarUrl: me.avatar
+            ? cdn.guildMemberAvatar(guildId, me.user.id, me.avatar, AVATAR)
+            : null,
+          globalAvatarUrl: userAvatarUrl(me.user),
+          hasServerAvatar: Boolean(me.avatar),
+        };
+      },
+    );
   }
 
   async fetchMessage(

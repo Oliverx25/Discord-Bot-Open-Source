@@ -22,6 +22,7 @@ vi.mock("./rest.js", () => ({
 // es el adaptador concreto más fino, así que sirve para ejercitar la base).
 const { RestGateway } = await import("./restGateway.js");
 const { BotGatewayError } = await import("./botGateway.js");
+const { setCacheStore, MemoryStore } = await import("#core/cache/store.js");
 
 function discordErr(code: number): Error {
   return Object.assign(new Error("discord"), { code });
@@ -29,6 +30,7 @@ function discordErr(code: number): Error {
 
 beforeEach(() => {
   token = "tok-123";
+  setCacheStore(new MemoryStore());
 });
 
 describe("BaseGateway — escrituras REST", () => {
@@ -68,5 +70,61 @@ describe("BaseGateway — escrituras REST", () => {
       gw.sendMessage("g1", "c1", { content: "x" }),
     ).rejects.toMatchObject({ status: 503, code: "NO_DISCORD_TOKEN" });
     expect(BotGatewayError).toBeTypeOf("function");
+  });
+});
+
+describe("RestGateway — caché read-through + invalidación", () => {
+  it("listChannels cachea: la 2ª llamada no vuelve a pegar a REST", async () => {
+    restCalls.get.mockResolvedValue([
+      { id: "c1", name: "general", type: 0, position: 1 },
+    ]);
+    const gw = new RestGateway();
+    const a = await gw.listChannels("g1");
+    const b = await gw.listChannels("g1");
+    expect(b).toEqual(a);
+    expect(restCalls.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("createRole invalida disc:roles:<guild> → listRoles vuelve a REST", async () => {
+    restCalls.get.mockResolvedValue([
+      { id: "r1", name: "Mod", color: 0, position: 2, permissions: "0" },
+    ]);
+    restCalls.post.mockResolvedValueOnce({
+      id: "r2",
+      name: "New",
+      color: 0,
+      position: 0,
+      permissions: "0",
+      managed: false,
+      hoist: false,
+      mentionable: false,
+    });
+    const gw = new RestGateway();
+    await gw.listRoles("g1"); // get #1 → cachea
+    await gw.listRoles("g1"); // hit
+    expect(restCalls.get).toHaveBeenCalledTimes(1);
+    await gw.createRole("g1", {
+      name: "New",
+      color: 0,
+      permissions: 0n,
+      hoist: false,
+      mentionable: false,
+      position: 0,
+    });
+    await gw.listRoles("g1"); // get #2 → miss tras invalidación
+    expect(restCalls.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("deleteChannel invalida el canal y la lista", async () => {
+    restCalls.get.mockResolvedValue([
+      { id: "c1", name: "general", type: 0, position: 1 },
+    ]);
+    restCalls.delete.mockResolvedValue(undefined);
+    const gw = new RestGateway();
+    await gw.listChannels("g1");
+    expect(restCalls.get).toHaveBeenCalledTimes(1);
+    await gw.deleteChannel("g1", "c1");
+    await gw.listChannels("g1");
+    expect(restCalls.get).toHaveBeenCalledTimes(2);
   });
 });
