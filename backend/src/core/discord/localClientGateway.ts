@@ -12,6 +12,7 @@ import {
   type SendableChannels,
 } from "discord.js";
 import { resolveMembersBatch } from "#lib/discordMember.js";
+import { BaseGateway } from "./baseGateway.js";
 import {
   type BotGateway,
   BotGatewayError,
@@ -75,8 +76,10 @@ function embedMediaOf(message: Message): PublishedEmbedMedia | undefined {
  * Lo usan los roles `all` y `gateway`, que sí tienen gateway conectado.
  * Comportamiento idéntico al acceso directo previo (`bot.guilds.cache`…).
  */
-export class LocalClientGateway implements BotGateway {
-  constructor(private readonly client: Client) {}
+export class LocalClientGateway extends BaseGateway implements BotGateway {
+  constructor(private readonly client: Client) {
+    super();
+  }
 
   isReady(): boolean {
     return this.client.isReady();
