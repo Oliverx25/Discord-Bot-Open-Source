@@ -7,10 +7,12 @@ export const welcomeModule: AdobosModule = {
   id: "welcome",
   name: "Welcome",
   intents: [GatewayIntentBits.GuildMembers],
-  register(ctx) {
+  registerGateway(ctx) {
     ctx.on("guildMemberAdd", (member) => {
       void onGuildMemberAdd(member);
     });
+  },
+  registerHttp(ctx) {
     ctx.route("/api/welcome-settings", welcomeSettingsRoutes(ctx.botGateway), {
       feature: "welcome",
     });

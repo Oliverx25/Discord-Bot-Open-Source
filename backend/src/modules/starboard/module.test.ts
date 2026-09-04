@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { starboardModule } from "./module.js";
 
 describe("starboard module", () => {
@@ -8,7 +9,7 @@ describe("starboard module", () => {
     const commands: string[] = [];
     const events: string[] = [];
     const routes: string[] = [];
-    starboardModule.register({
+    runAllModulePhases(starboardModule, {
       client: {} as never,
       on: (event) => {
         events.push(String(event));

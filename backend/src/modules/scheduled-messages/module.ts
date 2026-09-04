@@ -16,9 +16,7 @@ export const scheduledMessagesModule: AdobosModule = {
   id: "scheduled-messages",
   name: "Scheduled Messages",
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
-  register(ctx) {
-    bindScheduledMessagesScheduler(ctx.client);
-
+  registerHttp(ctx) {
     ctx.route(
       "/api/scheduled-messages",
       scheduledMessagesRoutes(ctx.botGateway),
@@ -26,6 +24,9 @@ export const scheduledMessagesModule: AdobosModule = {
         feature: "scheduled-messages",
       },
     );
+  },
+  registerJobs(ctx) {
+    if (ctx.client) bindScheduledMessagesScheduler(ctx.client);
 
     ctx.once("ready", async () => {
       if (!isWorkerLeader()) return;

@@ -6,7 +6,7 @@ import { stripeWebhookHandler } from "./webhook.js";
 export const billingModule: AdobosModule = {
   id: "billing",
   name: "Billing",
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.rawRoute("post", "/api/billing/webhook", stripeWebhookHandler);
     ctx.route("/api/billing", billingRoutes());
   },

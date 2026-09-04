@@ -1,5 +1,6 @@
 import { STREAM_ALERT_POLL_MS } from "@adobos/shared";
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { streamAlertsModule } from "./module.js";
 import {
   parseKickChannelPayload,
@@ -16,7 +17,7 @@ describe("stream-alerts module", () => {
     const commands: string[] = [];
     const routes: string[] = [];
     const once: string[] = [];
-    streamAlertsModule.register({
+    runAllModulePhases(streamAlertsModule, {
       client: {} as never,
       on: () => undefined,
       once: (event) => {

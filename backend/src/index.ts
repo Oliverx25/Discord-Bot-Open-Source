@@ -66,13 +66,24 @@ async function main(): Promise<void> {
 
   const registry = loadModules(ENABLED_MODULES);
   wireCustomCommandsBuiltinSync();
-  // El rol `api` construye el Client (lo exige `registry.collect` + los
-  // schedulers de módulo), pero nunca hace `login()`: sirve Discord por REST.
-  const bot = createBotClient(registry);
-  onShutdown("discord", () => bot.destroy());
 
-  const botGateway =
-    cfg.ADOBO_ROLE === "api" ? new RestGateway() : new LocalClientGateway(bot);
+  // Qué fases de módulo corre este rol.
+  const phases = {
+    http: roleRunsHttp(cfg.ADOBO_ROLE),
+    // El worker NO registra listeners de gateway/interacciones (los atiende
+    // el rol `gateway`); solo mantiene un Client para enviar por REST (Fase 4).
+    gateway: cfg.ADOBO_ROLE === "all" || cfg.ADOBO_ROLE === "gateway",
+    jobs: roleRunsWorker(cfg.ADOBO_ROLE),
+  };
+
+  // El rol `api` sirve todo por REST: sin Client vivo.
+  const bot = cfg.ADOBO_ROLE === "api" ? null : createBotClient(registry);
+  if (bot) onShutdown("discord", () => bot.destroy());
+
+  const botGateway = bot ? new LocalClientGateway(bot) : new RestGateway();
+
+  registry.collect(bot, botGateway, phases);
+  registry.attach();
 
   const app = roleRunsHttp(cfg.ADOBO_ROLE)
     ? createApp({
@@ -82,7 +93,7 @@ async function main(): Promise<void> {
       })
     : createHealthApp(botGateway);
 
-  if (roleRunsGateway(cfg.ADOBO_ROLE)) {
+  if (bot && roleRunsGateway(cfg.ADOBO_ROLE)) {
     if (cfg.DISCORD_TOKEN) {
       await bot.login(cfg.DISCORD_TOKEN);
     } else {

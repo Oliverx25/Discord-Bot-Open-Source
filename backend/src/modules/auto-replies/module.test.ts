@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { autoRepliesModule } from "./module.js";
 
 describe("auto-replies module", () => {
@@ -8,7 +9,7 @@ describe("auto-replies module", () => {
     const commands: string[] = [];
     const routes: string[] = [];
     const events: string[] = [];
-    autoRepliesModule.register({
+    runAllModulePhases(autoRepliesModule, {
       client: {} as never,
       on: (event) => {
         events.push(String(event));

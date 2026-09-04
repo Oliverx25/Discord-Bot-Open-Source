@@ -158,8 +158,10 @@ export function registerVoiceRoomListeners(ctx: ModuleContext): void {
       logger.warn({ err: error }, "voiceStateUpdate Voice Rooms:");
     });
   });
+  const client = ctx.client;
+  if (!client) return;
   ctx.once("ready", () => {
-    void reconcileVoiceRooms(ctx.client).catch((error: unknown) => {
+    void reconcileVoiceRooms(client).catch((error: unknown) => {
       logger.warn({ err: error }, "Voice Rooms: reconcile failed");
     });
   });

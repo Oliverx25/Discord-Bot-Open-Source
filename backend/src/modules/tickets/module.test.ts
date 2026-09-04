@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { ticketsModule } from "./module.js";
 
 describe("tickets module", () => {
@@ -10,7 +11,7 @@ describe("tickets module", () => {
     const events: string[] = [];
     const buttons: string[] = [];
     const modals: string[] = [];
-    ticketsModule.register({
+    runAllModulePhases(ticketsModule, {
       client: {} as never,
       on: (event) => {
         events.push(String(event));

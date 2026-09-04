@@ -5,7 +5,7 @@ import { guildAssetsRoutes } from "./http/routes.js";
 export const guildAssetsModule: AdobosModule = {
   id: "guild-assets",
   name: "Guild Assets",
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/guild-assets", guildAssetsRoutes(ctx.botGateway));
   },
 };

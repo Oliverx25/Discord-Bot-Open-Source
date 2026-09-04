@@ -18,9 +18,10 @@ export const remindersModule: AdobosModule = {
   id: "reminders",
   name: "Reminders",
   intents: [GatewayIntentBits.Guilds],
-  register(ctx) {
-    bindRemindersScheduler(ctx.client);
+  registerHttp(ctx) {
     ctx.route("/api/reminders", remindersRoutes(), { feature: "reminders" });
+  },
+  registerGateway(ctx) {
     ctx.command({
       name: slash.name,
       description: slash.description,
@@ -29,6 +30,9 @@ export const remindersModule: AdobosModule = {
     ctx.button(REMIND_BUTTON_CANCEL_PREFIX, (interaction) =>
       handleRemindCancelButton(interaction),
     );
+  },
+  registerJobs(ctx) {
+    if (ctx.client) bindRemindersScheduler(ctx.client);
     ctx.once("ready", () => {
       if (!isWorkerLeader()) return;
       void processDueReminders().catch((error: unknown) => {

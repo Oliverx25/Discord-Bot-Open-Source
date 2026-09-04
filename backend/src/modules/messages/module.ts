@@ -6,7 +6,7 @@ import { embedTemplateRoutes } from "./http/templateRoutes.js";
 export const messagesModule: AdobosModule = {
   id: "messages",
   name: "Messages",
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/messages", messageRoutes(ctx.botGateway), {
       feature: "messages",
     });

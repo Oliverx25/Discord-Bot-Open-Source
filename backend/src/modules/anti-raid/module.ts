@@ -15,10 +15,12 @@ export const antiRaidModule: AdobosModule = {
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration,
   ],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/anti-raid", antiRaidRoutes(ctx.botGateway), {
       feature: "anti-raid",
     });
+  },
+  registerGateway(ctx) {
     ctx.command({
       name: slash.name,
       description: slash.description,

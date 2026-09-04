@@ -22,12 +22,15 @@ export const actionLogsModule: AdobosModule = {
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildInvites,
   ],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/logs", actionLogsRoutes(ctx.botGateway), {
       feature: "logs",
     });
+  },
+  registerGateway(ctx) {
     registerActionLogListeners(ctx);
-
+  },
+  registerJobs(ctx) {
     ctx.once("ready", async () => {
       if (!isWorkerLeader()) return;
       try {

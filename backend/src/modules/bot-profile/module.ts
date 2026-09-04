@@ -5,14 +5,17 @@ import { botProfileRoutes } from "./http/routes.js";
 export const botProfileModule: AdobosModule = {
   id: "bot-profile",
   name: "Bot Profile",
-  register(ctx) {
+  registerHttp(ctx) {
     const routes = botProfileRoutes(ctx.botGateway);
     ctx.route("/api/bot/guild-profile", routes);
     // Alias de compatibilidad con el path anterior.
     ctx.route("/api/bot/profile", routes);
-
+  },
+  registerGateway(ctx) {
+    const client = ctx.client;
+    if (!client) return;
     ctx.once("ready", async () => {
-      await restorePersistedPresence(ctx.client);
+      await restorePersistedPresence(client);
     });
   },
 };

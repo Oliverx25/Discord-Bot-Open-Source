@@ -4,7 +4,7 @@ import { rolesBuilderRoutes } from "./http/routes.js";
 export const rolesBuilderModule: AdobosModule = {
   id: "roles-builder",
   name: "Roles Builder",
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/roles", rolesBuilderRoutes(ctx.botGateway), {
       feature: "roles-builder",
     });

@@ -21,8 +21,12 @@ export const formsModule: AdobosModule = {
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
   ],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/forms", formsRoutes(ctx.botGateway), { feature: "forms" });
+  },
+  registerGateway(ctx) {
+    const client = ctx.client;
+    if (!client) return;
     ctx.button(FORM_OPEN_PREFIX, (interaction) =>
       onFormsOpenButton(interaction),
     );
@@ -33,7 +37,7 @@ export const formsModule: AdobosModule = {
       onFormsReviewButton(interaction),
     );
     ctx.modal(FORM_SUBMIT_PREFIX, (interaction) =>
-      onFormsModalSubmit(interaction, ctx.client),
+      onFormsModalSubmit(interaction, client),
     );
   },
 };

@@ -13,10 +13,12 @@ export const systemCommandsModule: AdobosModule = {
   id: "system-commands",
   name: "System Commands",
   intents: [GatewayIntentBits.Guilds],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/system-commands", systemCommandsRoutes(), {
       feature: "system-commands",
     });
+  },
+  registerGateway(ctx) {
     ctx.autocomplete("buy", handleBuyAutocomplete);
     ctx.autocomplete("use", handleUseAutocomplete);
     for (const def of SYSTEM_COMMAND_CATALOG) {
@@ -36,9 +38,11 @@ export const systemCommandsModule: AdobosModule = {
         },
       });
     }
+    const client = ctx.client;
+    if (!client) return;
     ctx.once("ready", async () => {
       try {
-        await syncGlobalCommands(ctx.client);
+        await syncGlobalCommands(client);
       } catch (error) {
         logger.warn(
           { err: error },

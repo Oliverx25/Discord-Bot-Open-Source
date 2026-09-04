@@ -6,10 +6,8 @@ import type {
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
 } from "discord.js";
-import { LocalClientGateway } from "../discord/localClientGateway.js";
-import { RestGateway } from "../discord/restGateway.js";
+import type { BotGateway } from "../discord/botGateway.js";
 import { logger } from "../log.js";
-import { runtimeRole } from "../runtime/index.js";
 import type {
   AdobosModule,
   AutocompleteHandler,
@@ -23,6 +21,13 @@ import type {
   SelectHandler,
 } from "./types.js";
 
+/** Qué fases de registro corre el rol activo. */
+export interface CollectPhases {
+  http: boolean;
+  gateway: boolean;
+  jobs: boolean;
+}
+
 export interface ModuleRegistry {
   modules: readonly AdobosModule[];
   routes: readonly RegisteredRoute[];
@@ -35,14 +40,20 @@ export interface ModuleRegistry {
   modalHandlers: ReadonlyMap<string, ModalHandler>;
   intents: readonly number[];
   /**
-   * Ejecuta `register()` de cada módulo: recoge rutas, comandos y handlers de
+   * Ejecuta las fases de registro (`registerHttp`/`registerGateway`/`registerJobs`)
+   * indicadas en `phases` para cada módulo: recoge rutas, comandos y handlers de
    * interacción, y encola (sin atar todavía) los listeners de gateway.
+   * `client` es `null` en el rol `api` (solo `registerHttp`).
    * Idempotente: una segunda llamada es no-op y avisa.
    */
-  collect: (client: Client) => void;
+  collect: (
+    client: Client | null,
+    botGateway: BotGateway,
+    phases: CollectPhases,
+  ) => void;
   /**
    * Ata al Client los listeners de gateway recogidos en `collect()`.
-   * Requiere `collect()` previo. Idempotente.
+   * Requiere `collect()` previo. No-op si no hay Client (rol `api`). Idempotente.
    */
   attach: () => void;
 }
@@ -115,7 +126,11 @@ export function createModuleRegistry(
   let collected = false;
   let attached = false;
 
-  function collect(client: Client): void {
+  function collect(
+    client: Client | null,
+    botGateway: BotGateway,
+    phases: CollectPhases,
+  ): void {
     if (collected) {
       logger.warn("[adobos] ModuleRegistry.collect() dos veces — ignorado");
       return;
@@ -126,11 +141,7 @@ export function createModuleRegistry(
     let currentModuleId = "?";
     const ctx: ModuleContext = {
       client,
-      // El rol `api` no tiene gateway vivo: habla con Discord por REST.
-      botGateway:
-        runtimeRole() === "api"
-          ? new RestGateway()
-          : new LocalClientGateway(client),
+      botGateway,
       on(event, handler) {
         pendingEvents.push({
           once: false,
@@ -200,9 +211,18 @@ export function createModuleRegistry(
       },
     };
 
+    const active = (["http", "gateway", "jobs"] as const).filter(
+      (p) => phases[p],
+    );
+    logger.info(
+      `[adobos] fases activas: [${active.join(", ")}] · ${modules.length} módulo(s)`,
+    );
+
     for (const mod of modules) {
       currentModuleId = mod.id;
-      mod.register(ctx);
+      if (phases.http) mod.registerHttp?.(ctx);
+      if (phases.gateway) mod.registerGateway?.(ctx);
+      if (phases.jobs) mod.registerJobs?.(ctx);
     }
     currentModuleId = "?";
   }
@@ -212,11 +232,13 @@ export function createModuleRegistry(
       logger.warn("[adobos] ModuleRegistry.attach() dos veces — ignorado");
       return;
     }
-    if (!collected || !collectClient) {
+    if (!collected) {
       throw new Error("[adobos] attach() llamado antes de collect()");
     }
     attached = true;
     const client = collectClient;
+    // Rol `api`: sin Client, no hay listeners de gateway que atar.
+    if (!client) return;
 
     for (const entry of pendingEvents) {
       const wrapped = wrapEventHandler(

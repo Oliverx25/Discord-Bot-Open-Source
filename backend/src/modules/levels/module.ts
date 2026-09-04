@@ -13,10 +13,12 @@ export const levelsModule: AdobosModule = {
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
   ],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/levels", levelsRoutes(ctx.botGateway), {
       feature: "levels",
     });
+  },
+  registerGateway(ctx) {
     registerLevelsListeners(ctx);
     // Slash nativos (/rank, /leaderboard, …) viven en el catálogo
     // `SYSTEM_COMMAND_CATALOG` + handlers de system-commands.

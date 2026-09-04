@@ -11,11 +11,13 @@ export const streamAlertsModule: AdobosModule = {
   id: "stream-alerts",
   name: "Stream Alerts",
   intents: [GatewayIntentBits.Guilds],
-  register(ctx) {
-    bindStreamAlertsPoller(ctx.client);
+  registerHttp(ctx) {
     ctx.route("/api/stream-alerts", streamAlertsRoutes(ctx.botGateway), {
       feature: "stream-alerts",
     });
+  },
+  registerJobs(ctx) {
+    if (ctx.client) bindStreamAlertsPoller(ctx.client);
     ctx.once("ready", () => {
       if (!isWorkerLeader()) return;
       void processStreamAlerts().catch((error: unknown) => {

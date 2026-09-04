@@ -27,8 +27,9 @@ function shardConfig(): number | number[] | "auto" {
 }
 
 /**
- * Crea el Client Discord fusionando intents del core + módulos,
- * enlaza el interaction router y ejecuta `registry.collect` + `registry.attach`.
+ * Crea el Client Discord fusionando intents del core + módulos y enlaza el
+ * interaction router. `registry.collect` + `registry.attach` los llama `index.ts`
+ * (role-aware) después, porque el rol `api` no tiene Client.
  *
  * `shards: "auto"` (o SHARD_COUNT) es sharding interno en un proceso: el panel
  * Express sigue viendo el mismo Client. ShardingManager multi-proceso: ver
@@ -80,8 +81,6 @@ export function createBotClient(registry: ModuleRegistry): Client {
   });
 
   registerInteractionRouter(client, registry);
-  registry.collect(client);
-  registry.attach();
 
   return client;
 }

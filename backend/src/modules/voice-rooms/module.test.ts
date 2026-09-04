@@ -1,5 +1,6 @@
 import { VOICE_ROOM_SELECT_PREFIX } from "@adobos/shared";
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { voiceRoomsModule } from "./module.js";
 
 describe("voice-rooms module", () => {
@@ -9,7 +10,7 @@ describe("voice-rooms module", () => {
     const commands: string[] = [];
     const selects: string[] = [];
     const events: string[] = [];
-    voiceRoomsModule.register({
+    runAllModulePhases(voiceRoomsModule, {
       client: {} as never,
       on: (event) => {
         events.push(String(event));

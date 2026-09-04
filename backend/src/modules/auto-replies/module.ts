@@ -11,10 +11,12 @@ export const autoRepliesModule: AdobosModule = {
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/auto-replies", autoRepliesRoutes(), {
       feature: "auto-replies",
     });
+  },
+  registerGateway(ctx) {
     ctx.on("messageCreate", (message) => {
       void onAutoReplyMessageCreate(message);
     });

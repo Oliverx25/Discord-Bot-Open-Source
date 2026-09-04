@@ -1,5 +1,6 @@
 import { REMIND_BUTTON_CANCEL_PREFIX } from "@adobos/shared";
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { remindersModule } from "./module.js";
 
 describe("reminders module", () => {
@@ -8,7 +9,7 @@ describe("reminders module", () => {
     expect(remindersModule.name).toBe("Reminders");
     const commands: string[] = [];
     const buttons: string[] = [];
-    remindersModule.register({
+    runAllModulePhases(remindersModule, {
       client: {} as never,
       on: () => undefined,
       once: () => undefined,

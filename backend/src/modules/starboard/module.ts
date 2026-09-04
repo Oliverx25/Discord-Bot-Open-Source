@@ -7,10 +7,12 @@ export const starboardModule: AdobosModule = {
   id: "starboard",
   name: "Starboard",
   intents: [GatewayIntentBits.GuildMessageReactions],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/starboard", starboardRoutes(ctx.botGateway), {
       feature: "starboard",
     });
+  },
+  registerGateway(ctx) {
     registerStarboardListeners(ctx);
   },
 };

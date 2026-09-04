@@ -54,11 +54,16 @@ export interface RawRoute {
  * Los módulos solo hablan con el core a través de esta API.
  */
 export interface ModuleContext {
-  client: Client;
+  /**
+   * Client vivo de discord.js. `null` en el rol `api` (sin gateway): solo se
+   * usa desde `registerGateway` / `registerJobs`, que no corren en `api`.
+   */
+  client: Client | null;
   /**
    * Puerto HTTP → Discord. Las rutas del panel deben usar esto en vez de
    * `client` directo, para que el rol `api` pueda servir sin gateway vivo.
-   * En `all` / `gateway` es un `LocalClientGateway` sobre `client`.
+   * En `all` / `gateway` es un `LocalClientGateway` sobre `client`; en `api`
+   * un `RestGateway`.
    */
   botGateway: BotGateway;
   on: <K extends keyof ClientEvents>(
@@ -92,13 +97,24 @@ export interface ModuleContext {
   modal: (prefixOrId: string, handler: ModalHandler) => void;
 }
 
-/** Contrato plug-and-play de un bloque Lego del bot. */
+/** Fases de registro de un módulo. El kernel llama solo las del rol activo. */
+export type ModuleRegisterFn = (ctx: ModuleContext) => void;
+
+/**
+ * Contrato plug-and-play de un bloque Lego del bot. Cada módulo declara solo
+ * las fases que necesita:
+ * - `registerHttp`  → rutas del panel. Roles: `all`, `api`.
+ * - `registerGateway` → listeners de gateway + comandos + interacciones. Roles: `all`, `gateway`.
+ * - `registerJobs`  → schedulers, colas, side-effects de crons. Roles: `all`, `worker`.
+ */
 export interface AdobosModule {
   id: ModuleId;
   name: string;
   /** GatewayIntentBits adicionales a fusionar en el Client. */
   intents?: number[];
-  register: (ctx: ModuleContext) => void;
+  registerHttp?: ModuleRegisterFn;
+  registerGateway?: ModuleRegisterFn;
+  registerJobs?: ModuleRegisterFn;
 }
 
 export interface RegisteredRoute {

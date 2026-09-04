@@ -14,10 +14,12 @@ export const voiceRoomsModule: AdobosModule = {
   id: "voice-rooms",
   name: "Voice Rooms",
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/voice-rooms", voiceRoomsRoutes(ctx.botGateway), {
       feature: "voice-rooms",
     });
+  },
+  registerGateway(ctx) {
     ctx.command({
       name: slash.name,
       description: slash.description,

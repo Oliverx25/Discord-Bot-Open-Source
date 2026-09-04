@@ -15,11 +15,12 @@ export const giveawaysModule: AdobosModule = {
   id: "giveaways",
   name: "Giveaways",
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
-  register(ctx) {
-    bindGiveawaysScheduler(ctx.client);
+  registerHttp(ctx) {
     ctx.route("/api/giveaways", giveawaysRoutes(ctx.botGateway), {
       feature: "giveaways",
     });
+  },
+  registerGateway(ctx) {
     ctx.button(GIVEAWAY_JOIN_PREFIX, (interaction) =>
       onGiveawayJoinButton(interaction),
     );
@@ -29,6 +30,9 @@ export const giveawaysModule: AdobosModule = {
     ctx.on("channelDelete", (channel) => {
       void onGiveawayChannelDelete(channel);
     });
+  },
+  registerJobs(ctx) {
+    if (ctx.client) bindGiveawaysScheduler(ctx.client);
     ctx.once("ready", () => {
       if (!isWorkerLeader()) return;
       void processDueGiveaways().catch((error: unknown) => {

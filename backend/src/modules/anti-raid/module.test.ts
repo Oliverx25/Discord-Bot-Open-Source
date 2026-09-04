@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { antiRaidModule } from "./module.js";
 
 describe("anti-raid module", () => {
@@ -8,7 +9,7 @@ describe("anti-raid module", () => {
     const commands: string[] = [];
     const events: string[] = [];
     const routes: string[] = [];
-    antiRaidModule.register({
+    runAllModulePhases(antiRaidModule, {
       client: {} as never,
       on: (event) => {
         events.push(String(event));

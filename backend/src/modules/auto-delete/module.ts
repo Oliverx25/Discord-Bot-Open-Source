@@ -27,25 +27,30 @@ export const autoDeleteModule: AdobosModule = {
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
-  register(ctx) {
-    bindAutoDeleteScheduler(ctx.client);
+  registerHttp(ctx) {
+    ctx.route("/api/auto-delete", autoDeleteRoutes(), {
+      feature: "auto-delete",
+    });
+  },
+  registerGateway(ctx) {
+    registerAutoDeleteListeners(ctx);
+  },
+  registerJobs(ctx) {
+    const client = ctx.client;
+    if (!client) return;
+    bindAutoDeleteScheduler(client);
     setAutoDeleteConfigChangeListener((config) => {
       if (!isWorkerLeader()) return;
       syncAutoDeleteJobsForConfig(config);
     });
     onShutdown("auto-delete:scheduled-rules", () => stopAllAutoDeleteJobs());
 
-    ctx.route("/api/auto-delete", autoDeleteRoutes(), {
-      feature: "auto-delete",
-    });
-    registerAutoDeleteListeners(ctx);
-
     ctx.once("ready", async () => {
       if (!isWorkerLeader()) return;
       await rehydrateAllAutoDeleteJobs();
       logger.info("auto-delete: crons rehidratados");
       try {
-        await processDueCountdownDeletes(ctx.client);
+        await processDueCountdownDeletes(client);
       } catch (error) {
         logger.warn({ err: error }, "auto-delete: initial tick failed:");
       }
@@ -53,7 +58,7 @@ export const autoDeleteModule: AdobosModule = {
 
     const countdownTimer = setInterval(() => {
       if (!isWorkerLeader()) return;
-      void processDueCountdownDeletes(ctx.client).catch((error: unknown) => {
+      void processDueCountdownDeletes(client).catch((error: unknown) => {
         logger.warn({ err: error }, "auto-delete: tick failed:");
       });
     }, COUNTDOWN_TICK_MS);
@@ -61,7 +66,7 @@ export const autoDeleteModule: AdobosModule = {
 
     const scheduledTimer = setInterval(() => {
       if (!isWorkerLeader()) return;
-      void processDueScheduledCleanups(ctx.client).catch((error: unknown) => {
+      void processDueScheduledCleanups(client).catch((error: unknown) => {
         logger.warn({ err: error }, "auto-delete: scheduled tick failed:");
       });
     }, SCHEDULED_TICK_MS);

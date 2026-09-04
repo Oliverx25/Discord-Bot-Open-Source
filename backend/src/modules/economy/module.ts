@@ -33,10 +33,22 @@ import { startShopExpirationSweeper } from "./shopExpiration.js";
 export const economyModule: AdobosModule = {
   id: "economy",
   name: "Economy",
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/economy", economyRoutes(ctx.botGateway), {
       feature: "economy",
     });
+  },
+  registerJobs(ctx) {
+    const client = ctx.client;
+    if (!client) return;
+    ctx.once("ready", async () => {
+      if (!isWorkerLeader()) return;
+      await startShopExpirationSweeper(client);
+      const refunded = await refundAbandonedBlackjackStakes();
+      logger.info({ refunded }, "economy: temporary grants sweeper active");
+    });
+  },
+  registerGateway(ctx) {
     ctx.button(BUY_BUTTON_PREFIX, (interaction) =>
       handleBuyButton(interaction),
     );
@@ -64,12 +76,6 @@ export const economyModule: AdobosModule = {
     ctx.select(CR_SELECT_PREFIX, (interaction) =>
       handleCrimeSelect(interaction),
     );
-    ctx.once("ready", async () => {
-      if (!isWorkerLeader()) return;
-      await startShopExpirationSweeper(ctx.client);
-      const refunded = await refundAbandonedBlackjackStakes();
-      logger.info({ refunded }, "economy: temporary grants sweeper active");
-    });
   },
 };
 

@@ -5,6 +5,7 @@ import {
   FORM_SUBMIT_PREFIX,
 } from "@adobos/shared";
 import { describe, expect, it } from "vitest";
+import { runAllModulePhases } from "#core/modules/phases.js";
 import { remainingMsFromLast } from "./domain/forms.js";
 import { formsModule } from "./module.js";
 
@@ -12,7 +13,7 @@ describe("formsModule.register", () => {
   it("registers open/accept/deny and the modal", () => {
     const buttons: string[] = [];
     const modals: string[] = [];
-    formsModule.register({
+    runAllModulePhases(formsModule, {
       client: {} as never,
       on: () => undefined,
       once: () => undefined,

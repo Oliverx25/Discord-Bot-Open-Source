@@ -15,10 +15,12 @@ export const autoModModule: AdobosModule = {
     GatewayIntentBits.AutoModerationExecution,
     GatewayIntentBits.AutoModerationConfiguration,
   ],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/auto-mod", autoModRoutes(ctx.botGateway), {
       feature: "automod",
     });
+  },
+  registerGateway(ctx) {
     registerAutoModListeners(ctx);
   },
 };

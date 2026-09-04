@@ -11,7 +11,7 @@ export const moderationModule: AdobosModule = {
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
-  register(ctx) {
+  registerHttp(ctx) {
     ctx.route("/api/mod", moderationReadRoutes(ctx.botGateway), {
       feature: "moderation",
     });

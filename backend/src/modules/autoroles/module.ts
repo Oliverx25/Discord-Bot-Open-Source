@@ -141,7 +141,7 @@ export const autorolesModule: AdobosModule = {
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessageReactions,
   ],
-  register(ctx) {
+  registerGateway(ctx) {
     ctx.on("guildMemberAdd", (member) => {
       void onGuildMemberAddAutoRoles(member);
     });
@@ -157,6 +157,8 @@ export const autorolesModule: AdobosModule = {
       void handleAutoroleSelect(interaction);
     });
     ctx.button("autorole_", (interaction) => handleAutoroleButton(interaction));
+  },
+  registerHttp(ctx) {
     ctx.route("/api/autoroles", autoroleRoutes(ctx.botGateway), {
       feature: "autoroles",
     });

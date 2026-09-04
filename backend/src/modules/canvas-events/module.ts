@@ -12,7 +12,7 @@ export const canvasEventsModule: AdobosModule = {
   id: "canvas-events",
   name: "Canvas Events",
   intents: [GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration],
-  register(ctx) {
+  registerGateway(ctx) {
     ctx.on("guildMemberRemove", (member) => {
       void onGuildMemberRemove(member);
     });
@@ -22,7 +22,8 @@ export const canvasEventsModule: AdobosModule = {
     ctx.on("guildMemberUpdate", (oldMember, newMember) => {
       void onGuildMemberUpdate(oldMember, newMember);
     });
-
+  },
+  registerHttp(ctx) {
     ctx.route(
       "/api/bot/leave",
       canvasEventSettingsRoutes("leave", ctx.botGateway),
