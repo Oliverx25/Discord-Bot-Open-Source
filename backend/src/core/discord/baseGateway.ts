@@ -4,6 +4,9 @@ import { env } from "#core/env.js";
 import {
   type AutoModRuleInput,
   BotGatewayError,
+  type ChannelMessageBrief,
+  type ChannelSummary,
+  type CreateChannelInput,
   type CreateRoleInput,
   type EditMessageResult,
   type OutgoingMessage,
@@ -140,6 +143,7 @@ async function toImageDataUri(avatar: Buffer | string): Promise<string> {
  */
 export abstract class BaseGateway {
   private rest: REST | null = null;
+  private cachedBotUserId: string | null = null;
 
   /** Cliente REST por token. Lanza si no hay `DISCORD_TOKEN`. */
   protected restClient(): REST {
@@ -181,6 +185,114 @@ export abstract class BaseGateway {
         reason: input.reason,
       },
     );
+  }
+
+  async deleteChannelOverwrite(
+    channelId: string,
+    overwriteId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient()
+      .delete(Routes.channelPermission(channelId, overwriteId), { reason })
+      .catch(() => undefined);
+  }
+
+  async createChannel(
+    guildId: string,
+    input: CreateChannelInput,
+  ): Promise<ChannelSummary> {
+    const created = (await this.restClient().post(
+      Routes.guildChannels(guildId),
+      {
+        body: {
+          name: input.name,
+          type: input.type,
+          parent_id: input.parentId ?? undefined,
+          topic: input.topic,
+          permission_overwrites: input.permissionOverwrites?.map((o) => ({
+            id: o.id,
+            type: o.type,
+            allow: o.allow ?? "0",
+            deny: o.deny ?? "0",
+          })),
+        },
+        reason: input.reason,
+      },
+    )) as {
+      id: string;
+      name?: string | null;
+      type: number;
+      parent_id?: string | null;
+      position?: number;
+    };
+    return {
+      id: created.id,
+      name: created.name ?? input.name,
+      type: created.type,
+      parentId: created.parent_id ?? null,
+      position: created.position ?? 0,
+    };
+  }
+
+  async pinMessage(
+    channelId: string,
+    messageId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient()
+      .put(Routes.channelPin(channelId, messageId), { reason })
+      .catch(() => undefined);
+  }
+
+  // ─────────── Lecturas compartidas (REST; subclases con Client pueden override) ───────────
+
+  async getBotUserId(): Promise<string> {
+    if (!this.cachedBotUserId) {
+      const me = (await this.restClient().get(Routes.user("@me"))) as {
+        id: string;
+      };
+      this.cachedBotUserId = me.id;
+    }
+    return this.cachedBotUserId;
+  }
+
+  async listChannelMessages(
+    channelId: string,
+    opts: { limit?: number; before?: string } = {},
+  ): Promise<ChannelMessageBrief[]> {
+    const query = new URLSearchParams({
+      limit: String(Math.max(1, Math.min(100, opts.limit ?? 50))),
+    });
+    if (opts.before) query.set("before", opts.before);
+    const msgs = (await this.restClient().get(
+      Routes.channelMessages(channelId),
+      { query },
+    )) as {
+      id: string;
+      content?: string;
+      timestamp: string;
+      author: {
+        id: string;
+        username: string;
+        discriminator?: string;
+        bot?: boolean;
+      };
+      attachments?: unknown[];
+      components?: unknown[];
+    }[];
+    return msgs.map((m) => ({
+      id: m.id,
+      authorId: m.author.id,
+      authorTag:
+        m.author.discriminator && m.author.discriminator !== "0"
+          ? `${m.author.username}#${m.author.discriminator}`
+          : m.author.username,
+      authorIsBot: Boolean(m.author.bot),
+      content: m.content ?? "",
+      createdAt: m.timestamp,
+      attachmentCount: m.attachments?.length ?? 0,
+      hasComponents: (m.components?.length ?? 0) > 0,
+    }));
   }
 
   async setChannelOverwrites(

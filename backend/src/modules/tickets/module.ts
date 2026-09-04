@@ -38,7 +38,7 @@ export const ticketsModule: AdobosModule = {
     GatewayIntentBits.GuildMessages,
   ],
   register(ctx) {
-    ctx.route("/api/tickets", ticketsRoutes(ctx.client), {
+    ctx.route("/api/tickets", ticketsRoutes(ctx.botGateway), {
       feature: "tickets",
     });
     ctx.button(TICKET_OPEN_PREFIX, (interaction) =>

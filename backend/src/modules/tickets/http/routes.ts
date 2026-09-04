@@ -3,9 +3,9 @@ import {
   normalizeTicketCloseReason,
   parseTicketUserMention,
 } from "@adobos/shared";
-import type { Client } from "discord.js";
 import { Router } from "express";
 import { z } from "zod";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { idParams } from "#core/http/schemas.js";
 import { defineRoute } from "#core/http/validate.js";
@@ -59,9 +59,13 @@ function actorIdOf(req: Parameters<typeof guildIdOf>[0]): string {
   return id;
 }
 
-async function actorMember(bot: Client, guildId: string, userId: string) {
-  const guild = await requireGuild(bot, guildId);
-  const member = await guild.members.fetch(userId).catch(() => null);
+async function actorRef(
+  gateway: BotGateway,
+  guildId: string,
+  userId: string,
+): Promise<{ id: string; displayName: string }> {
+  await requireGuild(gateway, guildId);
+  const member = await gateway.getMember(guildId, userId);
   if (!member) {
     throw new TicketsError(
       "You are not in this server or the bot can't see you.",
@@ -69,10 +73,10 @@ async function actorMember(bot: Client, guildId: string, userId: string) {
       "MEMBER_NOT_FOUND",
     );
   }
-  return { guild, member };
+  return { id: member.userId, displayName: member.displayName };
 }
 
-export function ticketsRoutes(bot: Client): Router {
+export function ticketsRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   router.get(
@@ -137,7 +141,7 @@ export function ticketsRoutes(bot: Client): Router {
       { params: idParams, body: updateTicketPanelSchema },
       async (req, res, valid) => {
         const result = await publishTicketPanel(
-          bot,
+          gateway,
           valid.params.id,
           guildIdOf(req),
           valid.body,
@@ -177,15 +181,13 @@ export function ticketsRoutes(bot: Client): Router {
   router.post(
     "/:id/claim",
     defineRoute({ params: idParams }, async (req, res, valid) => {
-      const { guild, member } = await actorMember(
-        bot,
-        guildIdOf(req),
-        actorIdOf(req),
-      );
+      const guildId = guildIdOf(req);
+      const actor = await actorRef(gateway, guildId, actorIdOf(req));
       const ticket = await claimTicket({
-        guild,
+        gateway,
+        guildId,
         ticketId: valid.params.id,
-        actor: member,
+        actor,
       });
       res.json({ ticket });
     }),
@@ -194,9 +196,11 @@ export function ticketsRoutes(bot: Client): Router {
   router.post(
     "/:id/unclaim",
     defineRoute({ params: idParams }, async (req, res, valid) => {
-      const guild = await requireGuild(bot, guildIdOf(req));
+      const guildId = guildIdOf(req);
+      await requireGuild(gateway, guildId);
       const ticket = await unclaimTicket({
-        guild,
+        gateway,
+        guildId,
         ticketId: valid.params.id,
         actorId: actorIdOf(req),
       });
@@ -207,9 +211,11 @@ export function ticketsRoutes(bot: Client): Router {
   router.post(
     "/:id/wait",
     defineRoute({ params: idParams }, async (req, res, valid) => {
-      const guild = await requireGuild(bot, guildIdOf(req));
+      const guildId = guildIdOf(req);
+      await requireGuild(gateway, guildId);
       const ticket = await waitTicket({
-        guild,
+        gateway,
+        guildId,
         ticketId: valid.params.id,
         actorId: actorIdOf(req),
       });
@@ -220,9 +226,11 @@ export function ticketsRoutes(bot: Client): Router {
   router.post(
     "/:id/unwait",
     defineRoute({ params: idParams }, async (req, res, valid) => {
-      const guild = await requireGuild(bot, guildIdOf(req));
+      const guildId = guildIdOf(req);
+      await requireGuild(gateway, guildId);
       const ticket = await unwaitTicket({
-        guild,
+        gateway,
+        guildId,
         ticketId: valid.params.id,
         actorId: actorIdOf(req),
       });
@@ -243,9 +251,11 @@ export function ticketsRoutes(bot: Client): Router {
             "MISSING_CLOSE_REASON",
           );
         }
-        const guild = await requireGuild(bot, guildIdOf(req));
+        const guildId = guildIdOf(req);
+        await requireGuild(gateway, guildId);
         const ticket = await closeTicket({
-          guild,
+          gateway,
+          guildId,
           ticketId: valid.params.id,
           actorId: actorIdOf(req),
           reason,
@@ -258,15 +268,13 @@ export function ticketsRoutes(bot: Client): Router {
   router.post(
     "/:id/reopen",
     defineRoute({ params: idParams }, async (req, res, valid) => {
-      const { guild, member } = await actorMember(
-        bot,
-        guildIdOf(req),
-        actorIdOf(req),
-      );
+      const guildId = guildIdOf(req);
+      const actor = await actorRef(gateway, guildId, actorIdOf(req));
       const ticket = await reopenTicket({
-        guild,
+        gateway,
+        guildId,
         ticketId: valid.params.id,
-        actor: member,
+        actor,
       });
       res.json({ ticket });
     }),
@@ -281,9 +289,11 @@ export function ticketsRoutes(bot: Client): Router {
         if (!userId) {
           throw new TicketsError("Invalid user.", 400, "INVALID_USER");
         }
-        const guild = await requireGuild(bot, guildIdOf(req));
+        const guildId = guildIdOf(req);
+        await requireGuild(gateway, guildId);
         const ticket = await addUserToTicket({
-          guild,
+          gateway,
+          guildId,
           ticketId: valid.params.id,
           actorId: actorIdOf(req),
           userId,
@@ -300,9 +310,11 @@ export function ticketsRoutes(bot: Client): Router {
       if (!userId) {
         throw new TicketsError("Invalid user.", 400, "INVALID_USER");
       }
-      const guild = await requireGuild(bot, guildIdOf(req));
+      const guildId = guildIdOf(req);
+      await requireGuild(gateway, guildId);
       const ticket = await removeUserFromTicket({
-        guild,
+        gateway,
+        guildId,
         ticketId: valid.params.id,
         actorId: actorIdOf(req),
         userId,

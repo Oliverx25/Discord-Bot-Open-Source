@@ -9,11 +9,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
-  type Client,
   EmbedBuilder,
-  type TextChannel,
 } from "discord.js";
-import { channelBelongsToGuild } from "#core/http/channelScope.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import {
   getTicketPanel,
   setPanelPublishedMessage,
@@ -34,12 +32,12 @@ function asButtonStyle(style: TicketButtonStyle): ButtonStyle {
 }
 
 export async function publishTicketPanel(
-  bot: Client,
+  gateway: BotGateway,
   panelId: number,
   guildId?: string,
   input?: UpdateTicketPanelRequest,
 ): Promise<PublishTicketPanelResponse> {
-  if (!bot.isReady()) {
+  if (!gateway.isReady()) {
     throw new TicketsError(
       "The Discord bot is not connected.",
       503,
@@ -65,7 +63,7 @@ export async function publishTicketPanel(
     );
   }
 
-  const channel = await bot.channels.fetch(panel.channelId).catch(() => null);
+  const channel = await gateway.getChannel(panel.guildId, panel.channelId);
   if (
     !channel ||
     (channel.type !== ChannelType.GuildText &&
@@ -77,15 +75,7 @@ export async function publishTicketPanel(
       "INVALID_PUBLISH_CHANNEL",
     );
   }
-  if (!channelBelongsToGuild(channel, panel.guildId)) {
-    throw new TicketsError(
-      "The publish channel does not belong to this server.",
-      403,
-      "CHANNEL_GUILD_MISMATCH",
-    );
-  }
 
-  const textChannel = channel as TextChannel;
   const embed = new EmbedBuilder()
     .setColor(embedColorInt(panel.embedColor))
     .setTitle(panel.embedTitle.slice(0, 256))
@@ -99,30 +89,32 @@ export async function publishTicketPanel(
         .setStyle(asButtonStyle(btn.style)),
     ),
   );
+  const payload = {
+    embeds: [embed.toJSON()],
+    components: [row.toJSON()],
+  };
 
   let messageId = panel.messageId;
   if (messageId) {
-    const existing = await textChannel.messages
-      .fetch(messageId)
-      .catch(() => null);
-    if (existing) {
-      await existing.edit({ embeds: [embed], components: [row] });
-    } else {
-      const sent = await textChannel.send({
-        embeds: [embed],
-        components: [row],
-      });
-      messageId = sent.id;
+    const edit = await gateway.editMessage(
+      panel.guildId,
+      channel.id,
+      messageId,
+      payload,
+    );
+    if (edit.orphaned) {
+      const sent = await gateway.sendMessage(
+        panel.guildId,
+        channel.id,
+        payload,
+      );
+      messageId = sent.messageId;
     }
   } else {
-    const sent = await textChannel.send({ embeds: [embed], components: [row] });
-    messageId = sent.id;
+    const sent = await gateway.sendMessage(panel.guildId, channel.id, payload);
+    messageId = sent.messageId;
   }
 
-  const saved = await setPanelPublishedMessage(
-    panel.id,
-    textChannel.id,
-    messageId,
-  );
-  return { panel: saved, messageId, channelId: textChannel.id };
+  const saved = await setPanelPublishedMessage(panel.id, channel.id, messageId);
+  return { panel: saved, messageId, channelId: channel.id };
 }

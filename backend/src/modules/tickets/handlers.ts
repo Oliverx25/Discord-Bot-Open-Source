@@ -25,16 +25,14 @@ import {
   ModalBuilder,
   type ModalSubmitInteraction,
   PermissionFlagsBits,
-  type TextChannel,
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import {
   addUserToTicket,
   claimTicket,
   closeTicket,
-  onTicketChannelDeleted,
-  onTicketChannelMessage,
   openTicket,
   removeUserFromTicket,
   unclaimTicket,
@@ -169,8 +167,9 @@ export async function onTicketOpenButton(
   await interaction.deferReply(EPHEMERAL);
   try {
     const ticket = await openTicket({
-      guild: interaction.guild,
-      opener: member,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
+      opener: { id: member.id, displayName: member.displayName },
       typeKey: parsed.typeKey,
     });
     await interaction.editReply({
@@ -197,9 +196,10 @@ export async function onTicketClaimButton(
   await interaction.deferReply(EPHEMERAL);
   try {
     const ticket = await claimTicket({
-      guild: interaction.guild,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
       ticketId,
-      actor: member,
+      actor: { id: member.id, displayName: member.displayName },
     });
     await interaction.editReply({
       content: `Ticket #${ticket.number} claimed.`,
@@ -223,7 +223,8 @@ export async function onTicketUnclaimButton(
   await interaction.deferReply(EPHEMERAL);
   try {
     const ticket = await unclaimTicket({
-      guild: interaction.guild,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
       ticketId,
       actorId: member.id,
     });
@@ -249,7 +250,8 @@ export async function onTicketWaitButton(
   await interaction.deferReply(EPHEMERAL);
   try {
     await waitTicket({
-      guild: interaction.guild,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
       ticketId,
       actorId: member.id,
     });
@@ -273,7 +275,8 @@ export async function onTicketUnwaitButton(
   await interaction.deferReply(EPHEMERAL);
   try {
     await unwaitTicket({
-      guild: interaction.guild,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
       ticketId,
       actorId: member.id,
     });
@@ -368,7 +371,8 @@ export async function onTicketReasonModal(
   await interaction.deferReply(EPHEMERAL);
   try {
     const ticket = await closeTicket({
-      guild: interaction.guild,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
       ticketId,
       actorId: member.id,
       reason,
@@ -402,7 +406,8 @@ export async function onTicketAddModal(
   await interaction.deferReply(EPHEMERAL);
   try {
     await addUserToTicket({
-      guild: interaction.guild,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
       ticketId,
       actorId: member.id,
       userId,
@@ -436,7 +441,8 @@ export async function onTicketRemoveModal(
   await interaction.deferReply(EPHEMERAL);
   try {
     await removeUserFromTicket({
-      guild: interaction.guild,
+      gateway: new LocalClientGateway(interaction.client),
+      guildId: interaction.guild.id,
       ticketId,
       actorId: member.id,
       userId,
@@ -447,16 +453,4 @@ export async function onTicketRemoveModal(
   } catch (error: unknown) {
     await interaction.editReply({ content: mapError(error) });
   }
-}
-
-export async function onTicketsChannelDelete(channelId: string): Promise<void> {
-  await onTicketChannelDeleted(channelId);
-}
-
-export async function onTicketsMessageCreate(input: {
-  channel: TextChannel;
-  authorId: string;
-  bot: boolean;
-}): Promise<void> {
-  await onTicketChannelMessage(input);
 }

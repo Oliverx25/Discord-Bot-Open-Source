@@ -157,6 +157,36 @@ export interface ChannelOverwrite {
   deny: string;
 }
 
+/** Alta de un canal de guild (tickets). */
+export interface CreateChannelInput {
+  name: string;
+  /** `ChannelType` numérico. */
+  type: number;
+  parentId?: string | null;
+  topic?: string;
+  permissionOverwrites?: {
+    id: string;
+    type: number;
+    allow?: string;
+    deny?: string;
+  }[];
+  reason?: string;
+}
+
+/** Mensaje de un canal con los campos que necesitan tickets (transcript / panel). */
+export interface ChannelMessageBrief {
+  id: string;
+  authorId: string;
+  /** `username#discriminator`, o solo `username` si no tiene discriminator. */
+  authorTag: string;
+  authorIsBot: boolean;
+  content: string;
+  /** ISO8601. */
+  createdAt: string;
+  attachmentCount: number;
+  hasComponents: boolean;
+}
+
 /** Un cambio dentro de una entrada de audit log (valores crudos de Discord). */
 export interface AuditLogChange {
   key: string;
@@ -512,12 +542,37 @@ export interface BotGateway {
     overwriteId: string,
     input: { type: number; allow: string; deny: string; reason?: string },
   ): Promise<void>;
+  /** Quita un overwrite del canal. No-op si no existía. */
+  deleteChannelOverwrite(
+    channelId: string,
+    overwriteId: string,
+    reason?: string,
+  ): Promise<void>;
   /** Reemplaza **todos** los overwrites del canal. */
   setChannelOverwrites(
     channelId: string,
     overwrites: ChannelOverwrite[],
     reason?: string,
   ): Promise<void>;
+
+  // — Canales / mensajes (tickets) —
+  /** ID del usuario del bot. */
+  getBotUserId(): Promise<string>;
+  createChannel(
+    guildId: string,
+    input: CreateChannelInput,
+  ): Promise<ChannelSummary>;
+  /** Fija un mensaje. Best-effort. */
+  pinMessage(
+    channelId: string,
+    messageId: string,
+    reason?: string,
+  ): Promise<void>;
+  /** Últimos mensajes de un canal (paginable con `before`). */
+  listChannelMessages(
+    channelId: string,
+    opts?: { limit?: number; before?: string },
+  ): Promise<ChannelMessageBrief[]>;
 
   // — AutoMod nativo (auto-mod) —
   /** ¿El bot tiene ese permiso a nivel de guild? `permission` = bit de `PermissionFlagsBits`. */

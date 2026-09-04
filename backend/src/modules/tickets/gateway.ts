@@ -5,6 +5,7 @@ import {
   type Message,
   type NonThreadGuildBasedChannel,
 } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { logger } from "#core/log.js";
 import { onTicketChannelDeleted, onTicketChannelMessage } from "./actions.js";
 
@@ -37,7 +38,9 @@ export async function onTicketsMessageCreate(message: Message): Promise<void> {
   if (!channel) return;
   try {
     await onTicketChannelMessage({
-      channel,
+      gateway: new LocalClientGateway(message.client),
+      guildId: channel.guild.id,
+      channelId: channel.id,
       authorId: message.author.id,
       bot: message.author.bot,
     });

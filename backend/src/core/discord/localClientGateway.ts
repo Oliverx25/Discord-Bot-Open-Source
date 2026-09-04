@@ -18,6 +18,7 @@ import {
   type BotProfileSummary,
   type BotRoleAdminContext,
   type ChannelDetail,
+  type ChannelMessageBrief,
   type ChannelOverwrite,
   type ChannelSummary,
   type EmojiSummary,
@@ -511,6 +512,40 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
       kickable: member.kickable,
       moderatable: member.moderatable,
     };
+  }
+
+  async getBotUserId(): Promise<string> {
+    return this.client.user?.id ?? "";
+  }
+
+  async listChannelMessages(
+    channelId: string,
+    opts: { limit?: number; before?: string } = {},
+  ): Promise<ChannelMessageBrief[]> {
+    const channel = await this.client.channels
+      .fetch(channelId)
+      .catch(() => null);
+    if (!channel || !channel.isTextBased() || channel.isDMBased()) return [];
+    const batch = await channel.messages
+      .fetch({
+        limit: Math.max(1, Math.min(100, opts.limit ?? 50)),
+        before: opts.before,
+      })
+      .catch(() => null);
+    if (!batch) return [];
+    return [...batch.values()].map((m) => ({
+      id: m.id,
+      authorId: m.author.id,
+      authorTag:
+        m.author.discriminator && m.author.discriminator !== "0"
+          ? `${m.author.username}#${m.author.discriminator}`
+          : m.author.username,
+      authorIsBot: m.author.bot,
+      content: m.content ?? "",
+      createdAt: m.createdAt.toISOString(),
+      attachmentCount: m.attachments.size,
+      hasComponents: m.components.length > 0,
+    }));
   }
 
   async getChannelOverwrites(

@@ -13,19 +13,16 @@ import {
 } from "@adobos/shared";
 import {
   ActionRowBuilder,
-  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
-  type Client,
   EmbedBuilder,
-  type Guild,
-  type GuildMember,
-  type Message,
-  OverwriteType,
   PermissionFlagsBits,
-  type TextChannel,
 } from "discord.js";
+import type {
+  BotGateway,
+  ChannelMessageBrief,
+} from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import {
   addTicketParticipant,
@@ -41,47 +38,40 @@ import {
   TicketsError,
 } from "./domain/tickets.js";
 
-const TICKET_ALLOW = [
+/** Referencia mínima de un miembro (solo lo que usan las acciones). */
+interface ActorRef {
+  id: string;
+  displayName: string;
+}
+
+function orBits(bits: bigint[]): bigint {
+  return bits.reduce((acc, bit) => acc | bit, 0n);
+}
+
+const TICKET_ALLOW_BITS = orBits([
   PermissionFlagsBits.ViewChannel,
   PermissionFlagsBits.SendMessages,
   PermissionFlagsBits.ReadMessageHistory,
   PermissionFlagsBits.AttachFiles,
   PermissionFlagsBits.EmbedLinks,
-];
+]);
 
-const BOT_ALLOW = [
-  ...TICKET_ALLOW,
-  PermissionFlagsBits.ManageChannels,
-  PermissionFlagsBits.ManageMessages,
-];
+const BOT_ALLOW_BITS =
+  TICKET_ALLOW_BITS |
+  PermissionFlagsBits.ManageChannels |
+  PermissionFlagsBits.ManageMessages;
 
 function embedColorInt(hex: string): number {
   const n = Number.parseInt(hex.replace("#", ""), 16);
   return Number.isFinite(n) ? n : 0x5865f2;
 }
 
-function asTextChannel(channel: unknown): TextChannel | null {
-  if (
-    channel &&
-    typeof channel === "object" &&
-    "type" in channel &&
-    (channel as { type: number }).type === ChannelType.GuildText &&
-    "send" in channel
-  ) {
-    return channel as TextChannel;
-  }
-  return null;
-}
-
 export async function requireGuild(
-  bot: Client,
+  gateway: BotGateway,
   guildId: string,
-): Promise<Guild> {
-  const cached = bot.guilds.cache.get(guildId);
-  if (cached) return cached;
-  try {
-    return await bot.guilds.fetch(guildId);
-  } catch {
+): Promise<void> {
+  const guild = await gateway.getGuild(guildId);
+  if (!guild) {
     throw new TicketsError(
       "The bot is not in this server.",
       400,
@@ -90,17 +80,15 @@ export async function requireGuild(
   }
 }
 
-async function fetchTextInGuild(
-  guild: Guild,
-  channelId: string,
-): Promise<TextChannel | null> {
-  const cached = asTextChannel(guild.channels.cache.get(channelId));
-  if (cached) return cached;
-  try {
-    return asTextChannel(await guild.channels.fetch(channelId));
-  } catch {
-    return null;
-  }
+/** El canal (id) de un ticket, si sigue existiendo como canal de texto del guild. */
+async function findTicketChannelId(
+  gateway: BotGateway,
+  guildId: string,
+  channelId: string | null,
+): Promise<string | null> {
+  if (!channelId) return null;
+  const channel = await gateway.getChannel(guildId, channelId);
+  return channel && channel.type === ChannelType.GuildText ? channel.id : null;
 }
 
 function controlRows(ticket: TicketSummary): ActionRowBuilder<ButtonBuilder>[] {
@@ -171,37 +159,37 @@ function ticketEmbed(ticket: TicketSummary): EmbedBuilder {
 }
 
 export async function upsertControlMessage(
-  channel: TextChannel,
+  gateway: BotGateway,
+  guildId: string,
+  channelId: string,
   ticket: TicketSummary,
 ): Promise<void> {
   const payload = {
-    embeds: [ticketEmbed(ticket)],
-    components: controlRows(ticket),
+    embeds: [ticketEmbed(ticket).toJSON()],
+    components: controlRows(ticket).map((row) => row.toJSON()),
   };
   try {
-    const recent = await channel.messages.fetch({ limit: 20 });
-    const mine = recent.find(
-      (msg) =>
-        msg.author.id === channel.client.user?.id && msg.components.length > 0,
-    );
+    const recent = await gateway.listChannelMessages(channelId, { limit: 20 });
+    const mine = recent.find((msg) => msg.authorIsBot && msg.hasComponents);
     if (mine) {
-      await mine.edit(payload);
+      await gateway.editMessage(guildId, channelId, mine.id, payload);
       return;
     }
   } catch {
     // sin historial o sin permiso: enviamos uno nuevo
   }
-  const sent = await channel.send(payload);
-  await sent.pin().catch(() => undefined);
+  const sent = await gateway.sendMessage(guildId, channelId, payload);
+  await gateway.pinMessage(channelId, sent.messageId).catch(() => undefined);
 }
 
 async function createTicketChannel(
-  guild: Guild,
+  gateway: BotGateway,
+  guildId: string,
   settings: TicketSettings,
   ticket: TicketSummary,
-  opener: GuildMember,
-): Promise<TextChannel> {
-  const botId = guild.members.me?.id ?? guild.client.user?.id;
+  opener: ActorRef,
+): Promise<string> {
+  const botId = await gateway.getBotUserId();
   if (!botId) {
     throw new TicketsError(
       "The bot is not in this server.",
@@ -218,44 +206,33 @@ async function createTicketChannel(
   }
   const name = applyTicketNameTemplate(settings.nameTemplate, {
     n: ticket.number,
-    user: opener.displayName || opener.user.username,
+    user: opener.displayName,
     typeKey: ticket.typeKey,
   });
   try {
-    const channel = await guild.channels.create({
+    const channel = await gateway.createChannel(guildId, {
       name,
       type: ChannelType.GuildText,
-      parent: settings.categoryId,
+      parentId: settings.categoryId,
       permissionOverwrites: [
         {
-          id: guild.id,
-          type: OverwriteType.Role,
-          deny: [PermissionFlagsBits.ViewChannel],
+          id: guildId,
+          type: 0,
+          deny: PermissionFlagsBits.ViewChannel.toString(),
         },
-        {
-          id: botId,
-          type: OverwriteType.Member,
-          allow: BOT_ALLOW,
-        },
-        {
-          id: opener.id,
-          type: OverwriteType.Member,
-          allow: TICKET_ALLOW,
-        },
+        { id: botId, type: 1, allow: BOT_ALLOW_BITS.toString() },
+        { id: opener.id, type: 1, allow: TICKET_ALLOW_BITS.toString() },
         ...settings.staffRoleIds.map((roleId) => ({
           id: roleId,
-          type: OverwriteType.Role,
-          allow: TICKET_ALLOW,
+          type: 0,
+          allow: TICKET_ALLOW_BITS.toString(),
         })),
       ],
       reason: `Tickets: #${ticket.number}`,
     });
-    return channel;
+    return channel.id;
   } catch (error: unknown) {
-    logger.warn(
-      { err: error, guildId: guild.id },
-      "Couldn't create the ticket channel",
-    );
+    logger.warn({ err: error, guildId }, "Couldn't create the ticket channel");
     throw new TicketsError(
       "Couldn't create the channel. Make sure the bot has the Manage Channels permission in that category.",
       400,
@@ -264,32 +241,36 @@ async function createTicketChannel(
   }
 }
 
-async function collectTranscript(channel: TextChannel): Promise<string> {
-  const collected: Message[] = [];
+async function collectTranscript(
+  gateway: BotGateway,
+  channelId: string,
+): Promise<string> {
+  const collected: ChannelMessageBrief[] = [];
   let before: string | undefined;
   for (let i = 0; i < 10; i++) {
-    const batch = await channel.messages.fetch({ limit: 100, before });
-    if (batch.size === 0) break;
-    const arr = [...batch.values()];
-    collected.push(...arr);
-    before = arr[arr.length - 1]?.id;
-    if (batch.size < 100) break;
+    const batch = await gateway.listChannelMessages(channelId, {
+      limit: 100,
+      before,
+    });
+    if (batch.length === 0) break;
+    collected.push(...batch);
+    before = batch[batch.length - 1]?.id;
+    if (batch.length < 100) break;
   }
-  collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+  collected.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   const lines = collected.map((msg) => {
-    const when = msg.createdAt.toISOString();
-    const name = msg.author.tag;
-    const extra = msg.attachments.size
-      ? ` [${msg.attachments.size} attachment(s)]`
+    const extra = msg.attachmentCount
+      ? ` [${msg.attachmentCount} attachment(s)]`
       : "";
-    const body = msg.content?.trim() ? msg.content : extra ? "" : "(no text)";
-    return `[${when}] ${name}: ${body}${extra}`;
+    const body = msg.content.trim() ? msg.content : extra ? "" : "(no text)";
+    return `[${msg.createdAt}] ${msg.authorTag}: ${body}${extra}`;
   });
   return clampTicketTranscript(lines.join("\n"));
 }
 
 async function postTicketLog(
-  guild: Guild,
+  gateway: BotGateway,
+  guildId: string,
   settings: TicketSettings,
   ticket: TicketSummary,
   title: string,
@@ -297,64 +278,64 @@ async function postTicketLog(
   file?: { name: string; text: string },
 ): Promise<void> {
   if (!settings.logChannelId) return;
-  const channel = await fetchTextInGuild(guild, settings.logChannelId);
-  if (!channel) return;
+  const channel = await gateway.getChannel(guildId, settings.logChannelId);
+  if (!channel || channel.type !== ChannelType.GuildText) return;
   const embed = new EmbedBuilder()
     .setColor(embedColorInt("#5865F2"))
     .setTitle(title)
     .setDescription(body.slice(0, 4096))
     .setFooter({ text: `Ticket #${ticket.number}` })
     .setTimestamp(new Date());
-  const files = file
-    ? [
-        new AttachmentBuilder(Buffer.from(file.text, "utf8"), {
-          name: file.name,
-        }),
-      ]
-    : [];
-  await channel.send({ embeds: [embed], files }).catch((error: unknown) => {
-    logger.warn({ err: error }, "Couldn't send the ticket log");
-  });
+  await gateway
+    .sendMessage(guildId, settings.logChannelId, {
+      embeds: [embed.toJSON()],
+      files: file
+        ? [{ name: file.name, data: Buffer.from(file.text, "utf8") }]
+        : undefined,
+    })
+    .catch((error: unknown) => {
+      logger.warn({ err: error }, "Couldn't send the ticket log");
+    });
 }
 
 async function dmTranscript(
-  guild: Guild,
+  gateway: BotGateway,
   openerId: string,
   ticket: TicketSummary,
   text: string,
 ): Promise<void> {
-  try {
-    const user = await guild.client.users.fetch(openerId);
-    await user.send({
+  await gateway
+    .sendDirectMessage(openerId, {
       content: `Transcript for ticket #${ticket.number} (${ticket.typeKey}).`,
       files: [
-        new AttachmentBuilder(Buffer.from(text, "utf8"), {
+        {
           name: `ticket-${ticket.number}.txt`,
-        }),
+          data: Buffer.from(text, "utf8"),
+        },
       ],
-    });
-  } catch {
-    // DMs cerrados: el expediente sigue en el panel
-  }
+    })
+    .catch(() => undefined);
 }
 
 export async function openTicket(input: {
-  guild: Guild;
-  opener: GuildMember;
+  gateway: BotGateway;
+  guildId: string;
+  opener: ActorRef;
   typeKey: string;
   reason?: string | null;
 }): Promise<TicketSummary> {
-  const settings = await assertCanOpenTicket(input.guild.id, input.opener.id);
+  const settings = await assertCanOpenTicket(input.guildId, input.opener.id);
   const ticket = await insertOpenedTicket({
-    guildId: input.guild.id,
+    guildId: input.guildId,
     openerId: input.opener.id,
     typeKey: input.typeKey,
     reason: input.reason ?? null,
   });
-  let channel: TextChannel;
+  let channelId: string;
   try {
-    channel = await createTicketChannel(
-      input.guild,
+    channelId = await createTicketChannel(
+      input.gateway,
+      input.guildId,
       settings,
       ticket,
       input.opener,
@@ -370,9 +351,9 @@ export async function openTicket(input: {
     }).catch(() => undefined);
     throw error;
   }
-  await setTicketChannelId(ticket.id, channel.id);
-  const live = { ...ticket, channelId: channel.id };
-  await channel.send({
+  await setTicketChannelId(ticket.id, channelId);
+  const live = { ...ticket, channelId };
+  await input.gateway.sendMessage(input.guildId, channelId, {
     content: `<@${input.opener.id}>`,
     embeds: [
       new EmbedBuilder()
@@ -380,24 +361,27 @@ export async function openTicket(input: {
         .setTitle(`Ticket #${ticket.number}`)
         .setDescription(
           `Type: \`${ticket.typeKey}\`\nA staff member will assist you here.`,
-        ),
+        )
+        .toJSON(),
     ],
   });
-  await upsertControlMessage(channel, live);
+  await upsertControlMessage(input.gateway, input.guildId, channelId, live);
   await postTicketLog(
-    input.guild,
+    input.gateway,
+    input.guildId,
     settings,
     live,
     `Ticket #${ticket.number} abierto`,
-    `Tipo \`${ticket.typeKey}\` · <@${input.opener.id}> · ${channel}`,
+    `Tipo \`${ticket.typeKey}\` · <@${input.opener.id}> · <#${channelId}>`,
   );
   return live;
 }
 
-async function requireLiveChannel(
-  guild: Guild,
+async function requireLiveChannelId(
+  gateway: BotGateway,
+  guildId: string,
   ticket: TicketSummary,
-): Promise<TextChannel> {
+): Promise<string> {
   if (!ticket.channelId) {
     throw new TicketsError(
       "This ticket no longer has a Discord channel.",
@@ -405,23 +389,28 @@ async function requireLiveChannel(
       "NO_CHANNEL",
     );
   }
-  const channel = await fetchTextInGuild(guild, ticket.channelId);
-  if (!channel) {
+  const channelId = await findTicketChannelId(
+    gateway,
+    guildId,
+    ticket.channelId,
+  );
+  if (!channelId) {
     throw new TicketsError(
       "I can't find this ticket's channel.",
       404,
       "CHANNEL_NOT_FOUND",
     );
   }
-  return channel;
+  return channelId;
 }
 
 export async function claimTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
-  actor: GuildMember;
+  actor: ActorRef;
 }): Promise<TicketSummary> {
-  const current = await getTicketById(input.ticketId, input.guild.id);
+  const current = await getTicketById(input.ticketId, input.guildId);
   if (current.claimedBy === input.actor.id && current.status === "claimed") {
     throw new TicketsError(
       "You already have this ticket.",
@@ -441,20 +430,23 @@ export async function claimTicket(input: {
     claimedBy: input.actor.id,
     payload: { fromStaff: current.claimedBy, toStaff: input.actor.id },
   });
-  const channel = await requireLiveChannel(input.guild, ticket);
-  await channel.permissionOverwrites
-    .edit(input.actor.id, {
-      ViewChannel: true,
-      SendMessages: true,
-      ReadMessageHistory: true,
-      AttachFiles: true,
-      EmbedLinks: true,
+  const channelId = await requireLiveChannelId(
+    input.gateway,
+    input.guildId,
+    ticket,
+  );
+  await input.gateway
+    .putChannelOverwrite(channelId, input.actor.id, {
+      type: 1,
+      allow: TICKET_ALLOW_BITS.toString(),
+      deny: "0",
     })
     .catch(() => undefined);
-  await upsertControlMessage(channel, ticket);
-  const settings = await getTicketSettings(input.guild.id);
+  await upsertControlMessage(input.gateway, input.guildId, channelId, ticket);
+  const settings = await getTicketSettings(input.guildId);
   await postTicketLog(
-    input.guild,
+    input.gateway,
+    input.guildId,
     settings,
     ticket,
     `Ticket #${ticket.number} ${action === "transfer" ? "transferido" : "reclamado"}`,
@@ -463,73 +455,89 @@ export async function claimTicket(input: {
   return ticket;
 }
 
+async function refreshControl(
+  gateway: BotGateway,
+  guildId: string,
+  ticket: TicketSummary,
+): Promise<void> {
+  const channelId = await findTicketChannelId(
+    gateway,
+    guildId,
+    ticket.channelId,
+  );
+  if (channelId) {
+    await upsertControlMessage(gateway, guildId, channelId, ticket);
+  }
+}
+
 export async function unclaimTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
   actorId: string;
 }): Promise<TicketSummary> {
   const ticket = await applyTicketAction({
     ticketId: input.ticketId,
-    guildId: input.guild.id,
+    guildId: input.guildId,
     action: "unclaim",
     actorId: input.actorId,
   });
-  if (ticket.channelId) {
-    const channel = await fetchTextInGuild(input.guild, ticket.channelId);
-    if (channel) await upsertControlMessage(channel, ticket);
-  }
+  await refreshControl(input.gateway, input.guildId, ticket);
   return ticket;
 }
 
 export async function waitTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
   actorId: string;
 }): Promise<TicketSummary> {
   const ticket = await applyTicketAction({
     ticketId: input.ticketId,
-    guildId: input.guild.id,
+    guildId: input.guildId,
     action: "wait",
     actorId: input.actorId,
   });
-  if (ticket.channelId) {
-    const channel = await fetchTextInGuild(input.guild, ticket.channelId);
-    if (channel) await upsertControlMessage(channel, ticket);
-  }
+  await refreshControl(input.gateway, input.guildId, ticket);
   return ticket;
 }
 
 export async function unwaitTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
   actorId: string;
 }): Promise<TicketSummary> {
   const ticket = await applyTicketAction({
     ticketId: input.ticketId,
-    guildId: input.guild.id,
+    guildId: input.guildId,
     action: "unwait",
     actorId: input.actorId,
   });
-  if (ticket.channelId) {
-    const channel = await fetchTextInGuild(input.guild, ticket.channelId);
-    if (channel) await upsertControlMessage(channel, ticket);
-  }
+  await refreshControl(input.gateway, input.guildId, ticket);
   return ticket;
 }
 
 export async function closeTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
   actorId: string;
   reason: string;
 }): Promise<TicketSummary> {
-  const current = await getTicketById(input.ticketId, input.guild.id);
+  const current = await getTicketById(input.ticketId, input.guildId);
   let transcript = "";
-  let channel: TextChannel | null = null;
+  let channelId: string | null = null;
   if (current.channelId) {
-    channel = await fetchTextInGuild(input.guild, current.channelId);
-    if (channel) {
-      transcript = await collectTranscript(channel).catch(() => "");
+    channelId = await findTicketChannelId(
+      input.gateway,
+      input.guildId,
+      current.channelId,
+    );
+    if (channelId) {
+      transcript = await collectTranscript(input.gateway, channelId).catch(
+        () => "",
+      );
     }
   }
   const ticket = await applyTicketAction({
@@ -541,9 +549,10 @@ export async function closeTicket(input: {
     transcriptText: transcript || null,
     channelId: null,
   });
-  const settings = await getTicketSettings(input.guild.id);
+  const settings = await getTicketSettings(input.guildId);
   await postTicketLog(
-    input.guild,
+    input.gateway,
+    input.guildId,
     settings,
     ticket,
     `Ticket #${ticket.number} closed`,
@@ -553,11 +562,15 @@ export async function closeTicket(input: {
       : undefined,
   );
   if (transcript) {
-    await dmTranscript(input.guild, current.openerId, ticket, transcript);
+    await dmTranscript(input.gateway, current.openerId, ticket, transcript);
   }
-  if (channel) {
-    await channel
-      .delete(`Tickets: close #${ticket.number}`)
+  if (channelId) {
+    await input.gateway
+      .deleteChannel(
+        input.guildId,
+        channelId,
+        `Tickets: close #${ticket.number}`,
+      )
       .catch((error: unknown) => {
         logger.warn({ err: error }, "Couldn't delete the ticket channel");
       });
@@ -566,12 +579,13 @@ export async function closeTicket(input: {
 }
 
 export async function reopenTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
-  actor: GuildMember;
+  actor: ActorRef;
 }): Promise<TicketSummary> {
-  const current = await getTicketById(input.ticketId, input.guild.id);
-  const settings = await getTicketSettings(input.guild.id);
+  const current = await getTicketById(input.ticketId, input.guildId);
+  const settings = await getTicketSettings(input.guildId);
   if (!settings.categoryId || settings.staffRoleIds.length === 0) {
     throw new TicketsError(
       "Configure a category and staff roles before reopening.",
@@ -579,9 +593,13 @@ export async function reopenTicket(input: {
       "MISSING_SETTINGS",
     );
   }
-  const opener =
-    (await input.guild.members.fetch(current.openerId).catch(() => null)) ??
-    input.actor;
+  const openerMember = await input.gateway.getMember(
+    input.guildId,
+    current.openerId,
+  );
+  const opener: ActorRef = openerMember
+    ? { id: openerMember.userId, displayName: openerMember.displayName }
+    : input.actor;
   const placeholder = await applyTicketAction({
     ticketId: current.id,
     guildId: current.guildId,
@@ -590,81 +608,92 @@ export async function reopenTicket(input: {
     channelId: null,
     payload: { previousChannelId: current.channelId },
   });
-  const channel = await createTicketChannel(
-    input.guild,
+  const channelId = await createTicketChannel(
+    input.gateway,
+    input.guildId,
     settings,
     placeholder,
     opener,
   );
-  await setTicketChannelId(placeholder.id, channel.id);
+  await setTicketChannelId(placeholder.id, channelId);
   const live = {
     ...placeholder,
-    channelId: channel.id,
+    channelId,
     status: "open" as const,
   };
-  await channel.send({
+  await input.gateway.sendMessage(input.guildId, channelId, {
     content: `<@${current.openerId}>`,
     embeds: [
       new EmbedBuilder()
         .setColor(embedColorInt("#5865F2"))
         .setTitle(`Ticket #${current.number} reopened`)
-        .setDescription(`Type: \`${current.typeKey}\``),
+        .setDescription(`Type: \`${current.typeKey}\``)
+        .toJSON(),
     ],
   });
-  await upsertControlMessage(channel, live);
+  await upsertControlMessage(input.gateway, input.guildId, channelId, live);
   await postTicketLog(
-    input.guild,
+    input.gateway,
+    input.guildId,
     settings,
     live,
     `Ticket #${current.number} reopened`,
-    `<@${input.actor.id}> · ${channel}`,
+    `<@${input.actor.id}> · <#${channelId}>`,
   );
   return live;
 }
 
 export async function addUserToTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
   actorId: string;
   userId: string;
 }): Promise<TicketSummary> {
   const ticket = await addTicketParticipant(
     input.ticketId,
-    input.guild.id,
+    input.guildId,
     input.userId,
     input.actorId,
   );
-  const channel = await requireLiveChannel(input.guild, ticket);
-  await channel.permissionOverwrites.edit(input.userId, {
-    ViewChannel: true,
-    SendMessages: true,
-    ReadMessageHistory: true,
-    AttachFiles: true,
-    EmbedLinks: true,
+  const channelId = await requireLiveChannelId(
+    input.gateway,
+    input.guildId,
+    ticket,
+  );
+  await input.gateway.putChannelOverwrite(channelId, input.userId, {
+    type: 1,
+    allow: TICKET_ALLOW_BITS.toString(),
+    deny: "0",
   });
-  await channel.send(`<@${input.userId}> was added to the ticket.`);
+  await input.gateway.sendMessage(input.guildId, channelId, {
+    content: `<@${input.userId}> was added to the ticket.`,
+  });
   return ticket;
 }
 
 export async function removeUserFromTicket(input: {
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
   ticketId: number;
   actorId: string;
   userId: string;
 }): Promise<TicketSummary> {
   const ticket = await removeTicketParticipant(
     input.ticketId,
-    input.guild.id,
+    input.guildId,
     input.userId,
     input.actorId,
   );
-  if (ticket.channelId) {
-    const channel = await fetchTextInGuild(input.guild, ticket.channelId);
-    if (channel) {
-      await channel.permissionOverwrites
-        .delete(input.userId)
-        .catch(() => undefined);
-    }
+  const channelId = await findTicketChannelId(
+    input.gateway,
+    input.guildId,
+    ticket.channelId,
+  );
+  if (channelId) {
+    await input.gateway
+      .deleteChannelOverwrite(channelId, input.userId)
+      .catch(() => undefined);
   }
   return ticket;
 }
@@ -677,12 +706,14 @@ export async function onTicketChannelDeleted(channelId: string): Promise<void> {
 }
 
 export async function onTicketChannelMessage(input: {
-  channel: TextChannel;
+  gateway: BotGateway;
+  guildId: string;
+  channelId: string;
   authorId: string;
   bot: boolean;
 }): Promise<void> {
   if (input.bot) return;
-  const ticket = await getTicketByChannelId(input.channel.id);
+  const ticket = await getTicketByChannelId(input.channelId);
   if (!ticket || ticket.status !== "waiting") return;
   if (ticket.openerId !== input.authorId) return;
   const updated = await applyTicketAction({
@@ -691,5 +722,10 @@ export async function onTicketChannelMessage(input: {
     action: "unwait",
     actorId: input.authorId,
   });
-  await upsertControlMessage(input.channel, updated).catch(() => undefined);
+  await upsertControlMessage(
+    input.gateway,
+    input.guildId,
+    input.channelId,
+    updated,
+  ).catch(() => undefined);
 }
