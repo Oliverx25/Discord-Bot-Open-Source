@@ -45,6 +45,7 @@ export function toManagedGuild(guild: DiscordGuildPayload): ManagedGuild {
     icon: guild.icon,
     iconUrl: iconUrl(guild.id, guild.icon),
     owner: guild.owner,
+    permissions: guild.permissions,
   };
 }
 
@@ -70,6 +71,19 @@ export async function userManagesGuild(
 ): Promise<boolean> {
   const guilds = await listManagedGuilds(session);
   return guilds.some((g) => g.id === guildId);
+}
+
+/**
+ * Permisos base efectivos del usuario en un guild que ya gestiona (mismo
+ * caché de 60s que `userManagesGuild`, sin llamadas extra a Discord).
+ * `undefined` si el usuario no gestiona ese guild.
+ */
+export async function actorManagedGuild(
+  session: StoredSession,
+  guildId: string,
+): Promise<ManagedGuild | undefined> {
+  const guilds = await listManagedGuilds(session);
+  return guilds.find((g) => g.id === guildId);
 }
 
 export function invalidateGuildCache(userId: string): void {

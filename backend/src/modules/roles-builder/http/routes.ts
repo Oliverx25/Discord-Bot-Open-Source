@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { BotGateway } from "#core/discord/botGateway.js";
-import { guildIdOf } from "#core/http/guildContext.js";
+import { guildIdOf, requireGuildCapability } from "#core/http/guildContext.js";
 import { snowflake } from "#core/http/schemas.js";
 import { defineRoute } from "#core/http/validate.js";
 import {
@@ -19,9 +19,16 @@ import {
 
 const roleIdParams = z.object({ roleId: snowflake });
 
-/** Rutas: GET /list · POST /create · PATCH /positions · PATCH|DELETE /:roleId. */
+/**
+ * Rutas: GET /list · POST /create · PATCH /positions · PATCH|DELETE /:roleId.
+ * Las de escritura exigen `roles.write` (SEC-01): `ManageGuild` solo no debe
+ * bastar para crear un rol con permisos arbitrarios (incl. Administrator) y
+ * asignárselo — es la vía más directa para amplificar a toda la autoridad
+ * del bot.
+ */
 export function rolesBuilderRoutes(gateway: BotGateway): Router {
   const router = Router();
+  const requireRolesWrite = requireGuildCapability("roles.write");
 
   router.get(
     "/list",
@@ -32,6 +39,7 @@ export function rolesBuilderRoutes(gateway: BotGateway): Router {
 
   router.post(
     "/create",
+    requireRolesWrite,
     defineRoute({ body: createGuildRoleSchema }, async (req, res, valid) => {
       const data = await createGuildRole(gateway, valid.body, guildIdOf(req));
       res.status(201).json(data);
@@ -40,6 +48,7 @@ export function rolesBuilderRoutes(gateway: BotGateway): Router {
 
   router.patch(
     "/positions",
+    requireRolesWrite,
     defineRoute(
       { body: updateRolePositionsSchema },
       async (req, res, valid) => {
@@ -55,6 +64,7 @@ export function rolesBuilderRoutes(gateway: BotGateway): Router {
 
   router.patch(
     "/:roleId",
+    requireRolesWrite,
     defineRoute(
       { params: roleIdParams, body: updateGuildRoleSchema },
       async (req, res, valid) => {
@@ -71,6 +81,7 @@ export function rolesBuilderRoutes(gateway: BotGateway): Router {
 
   router.delete(
     "/:roleId",
+    requireRolesWrite,
     defineRoute({ params: roleIdParams }, async (req, res, valid) => {
       const data = await deleteGuildRole(
         gateway,

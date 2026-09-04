@@ -2,9 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
+import { HttpError } from "#core/http/httpError.js";
 import { searchQuerySchema, snowflake } from "#core/http/schemas.js";
 import { defineRoute } from "#core/http/validate.js";
 import { fetchDiscordAuditLog } from "../audit.js";
+import { assertModActionAuthorized } from "../authz.js";
 import {
   executeModAction,
   fetchDiscordMessage,
@@ -90,9 +92,20 @@ export function moderationReadRoutes(gateway: BotGateway): Router {
   router.post(
     "/action",
     defineRoute({ body: modActionSchema }, async (req, res, valid) => {
+      const guildId = guildIdOf(req);
+      const session = req.panelSession;
+      if (!session) {
+        throw new HttpError("Session missing.", 401, "UNAUTHENTICATED");
+      }
+      // SEC-01: ManageGuild (requireGuildAccess) no implica BanMembers,
+      // KickMembers, ManageMessages, etc. — ni jerarquía actor–objetivo.
+      await assertModActionAuthorized(gateway, session, guildId, {
+        action: valid.body.action,
+        userId: valid.body.userId,
+      });
       const result = await executeModAction(
         gateway,
-        { ...valid.body, guildId: guildIdOf(req) },
+        { ...valid.body, guildId },
         req.guild?.userId,
       );
       res.status(result.dmFailed ? 206 : 200).json(result);

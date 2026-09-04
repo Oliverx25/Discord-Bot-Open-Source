@@ -14,6 +14,12 @@ export interface ManagedGuild {
   icon: string | null;
   iconUrl: string | null;
   owner: boolean;
+  /**
+   * Bitfield de permisos base (rol) que Discord ya computa para este usuario
+   * en el guild — string decimal, sin overwrites de canal. Fuente para
+   * `core/authz/guildPolicy.ts`; nunca se expone tal cual al frontend.
+   */
+  permissions: string;
 }
 
 export interface GuildContext {

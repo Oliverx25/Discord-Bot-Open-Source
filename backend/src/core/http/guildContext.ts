@@ -2,6 +2,12 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { userManagesGuild } from "../auth/discordGuilds.js";
 import { readSessionFromRequest, redirectToLogin } from "../auth/oauth.js";
 import type { GuildContext } from "../auth/types.js";
+import {
+  actorGuildAuthority,
+  authorityHasCapability,
+  type GuildCapability,
+  logCapabilityDenied,
+} from "../authz/guildPolicy.js";
 import { DiscordHttpError } from "../discord/discordHttpError.js";
 import { entitlementsOf, getGuildTier } from "../entitlements/service.js";
 import { logger } from "../log.js";
@@ -108,6 +114,59 @@ export function requireGuildAccess(): RequestHandler {
           "Couldn't verify access to the server.",
           502,
           "GUILD_ACCESS_CHECK_FAILED",
+        ),
+      );
+    }
+  };
+}
+
+/**
+ * Capacidad específica sobre la autoridad del bot (SEC-01). Debe montarse
+ * después de `requireGuildAccess()` — reusa `req.guild`/`req.panelSession`,
+ * ambos ya validados, sin llamadas extra a Discord (mismo caché de 60s).
+ */
+export function requireGuildCapability(
+  capability: GuildCapability,
+): RequestHandler {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const guild = req.guild;
+      const session = req.panelSession;
+      if (!guild || !session) {
+        next(
+          new HttpError(
+            "requireGuildAccess was not applied before requireGuildCapability.",
+            500,
+            "MISSING_GUILD_CONTEXT",
+          ),
+        );
+        return;
+      }
+      const authority = await actorGuildAuthority(session, guild.guildId);
+      if (!authority || !authorityHasCapability(authority, capability)) {
+        logCapabilityDenied({
+          guildId: guild.guildId,
+          actorUserId: guild.userId,
+          capability,
+          reason: "missing_capability",
+        });
+        next(
+          new HttpError(
+            `You don't have the required Discord permission for this action (${capability}).`,
+            403,
+            "CAPABILITY_DENIED",
+          ),
+        );
+        return;
+      }
+      next();
+    } catch (error: unknown) {
+      logger.error({ err: error }, "requireGuildCapability failed");
+      next(
+        new HttpError(
+          "Couldn't verify your permissions for this action.",
+          502,
+          "CAPABILITY_CHECK_FAILED",
         ),
       );
     }
