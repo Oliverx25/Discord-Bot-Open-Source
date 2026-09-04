@@ -17,11 +17,12 @@ import {
   type ActivityType,
   type Client,
   DiscordAPIError,
-  type Guild,
   type PresenceStatusData,
   PresenceUpdateStatus,
 } from "discord.js";
 import { eq } from "drizzle-orm";
+import type { BotGateway } from "#core/discord/botGateway.js";
+import { BotGatewayError } from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
 import { botPresenceSettings } from "#db/schema.js";
@@ -64,31 +65,53 @@ const ACTIVITY_TYPE_MAP: Record<BotActivityTypeName, number> = {
   Competing: 5,
 };
 
-function assertBotReady(bot: Client): void {
-  if (!bot.isReady() || !bot.user) {
+function resolveGuildId(gateway: BotGateway, guildId?: string): string {
+  if (!gateway.isReady()) {
     throw new BotProfileError(
       "The Discord bot is not connected.",
       503,
       "BOT_NOT_READY",
     );
   }
-}
-
-function resolveGuild(bot: Client, guildId?: string): Guild {
-  assertBotReady(bot);
   const id = (guildId ?? "").trim();
   if (!id) {
     throw new BotProfileError("Missing guildId.", 400, "MISSING_GUILD_ID");
   }
-  const guild = bot.guilds.cache.get(id);
-  if (!guild) {
-    throw new BotProfileError(
-      "The bot is not in that server.",
-      404,
-      "GUILD_NOT_FOUND",
-    );
+  return id;
+}
+
+function toProfileResponse(
+  summary: Awaited<ReturnType<BotGateway["getBotProfile"]>>,
+): BotGuildProfileResponse {
+  return {
+    guildId: summary.guildId,
+    guildName: summary.guildName,
+    nickname: summary.nickname,
+    displayName: summary.displayName,
+    username: summary.username,
+    tag: summary.tag,
+    serverAvatarURL: summary.serverAvatarUrl,
+    globalAvatarURL: summary.globalAvatarUrl,
+    hasServerAvatar: summary.hasServerAvatar,
+  };
+}
+
+async function fetchProfile(
+  gateway: BotGateway,
+  guildId: string,
+): Promise<BotGuildProfileResponse> {
+  try {
+    return toProfileResponse(await gateway.getBotProfile(guildId));
+  } catch (error) {
+    if (error instanceof BotGatewayError && error.code === "GUILD_NOT_FOUND") {
+      throw new BotProfileError(
+        "The bot is not in that server.",
+        404,
+        "GUILD_NOT_FOUND",
+      );
+    }
+    throw error;
   }
-  return guild;
 }
 
 export async function readPersistedPresence(): Promise<PersistedPresence | null> {
@@ -170,46 +193,20 @@ export async function restorePersistedPresence(bot: Client): Promise<void> {
   }
 }
 
-function mapMemberToProfile(
-  guild: Guild,
-  me: NonNullable<Guild["members"]["me"]>,
-): BotGuildProfileResponse {
-  const serverAvatarURL =
-    me.avatarURL({ size: 256, extension: "png", forceStatic: true }) ?? null;
-  const globalAvatarURL = me.user.displayAvatarURL({
-    size: 256,
-    extension: "png",
-    forceStatic: true,
-  });
-
-  return {
-    guildId: guild.id,
-    guildName: guild.name,
-    nickname: me.nickname ?? "",
-    displayName: me.displayName,
-    username: me.user.username,
-    tag: me.user.tag,
-    serverAvatarURL,
-    globalAvatarURL,
-    hasServerAvatar: Boolean(me.avatar),
-  };
-}
-
 export async function getGuildBotProfile(
-  bot: Client,
+  gateway: BotGateway,
   guildId?: string,
 ): Promise<BotGuildProfileResponse> {
-  const guild = resolveGuild(bot, guildId);
-  const me = await guild.members.fetchMe({ force: true });
-  return mapMemberToProfile(guild, me);
+  const id = resolveGuildId(gateway, guildId);
+  return fetchProfile(gateway, id);
 }
 
 /** @deprecated alias */
 export async function getBotProfile(
-  bot: Client,
+  gateway: BotGateway,
   guildId?: string,
 ): Promise<BotGuildProfileResponse> {
-  return await getGuildBotProfile(bot, guildId);
+  return await getGuildBotProfile(gateway, guildId);
 }
 
 function mapDiscordError(error: unknown): never {
@@ -295,11 +292,11 @@ export interface UpdateGuildBotProfileOptions {
 }
 
 export async function updateGuildBotProfile(
-  bot: Client,
+  gateway: BotGateway,
   options: UpdateGuildBotProfileOptions,
 ): Promise<UpdateBotGuildProfileResponse> {
-  const guild = resolveGuild(bot, options.guildId);
-  const me = await guild.members.fetchMe();
+  const id = resolveGuildId(gateway, options.guildId);
+  const before = await fetchProfile(gateway, id);
   const { fields, avatarBuffer } = options;
 
   const changedFlags = {
@@ -327,9 +324,9 @@ export async function updateGuildBotProfile(
         );
       }
 
-      const current = me.nickname ?? null;
+      const current = before.nickname || null;
       if (current !== nextNick) {
-        await me.setNickname(nextNick);
+        await gateway.setBotGuildNickname(id, nextNick);
         changedFlags.nickname = true;
       }
     }
@@ -341,15 +338,14 @@ export async function updateGuildBotProfile(
     });
 
     if (avatarInput !== undefined) {
-      // Avatar de miembro (@me): GuildMemberManager.editMe
-      await guild.members.editMe({ avatar: avatarInput });
+      await gateway.setBotGuildAvatar(id, avatarInput);
       changedFlags.serverAvatar = true;
     }
   } catch (error: unknown) {
     mapDiscordError(error);
   }
 
-  const profile = await getGuildBotProfile(bot, guild.id);
+  const profile = await fetchProfile(gateway, id);
 
   return {
     ok: true,
@@ -361,8 +357,8 @@ export async function updateGuildBotProfile(
 
 /** @deprecated alias */
 export async function updateBotProfile(
-  bot: Client,
+  gateway: BotGateway,
   options: UpdateGuildBotProfileOptions,
 ): Promise<UpdateBotGuildProfileResponse> {
-  return await updateGuildBotProfile(bot, options);
+  return await updateGuildBotProfile(gateway, options);
 }

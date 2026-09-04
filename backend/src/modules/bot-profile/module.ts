@@ -6,7 +6,7 @@ export const botProfileModule: AdobosModule = {
   id: "bot-profile",
   name: "Bot Profile",
   register(ctx) {
-    const routes = botProfileRoutes(ctx.client);
+    const routes = botProfileRoutes(ctx.botGateway);
     ctx.route("/api/bot/guild-profile", routes);
     // Alias de compatibilidad con el path anterior.
     ctx.route("/api/bot/profile", routes);

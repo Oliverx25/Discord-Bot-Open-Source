@@ -15,6 +15,7 @@ import { resolveMembersBatch } from "#lib/discordMember.js";
 import {
   type BotGateway,
   BotGatewayError,
+  type BotProfileSummary,
   type BotRoleAdminContext,
   type ChannelSummary,
   type CreateRoleInput,
@@ -28,6 +29,12 @@ import {
   type StickerSummary,
   type UpdateRoleInput,
 } from "./botGateway.js";
+
+const AVATAR_OPTS = {
+  size: 256,
+  extension: "png",
+  forceStatic: true,
+} as const;
 
 function toRoleDetail(role: Role): RoleDetail {
   return {
@@ -421,5 +428,50 @@ export class LocalClientGateway implements BotGateway {
       .filter((role) => role.id !== guild.id)
       .map(toRoleDetail)
       .sort((a, b) => b.position - a.position);
+  }
+
+  private guildOrThrow(guildId: string): Guild {
+    const guild = this.guild(guildId);
+    if (!guild) {
+      throw new BotGatewayError(
+        "The bot is not in that server.",
+        404,
+        "GUILD_NOT_FOUND",
+      );
+    }
+    return guild;
+  }
+
+  async getBotProfile(guildId: string): Promise<BotProfileSummary> {
+    const guild = this.guildOrThrow(guildId);
+    const me = await guild.members.fetchMe({ force: true });
+    return {
+      guildId: guild.id,
+      guildName: guild.name,
+      nickname: me.nickname ?? "",
+      displayName: me.displayName,
+      username: me.user.username,
+      tag: me.user.tag,
+      serverAvatarUrl: me.avatarURL(AVATAR_OPTS) ?? null,
+      globalAvatarUrl: me.user.displayAvatarURL(AVATAR_OPTS),
+      hasServerAvatar: Boolean(me.avatar),
+    };
+  }
+
+  async setBotGuildNickname(
+    guildId: string,
+    nickname: string | null,
+  ): Promise<void> {
+    const guild = this.guildOrThrow(guildId);
+    const me = await guild.members.fetchMe();
+    await me.setNickname(nickname);
+  }
+
+  async setBotGuildAvatar(
+    guildId: string,
+    avatar: Buffer | string | null,
+  ): Promise<void> {
+    const guild = this.guildOrThrow(guildId);
+    await guild.members.editMe({ avatar });
   }
 }

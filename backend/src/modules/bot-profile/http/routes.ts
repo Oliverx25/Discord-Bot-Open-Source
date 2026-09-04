@@ -1,6 +1,6 @@
-import type { Client } from "discord.js";
 import { Router } from "express";
 import multer from "multer";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { requireFeature } from "#core/entitlements/service.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { defineRoute } from "#core/http/validate.js";
@@ -29,13 +29,13 @@ const avatarUpload = multer({
   },
 });
 
-export function botProfileRoutes(bot: Client): Router {
+export function botProfileRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   router.get(
     "/",
     defineRoute({}, async (req, res) => {
-      res.json(await getGuildBotProfile(bot, guildIdOf(req)));
+      res.json(await getGuildBotProfile(gateway, guildIdOf(req)));
     }),
   );
 
@@ -46,7 +46,7 @@ export function botProfileRoutes(bot: Client): Router {
     defineRoute(
       { body: updateBotGuildProfileSchema },
       async (req, res, valid) => {
-        const result = await updateGuildBotProfile(bot, {
+        const result = await updateGuildBotProfile(gateway, {
           fields: valid.body,
           avatarBuffer: req.file?.buffer,
           guildId: guildIdOf(req),
