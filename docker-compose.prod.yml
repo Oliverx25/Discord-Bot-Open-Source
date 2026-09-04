@@ -1,12 +1,49 @@
-# Producción — postgres (interno) + backend (API + bot) + frontend (nginx).
-# Uso:
-#   docker compose -f docker-compose.prod.yml up -d --build
+# Producción — topología PARTIDA: gateway / api / worker como servicios
+# independientes sobre Redis + BullMQ + Postgres. El binario es el mismo
+# (imagen `adobos-backend:latest`); `ADOBO_ROLE` decide qué corre.
 #
-# Un solo puerto público: el panel (nginx) en 3000. Postgres y la API
-# no se publican; nginx proxifica /api, /auth y /uploads.
+#   docker compose -f docker-compose.split.yml build          # construye 1 vez
+#   docker compose -f docker-compose.split.yml up -d
+#   docker compose -f docker-compose.split.yml up -d --scale backend=3   # N api
 #
-# PUBLIC_APP_URL y CORS_ORIGIN deben ser la URL que ve el navegador
-# (p. ej. http://tu-host:3000).
+# IMPORTANTE: solo `gateway` declara `build:` — las otras 3 (`migrate`, `worker`,
+# `backend`) referencian la misma imagen `adobos-backend:latest` YA construida.
+# Si las 4 declararan `build:` a la vez, Compose (Bake) las construiría en
+# paralelo desde el mismo Dockerfile y los stages intermedios se pisan entre sí
+# (visto en la práctica: "COPY --from=shared-build ...: not found" / builds
+# canceladas a mitad). Si corrés `up --build`, incluí siempre `gateway` en la
+# lista de servicios (o mejor, `build` sin filtro) para que la imagen exista
+# antes de que arranquen los demás.
+#
+# vs `docker-compose.prod.yml` (nodo único `ADOBO_ROLE=all`): esta variante
+# solo hace falta pasados ~2.5k guilds o si querés escalar el panel aparte.
+#
+# `.env` (junto a este fichero) debe traer al menos:
+#   POSTGRES_PASSWORD, SESSION_SECRET, PUBLIC_APP_URL, CORS_ORIGIN,
+#   DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  PORT: 3000
+  SERVE_STATIC: "false"
+  DATABASE_URL: postgresql://adobos:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/adobos
+  REDIS_URL: redis://redis:6379
+  DATA_DIR: /data
+  NODE_OPTIONS: --dns-result-order=ipv4first
+
+x-healthcheck: &health
+  test:
+    [
+      "CMD",
+      "node",
+      "-e",
+      "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+    ]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 25s
 
 services:
   postgres:
@@ -23,9 +60,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    networks:
-      - adobos
-    # Sin ports: sólo la red interna de Compose.
+    networks: [adobos]
 
   redis:
     image: redis:7-alpine
@@ -38,50 +73,94 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
-    networks:
-      - adobos
+    networks: [adobos]
 
-  backend:
+  # One-shot: aplica migraciones Drizzle y sale. Los servicios de app esperan
+  # a que termine (evita que N réplicas migren a la vez). Sin `build:` — usa
+  # la imagen que construye `gateway`.
+  migrate:
+    image: adobos-backend:latest
+    restart: "no"
+    command: ["node", "dist/db/migrate.js"]
+    env_file: [.env]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [adobos]
+
+  # Discord gateway. Un proceso (o N con SHARDS/SHARD_TOTAL disjuntos —
+  # ver `createClient.ts`). Único con Client vivo; calienta la caché de Redis.
+  # Única build canónica de `adobos-backend:latest` — ver nota arriba.
+  gateway:
     build:
       context: .
       dockerfile: Dockerfile
     image: adobos-backend:latest
     restart: unless-stopped
-    env_file:
-      - .env
+    env_file: [.env]
     environment:
-      NODE_ENV: production
-      HOST: 0.0.0.0
-      PORT: 3000
-      SERVE_STATIC: "false"
-      DATABASE_URL: postgresql://adobos:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/adobos
-      REDIS_URL: redis://redis:6379
-      DATA_DIR: /data
-      NODE_OPTIONS: --dns-result-order=ipv4first
+      <<: *backend-env
+      ADOBO_ROLE: gateway
+      # Multi-proceso: descomentar y desplegar N `gateway` con rangos disjuntos.
+      # SHARDS: "0-7"
+      # SHARD_TOTAL: "16"
     volumes:
       - ./data:/data
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+    healthcheck: *health
+    stop_grace_period: 20s
+    networks: [adobos]
+
+  # Worker: consumidores de cola (envíos, borrados, polling). Sin Client — REST.
+  # Sin `build:` — usa la imagen que construye `gateway`.
+  worker:
+    image: adobos-backend:latest
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      <<: *backend-env
+      ADOBO_ROLE: worker
+    volumes:
+      - ./data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck: *health
+    stop_grace_period: 20s
+    networks: [adobos]
+
+  # Panel + REST. Sin Client — lee de Redis/Postgres; en miss, REST de Discord.
+  # Escalable: `--scale backend=N` (nginx round-robin por DNS de Compose).
+  # Sin `build:` — usa la imagen que construye `gateway`.
+  backend:
+    image: adobos-backend:latest
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      <<: *backend-env
+      ADOBO_ROLE: api
+    volumes:
+      - ./data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck: *health
     stop_grace_period: 20s
     expose:
       - "3000"
-    networks:
-      - adobos
+    # Para probar el split sin `frontend`, descomentá y `curl localhost:3000/api/health`.
+    # ports:
+    #   - "3000:3000"
+    networks: [adobos]
 
   frontend:
     build:
@@ -94,8 +173,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    networks:
-      - adobos
+    networks: [adobos]
 
 volumes:
   adobos_pgdata:
