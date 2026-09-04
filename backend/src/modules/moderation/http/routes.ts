@@ -1,6 +1,7 @@
 import type { Client } from "discord.js";
 import { Router } from "express";
 import { z } from "zod";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { searchQuerySchema, snowflake } from "#core/http/schemas.js";
 import { defineRoute } from "#core/http/validate.js";
@@ -23,36 +24,65 @@ import {
 
 const snowflakeIdParams = z.object({ id: snowflake });
 
-export function moderationRoutes(bot: Client): Router {
+/** Rutas de solo lectura — vía `BotGateway` (funcionan en el rol `api`). */
+export function moderationReadRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   router.get(
     "/search-member",
     defineRoute({ query: searchQuerySchema }, async (req, res, valid) => {
-      res.json(await searchMembers(bot, valid.query.q ?? "", guildIdOf(req)));
+      res.json(
+        await searchMembers(gateway, valid.query.q ?? "", guildIdOf(req)),
+      );
     }),
   );
 
   router.get(
     "/search-channel",
     defineRoute({ query: searchQuerySchema }, async (req, res, valid) => {
-      res.json(await searchChannels(bot, valid.query.q ?? "", guildIdOf(req)));
+      res.json(
+        await searchChannels(gateway, valid.query.q ?? "", guildIdOf(req)),
+      );
     }),
   );
 
   router.get(
     "/member-info/:id",
     defineRoute({ params: snowflakeIdParams }, async (req, res, valid) => {
-      res.json(await getMemberInfo(bot, valid.params.id, guildIdOf(req)));
+      res.json(await getMemberInfo(gateway, valid.params.id, guildIdOf(req)));
     }),
   );
 
   router.get(
     "/channel-info/:id",
     defineRoute({ params: snowflakeIdParams }, async (req, res, valid) => {
-      res.json(await getChannelInfo(bot, valid.params.id, guildIdOf(req)));
+      res.json(await getChannelInfo(gateway, valid.params.id, guildIdOf(req)));
     }),
   );
+
+  router.get(
+    "/active/bans",
+    defineRoute({}, async (req, res) => {
+      res.json(await listActiveBans(gateway, guildIdOf(req)));
+    }),
+  );
+
+  router.get(
+    "/active/timeouts",
+    defineRoute({}, async (req, res) => {
+      res.json(await listActiveTimeouts(gateway, guildIdOf(req)));
+    }),
+  );
+
+  return router;
+}
+
+/**
+ * Rutas que todavía necesitan `Client`: `/action` (executeModAction),
+ * `/fetch-message` y `/discord-audit`. Se portan en waves siguientes.
+ */
+export function moderationRoutes(bot: Client): Router {
+  const router = Router();
 
   router.get(
     "/fetch-message",
@@ -91,20 +121,6 @@ export function moderationRoutes(bot: Client): Router {
           actionType: valid.query.actionType,
         }),
       );
-    }),
-  );
-
-  router.get(
-    "/active/bans",
-    defineRoute({}, async (req, res) => {
-      res.json(await listActiveBans(bot, guildIdOf(req)));
-    }),
-  );
-
-  router.get(
-    "/active/timeouts",
-    defineRoute({}, async (req, res) => {
-      res.json(await listActiveTimeouts(bot, guildIdOf(req)));
     }),
   );
 

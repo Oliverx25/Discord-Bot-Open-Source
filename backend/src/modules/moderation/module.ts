@@ -1,6 +1,6 @@
 import { GatewayIntentBits } from "discord.js";
 import type { AdobosModule } from "#core/modules/types.js";
-import { moderationRoutes } from "./http/routes.js";
+import { moderationReadRoutes, moderationRoutes } from "./http/routes.js";
 
 export const moderationModule: AdobosModule = {
   id: "moderation",
@@ -12,6 +12,9 @@ export const moderationModule: AdobosModule = {
     GatewayIntentBits.MessageContent,
   ],
   register(ctx) {
+    ctx.route("/api/mod", moderationReadRoutes(ctx.botGateway), {
+      feature: "moderation",
+    });
     ctx.route("/api/mod", moderationRoutes(ctx.client), {
       feature: "moderation",
     });

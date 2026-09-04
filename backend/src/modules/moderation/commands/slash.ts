@@ -1,4 +1,5 @@
 import { type ChatInputCommandInteraction, MessageFlags } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { consumeInteractionEphemeral } from "#modules/system-commands/ephemeral.js";
 import {
   executeModAction,
@@ -207,7 +208,11 @@ export async function handleWarnsCommand(
     ephemeral ? { flags: MessageFlags.Ephemeral } : {},
   );
   try {
-    const info = await getMemberInfo(interaction.client, user.id, guildId);
+    const info = await getMemberInfo(
+      new LocalClientGateway(interaction.client),
+      user.id,
+      guildId,
+    );
     if (info.warnings.length === 0) {
       await interaction.editReply({
         content: `${info.displayName} has no warnings.`,

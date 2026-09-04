@@ -109,6 +109,43 @@ export interface MemberProfile {
   avatarUrl: string | null;
 }
 
+/** Datos de un miembro para las vistas de moderación (búsqueda, ficha). */
+export interface MemberInfo {
+  userId: string;
+  username: string;
+  globalName: string | null;
+  displayName: string;
+  avatarUrl: string;
+  bot: boolean;
+  joinedAt: string | null;
+  timedOutUntil: string | null;
+  roles: { id: string; name: string; hexColor: string }[];
+}
+
+/** Usuario global (fallback cuando no es miembro del guild). */
+export interface UserInfo {
+  userId: string;
+  username: string;
+  globalName: string | null;
+  displayName: string;
+  avatarUrl: string;
+}
+
+export interface GuildBanEntry {
+  userId: string;
+  username: string;
+  globalName: string | null;
+  displayName: string;
+  avatarUrl: string;
+  reason: string | null;
+}
+
+export interface ChannelDetail extends ChannelSummary {
+  topic: string | null;
+  slowmodeSeconds: number;
+  nsfw: boolean;
+}
+
 /**
  * Contenido de un mensaje a enviar/editar. `embeds` / `components` van ya en
  * JSON (p. ej. `EmbedBuilder.toJSON()`), no como builders. Los adjuntos se pasan
@@ -185,6 +222,16 @@ export interface BotGateway {
     guildId: string,
     userIds: string[],
   ): Promise<Map<string, MemberProfile>>;
+  /** Roster completo del guild (para búsqueda/ranking en memoria del módulo). */
+  listMembers(guildId: string): Promise<MemberInfo[]>;
+  getMember(guildId: string, userId: string): Promise<MemberInfo | null>;
+  /** Usuario global — fallback para baneados / fuera del servidor. */
+  getUser(userId: string): Promise<UserInfo | null>;
+  listBans(guildId: string): Promise<GuildBanEntry[]>;
+  getChannelDetail(
+    guildId: string,
+    channelId: string,
+  ): Promise<ChannelDetail | null>;
   /**
    * Envía un mensaje a un canal del guild. Lanza `BotGatewayError` si el canal
    * no existe, no es de este guild o no admite mensajes.

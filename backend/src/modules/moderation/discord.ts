@@ -25,6 +25,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { and, desc, eq } from "drizzle-orm";
+import type { BotGateway, MemberInfo } from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
 import {
@@ -82,6 +83,22 @@ function resolveGuild(bot: Client, guildId?: string): Guild {
   }
 
   return guild;
+}
+
+/** Validación mínima para las rutas de lectura (que van por `BotGateway`). */
+function resolveGuildId(gateway: BotGateway, guildId?: string): string {
+  if (!gateway.isReady()) {
+    throw new ModerationError(
+      "The Discord bot is not connected.",
+      503,
+      "BOT_NOT_READY",
+    );
+  }
+  const id = (guildId ?? "").trim();
+  if (!id) {
+    throw new ModerationError("Missing guildId.", 400, "MISSING_GUILD_ID");
+  }
+  return id;
 }
 
 function assertSnowflake(value: string, field: string): string {
@@ -190,14 +207,14 @@ function assertBotCanAct(
   }
 }
 
-function memberHit(member: GuildMember) {
+function memberHit(member: MemberInfo) {
   return {
-    id: member.id,
-    username: member.user.username,
-    globalName: member.user.globalName,
+    id: member.userId,
+    username: member.username,
+    globalName: member.globalName,
     displayName: member.displayName,
-    avatarUrl: safeMemberAvatarURL(member, 64),
-    bot: member.user.bot,
+    avatarUrl: member.avatarUrl,
+    bot: member.bot,
   };
 }
 
@@ -219,19 +236,19 @@ function relevanceWeight(haystacks: string[], needle: string): number {
   return best;
 }
 
-function memberSearchFields(member: GuildMember): string[] {
+function memberSearchFields(member: MemberInfo): string[] {
   return [
-    member.user.username,
+    member.username,
     member.displayName,
-    member.user.globalName ?? "",
-    member.id,
+    member.globalName ?? "",
+    member.userId,
   ];
 }
 
 function rankMembersByQuery(
-  members: GuildMember[],
+  members: MemberInfo[],
   query: string,
-): GuildMember[] {
+): MemberInfo[] {
   return members
     .map((member) => ({
       member,
@@ -247,54 +264,46 @@ function rankMembersByQuery(
     .map((row) => row.member);
 }
 
-async function ensureMembersCached(guild: Guild): Promise<void> {
-  // Con Intent GuildMembers, fetch() sin args descarga el roster completo.
-  await guild.members.fetch().catch(() => undefined);
-}
-
 export async function searchMembers(
-  bot: Client,
+  gateway: BotGateway,
   queryRaw: string,
   guildId?: string,
 ): Promise<ModMemberSearchResponse> {
-  const guild = resolveGuild(bot, guildId);
+  const id = resolveGuildId(gateway, guildId);
   const q = queryRaw.trim();
 
   try {
-    await ensureMembersCached(guild);
+    if (/^\d{17,20}$/.test(q)) {
+      const member = await gateway.getMember(id, q);
+      return { members: member ? [memberHit(member)] : [] };
+    }
+
+    const all = await gateway.listMembers(id);
 
     if (q.length < 1) {
-      const all = [...guild.members.cache.values()].sort((a, b) =>
+      const sorted = [...all].sort((a, b) =>
         a.displayName.localeCompare(b.displayName, "es", {
           sensitivity: "base",
         }),
       );
-      return { members: all.map(memberHit) };
+      return { members: sorted.map(memberHit) };
     }
 
-    if (/^\d{17,20}$/.test(q)) {
-      const member =
-        guild.members.cache.get(q) ??
-        (await guild.members.fetch(q).catch(() => null));
-      return { members: member ? [memberHit(member)] : [] };
-    }
-
-    const ranked = rankMembersByQuery([...guild.members.cache.values()], q);
-    return { members: ranked.map(memberHit) };
+    return { members: rankMembersByQuery(all, q).map(memberHit) };
   } catch (error: unknown) {
     mapDiscordError(error);
   }
 }
 
 export async function searchChannels(
-  bot: Client,
+  gateway: BotGateway,
   queryRaw: string,
   guildId?: string,
 ): Promise<ModChannelSearchResponse> {
-  const guild = resolveGuild(bot, guildId);
+  const id = resolveGuildId(gateway, guildId);
   const q = queryRaw.trim().toLowerCase();
 
-  const channels = [...guild.channels.cache.values()]
+  const channels = (await gateway.listChannels(id))
     .filter(
       (channel) =>
         channel.type === ChannelType.GuildText ||
@@ -305,7 +314,7 @@ export async function searchChannels(
       if (/^\d{17,20}$/.test(q)) return channel.id === q;
       return channel.name.toLowerCase().includes(q);
     })
-    .sort((a, b) => a.rawPosition - b.rawPosition)
+    .sort((a, b) => a.position - b.position)
     .slice(0, 20)
     .map((channel) => ({
       id: channel.id,
@@ -317,18 +326,18 @@ export async function searchChannels(
 }
 
 export async function getMemberInfo(
-  bot: Client,
+  gateway: BotGateway,
   userIdRaw: string,
   guildId?: string,
 ): Promise<ModMemberInfoResponse> {
-  const guild = resolveGuild(bot, guildId);
+  const id = resolveGuildId(gateway, guildId);
   const userId = assertSnowflake(userIdRaw, "userId");
 
   const warningRows = (
     await getDb()
       .select()
       .from(warnings)
-      .where(and(eq(warnings.guildId, guild.id), eq(warnings.userId, userId)))
+      .where(and(eq(warnings.guildId, id), eq(warnings.userId, userId)))
       .orderBy(desc(warnings.createdAt))
   ).map((row) => ({
     id: row.id,
@@ -340,60 +349,54 @@ export async function getMemberInfo(
         : new Date(row.createdAt).toISOString(),
   }));
 
-  try {
-    const member = await guild.members.fetch(userId);
+  const member = await gateway.getMember(id, userId);
+  if (member) {
     return {
-      id: member.id,
-      username: member.user.username,
+      id: member.userId,
+      username: member.username,
       displayName: member.displayName,
-      avatarUrl: safeMemberAvatarURL(member, 256),
-      joinedAt: member.joinedAt?.toISOString() ?? null,
-      roles: member.roles.cache
-        .filter((role) => role.id !== guild.id)
-        .sort((a, b) => b.position - a.position)
-        .map((role) => ({
-          id: role.id,
-          name: role.name,
-          color: role.hexColor === "#000000" ? null : role.hexColor,
-        }))
-        .slice(0, 12),
+      avatarUrl: member.avatarUrl,
+      joinedAt: member.joinedAt,
+      roles: member.roles.slice(0, 12).map((role) => ({
+        id: role.id,
+        name: role.name,
+        color: role.hexColor === "#000000" ? null : role.hexColor,
+      })),
       warnings: warningRows,
-      timedOutUntil: member.communicationDisabledUntil?.toISOString() ?? null,
+      timedOutUntil: member.timedOutUntil,
     };
-  } catch (memberError: unknown) {
-    // Usuario baneado / fuera del servidor: expediente mínimo vía User API.
-    try {
-      const user = await bot.users.fetch(userId);
-      return {
-        id: user.id,
-        username: user.username,
-        displayName: user.globalName || user.username,
-        avatarUrl: safeUserAvatarURL(user, 256),
-        joinedAt: null,
-        roles: [],
-        warnings: warningRows,
-        timedOutUntil: null,
-      };
-    } catch {
-      mapDiscordError(memberError);
-    }
   }
+
+  // Usuario baneado / fuera del servidor: expediente mínimo vía User API.
+  const user = await gateway.getUser(userId);
+  if (!user) {
+    throw new ModerationError("Member not found.", 404, "MEMBER_NOT_FOUND");
+  }
+  return {
+    id: user.userId,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    joinedAt: null,
+    roles: [],
+    warnings: warningRows,
+    timedOutUntil: null,
+  };
 }
 
 export async function listActiveBans(
-  bot: Client,
+  gateway: BotGateway,
   guildId?: string,
 ): Promise<ModActiveBansResponse> {
-  const guild = resolveGuild(bot, guildId);
+  const id = resolveGuildId(gateway, guildId);
   try {
-    const bans = await guild.bans.fetch();
-    const items = [...bans.values()]
+    const items = (await gateway.listBans(id))
       .map((ban) => ({
-        id: ban.user.id,
-        username: ban.user.username,
-        displayName: ban.user.globalName || ban.user.username,
-        avatarUrl: safeUserAvatarURL(ban.user, 64),
-        reason: ban.reason?.trim() || null,
+        id: ban.userId,
+        username: ban.username,
+        displayName: ban.displayName,
+        avatarUrl: ban.avatarUrl,
+        reason: ban.reason,
       }))
       .sort((a, b) =>
         a.displayName.localeCompare(b.displayName, "es", {
@@ -407,30 +410,26 @@ export async function listActiveBans(
 }
 
 export async function listActiveTimeouts(
-  bot: Client,
+  gateway: BotGateway,
   guildId?: string,
 ): Promise<ModActiveTimeoutsResponse> {
-  const guild = resolveGuild(bot, guildId);
+  const id = resolveGuildId(gateway, guildId);
   try {
-    try {
-      await guild.members.fetch();
-    } catch {
-      // Si el fetch masivo falla, usamos la caché disponible.
-    }
-
     const now = Date.now();
-    const timeouts = [...guild.members.cache.values()]
+    const timeouts = (await gateway.listMembers(id))
       .filter((member) => {
-        const until = member.communicationDisabledUntilTimestamp;
-        return typeof until === "number" && until > now;
+        const until = member.timedOutUntil
+          ? Date.parse(member.timedOutUntil)
+          : Number.NaN;
+        return Number.isFinite(until) && until > now;
       })
       .map((member) => {
-        const until = member.communicationDisabledUntilTimestamp as number;
+        const until = Date.parse(member.timedOutUntil as string);
         return {
-          id: member.id,
-          username: member.user.username,
+          id: member.userId,
+          username: member.username,
           displayName: member.displayName,
-          avatarUrl: safeMemberAvatarURL(member, 64),
+          avatarUrl: member.avatarUrl,
           timedOutUntil: new Date(until).toISOString(),
           remainingSeconds: Math.max(0, Math.ceil((until - now) / 1000)),
         };
@@ -444,39 +443,34 @@ export async function listActiveTimeouts(
 }
 
 export async function getChannelInfo(
-  bot: Client,
+  gateway: BotGateway,
   channelIdRaw: string,
   guildId?: string,
 ): Promise<ModChannelInfoResponse> {
-  const guild = resolveGuild(bot, guildId);
+  const id = resolveGuildId(gateway, guildId);
   const channelId = assertSnowflake(channelIdRaw, "channelId");
 
-  try {
-    const channel = await guild.channels.fetch(channelId);
-    if (
-      !channel ||
-      (channel.type !== ChannelType.GuildText &&
-        channel.type !== ChannelType.GuildAnnouncement)
-    ) {
-      throw new ModerationError(
-        "Text channel not found.",
-        404,
-        "CHANNEL_NOT_FOUND",
-      );
-    }
-
-    const text = channel as TextChannel;
-    return {
-      id: text.id,
-      name: text.name,
-      type: text.type,
-      slowmodeSeconds: text.rateLimitPerUser ?? 0,
-      topic: text.topic,
-      nsfw: text.nsfw,
-    };
-  } catch (error: unknown) {
-    mapDiscordError(error);
+  const channel = await gateway.getChannelDetail(id, channelId);
+  if (
+    !channel ||
+    (channel.type !== ChannelType.GuildText &&
+      channel.type !== ChannelType.GuildAnnouncement)
+  ) {
+    throw new ModerationError(
+      "Text channel not found.",
+      404,
+      "CHANNEL_NOT_FOUND",
+    );
   }
+
+  return {
+    id: channel.id,
+    name: channel.name,
+    type: channel.type,
+    slowmodeSeconds: channel.slowmodeSeconds,
+    topic: channel.topic,
+    nsfw: channel.nsfw,
+  };
 }
 
 function assertAction(raw: string): ModActionType {
