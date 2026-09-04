@@ -7,21 +7,32 @@ import {
 } from "./index.js";
 
 describe("ADOBO_ROLE", () => {
-  it("accepts the four roles", () => {
-    expect(isAdobosRole("all")).toBe(true);
+  it("accepts exactly the three split roles", () => {
     expect(isAdobosRole("api")).toBe(true);
+    expect(isAdobosRole("gateway")).toBe(true);
+    expect(isAdobosRole("worker")).toBe(true);
+  });
+
+  it("rejects the removed all role, empty, uppercase, spaces and unknown values", () => {
+    expect(isAdobosRole("all")).toBe(false);
+    expect(isAdobosRole("")).toBe(false);
+    expect(isAdobosRole("API")).toBe(false);
+    expect(isAdobosRole("Gateway")).toBe(false);
+    expect(isAdobosRole(" api")).toBe(false);
+    expect(isAdobosRole("api ")).toBe(false);
     expect(isAdobosRole("bot")).toBe(false);
   });
 
-  it("api does not run gateway or worker", () => {
-    expect(roleRunsHttp("api")).toBe(true);
-    expect(roleRunsGateway("api")).toBe(false);
-    expect(roleRunsWorker("api")).toBe(false);
-  });
-
-  it("all runs all three layers", () => {
-    expect(roleRunsHttp("all")).toBe(true);
-    expect(roleRunsGateway("all")).toBe(true);
-    expect(roleRunsWorker("all")).toBe(true);
-  });
+  it.each([
+    { role: "api", http: true, gateway: false, worker: false },
+    { role: "gateway", http: false, gateway: true, worker: false },
+    { role: "worker", http: false, gateway: false, worker: true },
+  ] as const)(
+    "$role activates exactly one phase (http=$http, gateway=$gateway, worker=$worker)",
+    ({ role, http, gateway, worker }) => {
+      expect(roleRunsHttp(role)).toBe(http);
+      expect(roleRunsGateway(role)).toBe(gateway);
+      expect(roleRunsWorker(role)).toBe(worker);
+    },
+  );
 });

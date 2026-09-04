@@ -21,7 +21,8 @@ function poolMax(): number {
     case "worker":
       return 6;
     default:
-      return 12;
+      // Defensivo: los tres `AdobosRole` están cubiertos arriba; no hay rol `all`.
+      return 6;
   }
 }
 

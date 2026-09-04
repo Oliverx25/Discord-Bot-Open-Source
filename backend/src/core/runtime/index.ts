@@ -1,10 +1,11 @@
-/** Rol de proceso. Un binario, distinto trabajo. Default `all` = Compose actual. */
+/** Rol de proceso. Un binario, distinto trabajo. Topología split obligatoria. */
 
-export const ADOBO_ROLES = ["all", "api", "gateway", "worker"] as const;
+export const ADOBO_ROLES = ["api", "gateway", "worker"] as const;
 
 export type AdobosRole = (typeof ADOBO_ROLES)[number];
 
-let current: AdobosRole = "all";
+// Valor interno defensivo hasta que `setRuntimeRole` reciba el rol real desde `loadEnv()`.
+let current: AdobosRole = "api";
 let workerLeader = false;
 
 export function isAdobosRole(value: string): value is AdobosRole {
@@ -20,16 +21,16 @@ export function runtimeRole(): AdobosRole {
 }
 
 export function roleRunsHttp(role: AdobosRole = current): boolean {
-  return role === "all" || role === "api";
+  return role === "api";
 }
 
 /** Este rol mantiene un `Client` de discord.js conectado (login + listeners). */
 export function roleRunsGateway(role: AdobosRole = current): boolean {
-  return role === "all" || role === "gateway";
+  return role === "gateway";
 }
 
 export function roleRunsWorker(role: AdobosRole = current): boolean {
-  return role === "all" || role === "worker";
+  return role === "worker";
 }
 
 export function setWorkerLeader(value: boolean): void {

@@ -17,18 +17,25 @@ const envSchema = z.object({
     ),
   REDIS_URL: z
     .string()
-    .optional()
+    .min(
+      1,
+      "REDIS_URL is required (all roles need shared cache/rate-limit/queue).",
+    )
     .refine(
-      (v) => !v || v.startsWith("redis://") || v.startsWith("rediss://"),
+      (v) => v.startsWith("redis://") || v.startsWith("rediss://"),
       "REDIS_URL debe ser redis://… o rediss://…",
     ),
   SESSION_SECRET: z.string().min(16),
   PUBLIC_APP_URL: z.string().min(1),
   DISCORD_CLIENT_ID: z.string().min(1),
   DISCORD_CLIENT_SECRET: z.string().min(1),
-  DISCORD_TOKEN: z.string().optional(),
+  DISCORD_TOKEN: z
+    .string()
+    .min(1, "DISCORD_TOKEN is required for api | gateway | worker."),
   CORS_ORIGIN: z.string().optional(),
-  ADOBO_ROLE: z.string().default("all"),
+  ADOBO_ROLE: z.string({
+    message: "ADOBO_ROLE is required. Use api | gateway | worker.",
+  }),
   SERVE_STATIC: z.string().optional(),
   STATIC_DIR: z.string().optional(),
   CSP_REPORT_ONLY: z.string().optional(),
@@ -52,9 +59,9 @@ export interface AppEnv {
   PUBLIC_APP_URL: string;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
-  DISCORD_TOKEN?: string;
+  DISCORD_TOKEN: string;
   CORS_ORIGIN?: string;
-  REDIS_URL?: string;
+  REDIS_URL: string;
   ADOBO_ROLE: AdobosRole;
   SERVE_STATIC: boolean;
   STATIC_DIR?: string;
@@ -66,17 +73,18 @@ export interface AppEnv {
   SHARD_TOTAL?: string;
 }
 
-let cached: AppEnv | null = null;
-
 function parseServeStatic(raw: string | undefined): boolean {
   if (raw === "false" || raw === "0") return false;
   return true;
 }
 
-/** Valida process.env al boot. Lanza si falta un secreto del panel. */
-export function loadEnv(): AppEnv {
-  if (cached) return cached;
-  const parsed = envSchema.safeParse(process.env);
+/**
+ * Valida un `process.env`-like arbitrario y devuelve `AppEnv`. Función pura:
+ * sin caché ni mutación global, para poder testear distintas combinaciones
+ * de entorno sin pisar `process.env` real entre tests.
+ */
+export function parseEnv(input: NodeJS.ProcessEnv): AppEnv {
+  const parsed = envSchema.safeParse(input);
   if (!parsed.success) {
     const detail = parsed.error.issues
       .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
@@ -86,23 +94,7 @@ export function loadEnv(): AppEnv {
   const raw = parsed.data;
   if (!isAdobosRole(raw.ADOBO_ROLE)) {
     throw new Error(
-      `Invalid ADOBO_ROLE (${raw.ADOBO_ROLE}). Use all | api | gateway | worker.`,
-    );
-  }
-  // Multi-proceso: los roles ≠ all comparten caché, rate-limit y cola por Redis.
-  // `all` (dev / nodo único) sigue con los fallbacks en memoria.
-  if (raw.ADOBO_ROLE !== "all" && !raw.REDIS_URL?.trim()) {
-    throw new Error(
-      `ADOBO_ROLE=${raw.ADOBO_ROLE} requires REDIS_URL (shared cache / rate-limit / queue). Only ADOBO_ROLE=all runs without Redis.`,
-    );
-  }
-  // `api` y `worker` hablan con Discord por REST (RestGateway) — sin gateway vivo.
-  if (
-    (raw.ADOBO_ROLE === "api" || raw.ADOBO_ROLE === "worker") &&
-    !raw.DISCORD_TOKEN?.trim()
-  ) {
-    throw new Error(
-      `ADOBO_ROLE=${raw.ADOBO_ROLE} requires DISCORD_TOKEN (talks to Discord via REST, not a gateway).`,
+      `Invalid ADOBO_ROLE (${raw.ADOBO_ROLE}). Use api | gateway | worker.`,
     );
   }
   if (raw.NODE_ENV === "production" && !raw.CORS_ORIGIN?.trim()) {
@@ -110,13 +102,18 @@ export function loadEnv(): AppEnv {
       "CORS_ORIGIN is required in production (allowlist, not origin:true).",
     );
   }
-  const token = raw.DISCORD_TOKEN?.trim();
-  if (token && raw.DISCORD_CLIENT_SECRET === token) {
+  const token = raw.DISCORD_TOKEN.trim();
+  if (!token) {
+    throw new Error(
+      `ADOBO_ROLE=${raw.ADOBO_ROLE} requires DISCORD_TOKEN (api/worker talk to Discord via REST, gateway keeps the Client).`,
+    );
+  }
+  if (raw.DISCORD_CLIENT_SECRET === token) {
     throw new Error(
       "DISCORD_CLIENT_SECRET can't be the bot token. Use OAuth2 → Client Secret.",
     );
   }
-  cached = {
+  return {
     NODE_ENV: raw.NODE_ENV,
     PORT: raw.PORT,
     HOST: raw.HOST,
@@ -125,9 +122,9 @@ export function loadEnv(): AppEnv {
     PUBLIC_APP_URL: raw.PUBLIC_APP_URL.replace(/\/$/, ""),
     DISCORD_CLIENT_ID: raw.DISCORD_CLIENT_ID,
     DISCORD_CLIENT_SECRET: raw.DISCORD_CLIENT_SECRET,
-    DISCORD_TOKEN: token || undefined,
+    DISCORD_TOKEN: token,
     CORS_ORIGIN: raw.CORS_ORIGIN,
-    REDIS_URL: raw.REDIS_URL?.trim() || undefined,
+    REDIS_URL: raw.REDIS_URL.trim(),
     ADOBO_ROLE: raw.ADOBO_ROLE,
     SERVE_STATIC: parseServeStatic(raw.SERVE_STATIC),
     STATIC_DIR: raw.STATIC_DIR,
@@ -138,6 +135,14 @@ export function loadEnv(): AppEnv {
     SHARDS: raw.SHARDS,
     SHARD_TOTAL: raw.SHARD_TOTAL,
   };
+}
+
+let cached: AppEnv | null = null;
+
+/** Valida process.env al boot. Lanza si falta un secreto del panel. */
+export function loadEnv(): AppEnv {
+  if (cached) return cached;
+  cached = parseEnv(process.env);
   return cached;
 }
 

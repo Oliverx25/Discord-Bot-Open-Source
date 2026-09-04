@@ -43,8 +43,7 @@ async function main(): Promise<void> {
   const cfg = loadEnv();
   setRuntimeRole(cfg.ADOBO_ROLE);
 
-  // Redis (opcional). Sin REDIS_URL todo sigue con MemoryStore + rate-limit
-  // en memoria — el rol `all` y dev no lo necesitan.
+  // Redis es obligatorio en los tres roles (cache/rate-limit/queue compartidos).
   if (cfg.REDIS_URL) {
     const { client, subscriber } = initRedis(cfg.REDIS_URL);
     setCacheStore(new RedisStore(client, subscriber));
@@ -71,12 +70,12 @@ async function main(): Promise<void> {
   // Qué fases de módulo corre este rol.
   const phases = {
     http: roleRunsHttp(cfg.ADOBO_ROLE),
-    // Solo `gateway` (y `all`) atienden eventos/interacciones de Discord.
+    // Solo `gateway` atiende eventos/interacciones de Discord.
     gateway: roleRunsGateway(cfg.ADOBO_ROLE),
     jobs: roleRunsWorker(cfg.ADOBO_ROLE),
   };
 
-  // Solo `all` / `gateway` sostienen un Client vivo. `api` y `worker` hablan
+  // Solo `gateway` sostiene un Client vivo. `api` y `worker` hablan
   // con Discord por REST (`RestGateway`).
   const bot = roleRunsGateway(cfg.ADOBO_ROLE)
     ? createBotClient(registry)
