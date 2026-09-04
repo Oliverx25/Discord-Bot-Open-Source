@@ -1,6 +1,6 @@
-import type { Client } from "discord.js";
 import { Router } from "express";
 import { z } from "zod";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { snowflake } from "#core/http/schemas.js";
 import { defineRoute } from "#core/http/validate.js";
@@ -20,20 +20,20 @@ import {
 const roleIdParams = z.object({ roleId: snowflake });
 
 /** Rutas: GET /list · POST /create · PATCH /positions · PATCH|DELETE /:roleId. */
-export function rolesBuilderRoutes(client: Client): Router {
+export function rolesBuilderRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   router.get(
     "/list",
     defineRoute({}, async (req, res) => {
-      res.json(await listGuildRoles(client, guildIdOf(req)));
+      res.json(await listGuildRoles(gateway, guildIdOf(req)));
     }),
   );
 
   router.post(
     "/create",
     defineRoute({ body: createGuildRoleSchema }, async (req, res, valid) => {
-      const data = await createGuildRole(client, valid.body, guildIdOf(req));
+      const data = await createGuildRole(gateway, valid.body, guildIdOf(req));
       res.status(201).json(data);
     }),
   );
@@ -44,7 +44,7 @@ export function rolesBuilderRoutes(client: Client): Router {
       { body: updateRolePositionsSchema },
       async (req, res, valid) => {
         const data = await updateRolePositions(
-          client,
+          gateway,
           valid.body.positions,
           guildIdOf(req),
         );
@@ -59,7 +59,7 @@ export function rolesBuilderRoutes(client: Client): Router {
       { params: roleIdParams, body: updateGuildRoleSchema },
       async (req, res, valid) => {
         const data = await updateGuildRole(
-          client,
+          gateway,
           valid.params.roleId,
           valid.body,
           guildIdOf(req),
@@ -73,7 +73,7 @@ export function rolesBuilderRoutes(client: Client): Router {
     "/:roleId",
     defineRoute({ params: roleIdParams }, async (req, res, valid) => {
       const data = await deleteGuildRole(
-        client,
+        gateway,
         valid.params.roleId,
         guildIdOf(req),
       );

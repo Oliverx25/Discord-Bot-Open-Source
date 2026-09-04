@@ -5,7 +5,7 @@ export const rolesBuilderModule: AdobosModule = {
   id: "roles-builder",
   name: "Roles Builder",
   register(ctx) {
-    ctx.route("/api/roles", rolesBuilderRoutes(ctx.client), {
+    ctx.route("/api/roles", rolesBuilderRoutes(ctx.botGateway), {
       feature: "roles-builder",
     });
   },

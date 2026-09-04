@@ -16,13 +16,12 @@ import {
   ROLE_PERMISSION_GROUPS,
   ROLE_PERMISSION_KEY_SET,
 } from "@adobos/shared";
-import {
-  type Client,
-  DiscordAPIError,
-  type Guild,
-  PermissionFlagsBits,
-  type Role,
-} from "discord.js";
+import { DiscordAPIError, PermissionFlagsBits } from "discord.js";
+import type {
+  BotGateway,
+  BotRoleAdminContext,
+  RoleDetail,
+} from "#core/discord/botGateway.js";
 
 const AUDIT_REASON = "Adobos Bot — Roles Builder";
 
@@ -37,30 +36,30 @@ export class RolesBuilderError extends Error {
   }
 }
 
-function resolveGuild(bot: Client, guildId?: string): Guild {
-  if (!bot.isReady()) {
+async function loadContext(
+  gateway: BotGateway,
+  guildId?: string,
+): Promise<{ id: string; ctx: BotRoleAdminContext }> {
+  if (!gateway.isReady()) {
     throw new RolesBuilderError(
       "The Discord bot is not connected.",
       503,
       "BOT_NOT_READY",
     );
   }
-
   const id = (guildId ?? "").trim();
   if (!id) {
     throw new RolesBuilderError("Missing guildId.", 400, "MISSING_GUILD_ID");
   }
-
-  const guild = bot.guilds.cache.get(id);
-  if (!guild) {
+  const ctx = await gateway.getRoleAdminContext(id);
+  if (!ctx) {
     throw new RolesBuilderError(
       "The bot is not in that server or the guild is not cached yet.",
       404,
       "GUILD_NOT_FOUND",
     );
   }
-
-  return guild;
+  return { id, ctx };
 }
 
 function permissionKeysFromBitfield(bits: bigint): string[] {
@@ -74,8 +73,8 @@ function permissionKeysFromBitfield(bits: bigint): string[] {
   return keys;
 }
 
-function mapRole(role: Role): RolesBuilderRole {
-  const bits = role.permissions.bitfield;
+function mapRole(role: RoleDetail): RolesBuilderRole {
+  const bits = role.permissions;
   return {
     id: role.id,
     name: role.name,
@@ -91,31 +90,6 @@ function mapRole(role: Role): RolesBuilderRole {
     hasAdministrator:
       (bits & PermissionFlagsBits.Administrator) ===
       PermissionFlagsBits.Administrator,
-  };
-}
-
-function botMemberContext(guild: Guild): {
-  highestRoleId: string | null;
-  highestPosition: number;
-  canManageRoles: boolean;
-  roleName: string | null;
-} {
-  const me = guild.members.me;
-  if (!me) {
-    return {
-      highestRoleId: null,
-      highestPosition: 0,
-      canManageRoles: false,
-      roleName: null,
-    };
-  }
-  const highest = me.roles.highest;
-  const isEveryone = highest.id === guild.id;
-  return {
-    highestRoleId: isEveryone ? null : highest.id,
-    highestPosition: highest.position,
-    canManageRoles: me.permissions.has(PermissionFlagsBits.ManageRoles),
-    roleName: isEveryone ? null : highest.name,
   };
 }
 
@@ -197,15 +171,8 @@ function friendlyDiscordError(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function sortedRoles(guild: Guild): RolesBuilderRole[] {
-  return [...guild.roles.cache.values()]
-    .filter((role) => role.id !== guild.id)
-    .map(mapRole)
-    .sort((a, b) => b.position - a.position);
-}
-
-function assertRoleLimit(guild: Guild): void {
-  if (guild.roles.cache.size >= DISCORD_GUILD_ROLE_LIMIT) {
+function assertRoleLimit(ctx: BotRoleAdminContext): void {
+  if (ctx.roleCount >= DISCORD_GUILD_ROLE_LIMIT) {
     throw new RolesBuilderError(
       `This server already has the maximum of ${DISCORD_GUILD_ROLE_LIMIT} Discord roles.`,
       400,
@@ -214,14 +181,14 @@ function assertRoleLimit(guild: Guild): void {
   }
 }
 
-function resolveEditableRole(
-  guild: Guild,
+/** Valida que el rol existe, no es managed y está por debajo del bot. */
+function assertEditableRole(
+  ctx: BotRoleAdminContext,
   roleId: string,
-  highestPosition: number,
-): Role {
+): RoleDetail {
   const id = roleId.trim();
-  const role = guild.roles.cache.get(id);
-  if (!role || role.id === guild.id) {
+  const role = ctx.roles.find((entry) => entry.id === id);
+  if (!role) {
     throw new RolesBuilderError(`Role not found: ${id}`, 404, "ROLE_NOT_FOUND");
   }
   if (role.managed) {
@@ -231,7 +198,7 @@ function resolveEditableRole(
       "ROLE_MANAGED",
     );
   }
-  if (role.position >= highestPosition) {
+  if (role.position >= ctx.bot.highestPosition) {
     throw new RolesBuilderError(
       `The role «${role.name}» is above (or at the level of) the bot and can't be managed.`,
       403,
@@ -242,56 +209,46 @@ function resolveEditableRole(
 }
 
 export async function listGuildRoles(
-  bot: Client,
+  gateway: BotGateway,
   guildId?: string,
 ): Promise<RolesBuilderListResponse> {
-  const guild = resolveGuild(bot, guildId);
-  await guild.roles.fetch().catch(() => null);
-
-  const botCtx = botMemberContext(guild);
-
+  const { id, ctx } = await loadContext(gateway, guildId);
   return {
-    guildId: guild.id,
-    guildName: guild.name,
-    botHighestRoleId: botCtx.highestRoleId,
-    botHighestPosition: botCtx.highestPosition,
-    botCanManageRoles: botCtx.canManageRoles,
-    botRoleName: botCtx.roleName,
-    roleCount: guild.roles.cache.size,
+    guildId: id,
+    guildName: ctx.guildName,
+    botHighestRoleId: ctx.bot.highestRoleId,
+    botHighestPosition: ctx.bot.highestPosition,
+    botCanManageRoles: ctx.bot.canManageRoles,
+    botRoleName: ctx.bot.roleName,
+    roleCount: ctx.roleCount,
     roleLimit: DISCORD_GUILD_ROLE_LIMIT,
-    roles: sortedRoles(guild),
+    roles: ctx.roles.map(mapRole),
     permissionGroups: ROLE_PERMISSION_GROUPS,
   };
 }
 
 export async function createGuildRole(
-  bot: Client,
+  gateway: BotGateway,
   input: CreateGuildRoleRequest,
   guildId?: string,
 ): Promise<CreateGuildRoleResponse> {
-  const guild = resolveGuild(bot, guildId);
-  await guild.roles.fetch().catch(() => null);
-  const botCtx = botMemberContext(guild);
-
-  assertCanManageRoles(botCtx.canManageRoles);
-  assertRoleLimit(guild);
+  const { id, ctx } = await loadContext(gateway, guildId);
+  assertCanManageRoles(ctx.bot.canManageRoles);
+  assertRoleLimit(ctx);
 
   const name = resolveRoleName(input.name);
   const color = resolveColor(input.color);
   const permissions = permissionsBitfieldFromKeys(input.permissions);
-  const hoist = Boolean(input.hoist);
-  const mentionable = Boolean(input.mentionable);
+  const position = Math.max(0, ctx.bot.highestPosition - 1);
 
-  const position = Math.max(0, botCtx.highestPosition - 1);
-
-  let role: Role;
+  let role: RoleDetail;
   try {
-    role = await guild.roles.create({
+    role = await gateway.createRole(id, {
       name,
-      colors: { primaryColor: color },
+      color,
       permissions,
-      hoist,
-      mentionable,
+      hoist: Boolean(input.hoist),
+      mentionable: Boolean(input.mentionable),
       position,
       reason: AUDIT_REASON,
     });
@@ -313,22 +270,19 @@ export async function createGuildRole(
 }
 
 export async function updateGuildRole(
-  bot: Client,
+  gateway: BotGateway,
   roleId: string,
   input: UpdateGuildRoleRequest,
   guildId?: string,
 ): Promise<UpdateGuildRoleResponse> {
-  const guild = resolveGuild(bot, guildId);
-  await guild.roles.fetch().catch(() => null);
-  const botCtx = botMemberContext(guild);
+  const { id, ctx } = await loadContext(gateway, guildId);
+  assertCanManageRoles(ctx.bot.canManageRoles);
+  const role = assertEditableRole(ctx, roleId);
 
-  assertCanManageRoles(botCtx.canManageRoles);
-  const role = resolveEditableRole(guild, roleId, botCtx.highestPosition);
-
-  if (
-    input.permissions !== undefined &&
-    role.permissions.has(PermissionFlagsBits.Administrator)
-  ) {
+  const hasAdmin =
+    (role.permissions & PermissionFlagsBits.Administrator) ===
+    PermissionFlagsBits.Administrator;
+  if (input.permissions !== undefined && hasAdmin) {
     throw new RolesBuilderError(
       "You can't change the permissions of a role with Administrator.",
       403,
@@ -336,30 +290,28 @@ export async function updateGuildRole(
     );
   }
 
-  const edit: {
+  const patch: {
     name?: string;
-    colors?: { primaryColor: number };
+    color?: number;
     permissions?: bigint;
     hoist?: boolean;
     mentionable?: boolean;
     reason: string;
   } = { reason: AUDIT_REASON };
 
-  if (input.name !== undefined) edit.name = resolveRoleName(input.name);
-  if (input.color !== undefined) {
-    edit.colors = { primaryColor: resolveColor(input.color) };
-  }
+  if (input.name !== undefined) patch.name = resolveRoleName(input.name);
+  if (input.color !== undefined) patch.color = resolveColor(input.color);
   if (input.permissions !== undefined) {
-    edit.permissions = permissionsBitfieldFromKeys(input.permissions);
+    patch.permissions = permissionsBitfieldFromKeys(input.permissions);
   }
-  if (input.hoist !== undefined) edit.hoist = Boolean(input.hoist);
+  if (input.hoist !== undefined) patch.hoist = Boolean(input.hoist);
   if (input.mentionable !== undefined) {
-    edit.mentionable = Boolean(input.mentionable);
+    patch.mentionable = Boolean(input.mentionable);
   }
 
-  let updated: Role;
+  let updated: RoleDetail;
   try {
-    updated = await role.edit(edit);
+    updated = await gateway.updateRole(id, role.id, patch);
   } catch (error) {
     throw new RolesBuilderError(
       friendlyDiscordError(error, "Couldn't update the role."),
@@ -372,19 +324,16 @@ export async function updateGuildRole(
 }
 
 export async function deleteGuildRole(
-  bot: Client,
+  gateway: BotGateway,
   roleId: string,
   guildId?: string,
 ): Promise<DeleteGuildRoleResponse> {
-  const guild = resolveGuild(bot, guildId);
-  await guild.roles.fetch().catch(() => null);
-  const botCtx = botMemberContext(guild);
-
-  assertCanManageRoles(botCtx.canManageRoles);
-  const role = resolveEditableRole(guild, roleId, botCtx.highestPosition);
+  const { id, ctx } = await loadContext(gateway, guildId);
+  assertCanManageRoles(ctx.bot.canManageRoles);
+  const role = assertEditableRole(ctx, roleId);
 
   try {
-    await role.delete(AUDIT_REASON);
+    await gateway.deleteRole(id, role.id, AUDIT_REASON);
   } catch (error) {
     throw new RolesBuilderError(
       friendlyDiscordError(error, "Couldn't delete the role."),
@@ -397,14 +346,12 @@ export async function deleteGuildRole(
 }
 
 export async function updateRolePositions(
-  bot: Client,
+  gateway: BotGateway,
   positions: RolePositionUpdate[],
   guildId?: string,
 ): Promise<UpdateRolePositionsResponse> {
-  const guild = resolveGuild(bot, guildId);
-  const botCtx = botMemberContext(guild);
-
-  assertCanManageRoles(botCtx.canManageRoles);
+  const { id, ctx } = await loadContext(gateway, guildId);
+  assertCanManageRoles(ctx.bot.canManageRoles);
 
   if (!Array.isArray(positions) || positions.length === 0) {
     throw new RolesBuilderError(
@@ -414,10 +361,8 @@ export async function updateRolePositions(
     );
   }
 
-  await guild.roles.fetch().catch(() => null);
-
-  const maxAllowed = Math.max(0, botCtx.highestPosition - 1);
-  const payload: { role: string; position: number }[] = [];
+  const maxAllowed = Math.max(0, ctx.bot.highestPosition - 1);
+  const payload: { roleId: string; position: number }[] = [];
 
   for (const entry of positions) {
     const roleId = String(entry.roleId ?? "").trim();
@@ -437,20 +382,21 @@ export async function updateRolePositions(
         "INVALID_POSITION",
       );
     }
-    if (position >= botCtx.highestPosition || position > maxAllowed) {
+    if (position >= ctx.bot.highestPosition || position > maxAllowed) {
       throw new RolesBuilderError(
-        `Position ${position} matches or exceeds the bot's role (pos ${botCtx.highestPosition}).`,
+        `Position ${position} matches or exceeds the bot's role (pos ${ctx.bot.highestPosition}).`,
         400,
         "POSITION_ABOVE_BOT",
       );
     }
 
-    resolveEditableRole(guild, roleId, botCtx.highestPosition);
-    payload.push({ role: roleId, position });
+    assertEditableRole(ctx, roleId);
+    payload.push({ roleId, position });
   }
 
+  let roles: RoleDetail[];
   try {
-    await guild.roles.setPositions(payload);
+    roles = await gateway.setRolePositions(id, payload, AUDIT_REASON);
   } catch (error) {
     throw new RolesBuilderError(
       friendlyDiscordError(
@@ -462,7 +408,5 @@ export async function updateRolePositions(
     );
   }
 
-  await guild.roles.fetch().catch(() => null);
-
-  return { roles: sortedRoles(guild) };
+  return { roles: roles.map(mapRole) };
 }

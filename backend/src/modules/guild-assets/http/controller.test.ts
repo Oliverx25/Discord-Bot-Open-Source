@@ -62,6 +62,15 @@ function fakeGateway(over: Partial<BotGateway> = {}): BotGateway {
     editMessage: async () => ({ orphaned: false }),
     deleteMessage: async () => ({ orphaned: false }),
     sendDirectMessage: async () => ({ sent: true }),
+    getRoleAdminContext: async () => null,
+    createRole: async () => {
+      throw new Error("not stubbed");
+    },
+    updateRole: async () => {
+      throw new Error("not stubbed");
+    },
+    deleteRole: async () => {},
+    setRolePositions: async () => [],
     ...over,
   };
 }

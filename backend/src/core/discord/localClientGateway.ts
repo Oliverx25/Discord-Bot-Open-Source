@@ -7,21 +7,41 @@ import {
   type Message,
   type MessageCreateOptions,
   type MessageEditOptions,
+  PermissionFlagsBits,
+  type Role,
   type SendableChannels,
 } from "discord.js";
 import { resolveMembersBatch } from "#lib/discordMember.js";
 import {
   type BotGateway,
   BotGatewayError,
+  type BotRoleAdminContext,
   type ChannelSummary,
+  type CreateRoleInput,
   type EmojiSummary,
   type GuildSummary,
   type MemberProfile,
   type OutgoingMessage,
   type PublishedEmbedMedia,
+  type RoleDetail,
   type RoleSummary,
   type StickerSummary,
+  type UpdateRoleInput,
 } from "./botGateway.js";
+
+function toRoleDetail(role: Role): RoleDetail {
+  return {
+    id: role.id,
+    name: role.name,
+    color: role.color,
+    hexColor: role.hexColor,
+    position: role.position,
+    managed: role.managed,
+    hoist: role.hoist,
+    mentionable: role.mentionable,
+    permissions: role.permissions.bitfield,
+  };
+}
 
 const UNKNOWN_MESSAGE = 10008;
 
@@ -291,5 +311,115 @@ export class LocalClientGateway implements BotGateway {
     } catch {
       return { sent: false };
     }
+  }
+
+  private async guildWithRoles(guildId: string): Promise<Guild> {
+    const guild = this.guild(guildId);
+    if (!guild) {
+      throw new BotGatewayError(
+        "The bot is not in that server.",
+        404,
+        "GUILD_NOT_FOUND",
+      );
+    }
+    await guild.roles.fetch().catch(() => null);
+    return guild;
+  }
+
+  async getRoleAdminContext(
+    guildId: string,
+  ): Promise<BotRoleAdminContext | null> {
+    const guild = this.guild(guildId);
+    if (!guild) return null;
+    await guild.roles.fetch().catch(() => null);
+
+    const me = guild.members.me;
+    const highest = me?.roles.highest;
+    const isEveryone = highest ? highest.id === guild.id : true;
+
+    return {
+      guildName: guild.name,
+      roles: [...guild.roles.cache.values()]
+        .filter((role) => role.id !== guild.id)
+        .map(toRoleDetail)
+        .sort((a, b) => b.position - a.position),
+      roleCount: guild.roles.cache.size,
+      bot: {
+        highestRoleId: isEveryone ? null : (highest?.id ?? null),
+        highestPosition: highest?.position ?? 0,
+        canManageRoles: Boolean(
+          me?.permissions.has(PermissionFlagsBits.ManageRoles),
+        ),
+        roleName: isEveryone ? null : (highest?.name ?? null),
+      },
+    };
+  }
+
+  async createRole(
+    guildId: string,
+    input: CreateRoleInput,
+  ): Promise<RoleDetail> {
+    const guild = await this.guildWithRoles(guildId);
+    const role = await guild.roles.create({
+      name: input.name,
+      colors: { primaryColor: input.color },
+      permissions: input.permissions,
+      hoist: input.hoist,
+      mentionable: input.mentionable,
+      position: input.position,
+      reason: input.reason,
+    });
+    return toRoleDetail(role);
+  }
+
+  async updateRole(
+    guildId: string,
+    roleId: string,
+    patch: UpdateRoleInput,
+  ): Promise<RoleDetail> {
+    const guild = await this.guildWithRoles(guildId);
+    const role = guild.roles.cache.get(roleId);
+    if (!role) {
+      throw new BotGatewayError(
+        `Role not found: ${roleId}`,
+        404,
+        "ROLE_NOT_FOUND",
+      );
+    }
+    const updated = await role.edit({
+      name: patch.name,
+      colors:
+        patch.color !== undefined ? { primaryColor: patch.color } : undefined,
+      permissions: patch.permissions,
+      hoist: patch.hoist,
+      mentionable: patch.mentionable,
+      reason: patch.reason,
+    });
+    return toRoleDetail(updated);
+  }
+
+  async deleteRole(
+    guildId: string,
+    roleId: string,
+    reason?: string,
+  ): Promise<void> {
+    const guild = await this.guildWithRoles(guildId);
+    await guild.roles.delete(roleId, reason);
+  }
+
+  async setRolePositions(
+    guildId: string,
+    positions: { roleId: string; position: number }[],
+    _reason?: string,
+  ): Promise<RoleDetail[]> {
+    const guild = await this.guildWithRoles(guildId);
+    await guild.roles.setPositions(
+      positions.map((p) => ({ role: p.roleId, position: p.position })),
+    );
+    await guild.roles.fetch().catch(() => null);
+    return [...guild.roles.cache.values()]
+      .filter((role) => role.id !== guild.id)
+      .map(toRoleDetail)
+      .sort((a, b) => b.position - a.position);
   }
 }
