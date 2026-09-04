@@ -2,10 +2,12 @@ import { CDN } from "@discordjs/rest";
 import { PermissionFlagsBits, Routes } from "discord.js";
 import { BaseGateway } from "./baseGateway.js";
 import type {
+  AutoModRuleSummary,
   BotGateway,
   BotProfileSummary,
   BotRoleAdminContext,
   ChannelDetail,
+  ChannelOverwrite,
   ChannelSummary,
   EmojiSummary,
   FetchedMessage,
@@ -51,6 +53,12 @@ interface APIChannel {
   rate_limit_per_user?: number;
   nsfw?: boolean;
   guild_id?: string;
+  permission_overwrites?: {
+    id: string;
+    type: number;
+    allow: string;
+    deny: string;
+  }[];
 }
 interface APIMember {
   user: APIUser;
@@ -423,6 +431,64 @@ export class RestGateway extends BaseGateway implements BotGateway {
         )
         .sort((a, b) => b.position - a.position),
     };
+  }
+
+  async getChannelOverwrites(
+    guildId: string,
+    channelId: string,
+  ): Promise<ChannelOverwrite[] | null> {
+    const channel = await this.channelInGuild(guildId, channelId);
+    if (!channel) return null;
+    return (channel.permission_overwrites ?? []).map((o) => ({
+      id: o.id,
+      type: Number(o.type),
+      allow: o.allow,
+      deny: o.deny,
+    }));
+  }
+
+  async botHasGuildPermission(
+    guildId: string,
+    permission: bigint,
+  ): Promise<boolean> {
+    const [roles, me] = await Promise.all([
+      this.guildRoles(guildId),
+      this.rawMember(guildId, "@me"),
+    ]);
+    if (!me) return false;
+    const roleById = new Map(roles.map((r) => [r.id, r]));
+    const everyone = roleById.get(guildId);
+    let perms = everyone ? BigInt(everyone.permissions) : 0n;
+    for (const id of me.roles) {
+      const role = roleById.get(id);
+      if (role) perms |= BigInt(role.permissions);
+    }
+    if (
+      (perms & PermissionFlagsBits.Administrator) ===
+      PermissionFlagsBits.Administrator
+    ) {
+      return true;
+    }
+    return (perms & permission) === permission;
+  }
+
+  async listAutoModRules(guildId: string): Promise<AutoModRuleSummary[]> {
+    const rules = (await this.restClient().get(
+      Routes.guildAutoModerationRules(guildId),
+    )) as {
+      id: string;
+      name: string;
+      enabled: boolean;
+      event_type: number;
+      trigger_type: number;
+    }[];
+    return rules.map((r) => ({
+      id: r.id,
+      name: r.name,
+      enabled: r.enabled,
+      eventType: r.event_type,
+      triggerType: r.trigger_type,
+    }));
   }
 
   async getBotProfile(guildId: string): Promise<BotProfileSummary> {

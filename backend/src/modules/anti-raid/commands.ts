@@ -3,6 +3,7 @@ import {
   MessageFlags,
   PermissionFlagsBits,
 } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { resolveAlertChannel, sendAntiRaidAlert } from "./alerts.js";
 import { getAntiRaidSettings } from "./domain/anti-raid.js";
 import { applyGuildLockdown, liftGuildLockdown } from "./lockdown.js";
@@ -59,7 +60,8 @@ export async function handleLockdownCommand(
     const reason =
       interaction.options.getString("reason")?.trim() || "/lockdown command";
     const result = await applyGuildLockdown(
-      interaction.guild,
+      new LocalClientGateway(interaction.guild.client),
+      interaction.guild.id,
       interaction.user.id,
     );
     const alert = await resolveAlertChannel(interaction.guild, settings);
@@ -79,7 +81,10 @@ export async function handleLockdownCommand(
       await interaction.editReply("There is no active lockdown.");
       return;
     }
-    const result = await liftGuildLockdown(interaction.guild);
+    const result = await liftGuildLockdown(
+      new LocalClientGateway(interaction.guild.client),
+      interaction.guild.id,
+    );
     const alert = await resolveAlertChannel(interaction.guild, settings);
     await sendAntiRaidAlert(
       alert,

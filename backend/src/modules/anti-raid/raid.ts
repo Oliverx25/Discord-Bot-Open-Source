@@ -7,6 +7,7 @@ import {
   recordAndCount,
 } from "@adobos/shared";
 import type { GuildMember } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { resolveAlertChannel, sendAntiRaidAlert } from "./alerts.js";
 import { applyGuildLockdown } from "./lockdown.js";
 
@@ -25,7 +26,11 @@ async function applyVerdict(
   if (verdict === "allow") return;
   if (verdict === "lockdown") {
     if (!settings.lockdownActive) {
-      await applyGuildLockdown(member.guild, member.client.user?.id ?? null);
+      await applyGuildLockdown(
+        new LocalClientGateway(member.guild.client),
+        member.guild.id,
+        member.client.user?.id ?? null,
+      );
     }
     if (member.kickable) {
       await member.kick(reason).catch(() => undefined);

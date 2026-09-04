@@ -1,12 +1,12 @@
-import type { Client } from "discord.js";
 import { Router } from "express";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { defineRoute } from "#core/http/validate.js";
 import { getAutoModConfig, updateAutoModConfig } from "../domain/auto-mod.js";
 import { syncNativeAutoMod } from "../nativeSync.js";
 import { updateAutoModConfigSchema } from "./schema.js";
 
-export function autoModRoutes(bot: Client): Router {
+export function autoModRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   /** GET /api/auto-mod/config */
@@ -26,7 +26,7 @@ export function autoModRoutes(bot: Client): Router {
       async (req, res, valid) => {
         const guildId = guildIdOf(req);
         const config = await updateAutoModConfig(valid.body, guildId);
-        const nativeSync = await syncNativeAutoMod(bot, guildId, config);
+        const nativeSync = await syncNativeAutoMod(gateway, guildId, config);
         res.json({ config, nativeSync });
       },
     ),

@@ -1,14 +1,17 @@
 import type { AutoModConfig, AutoModFilterKey } from "@adobos/shared";
 import {
   AutoModerationActionType,
-  type AutoModerationRule,
   AutoModerationRuleEventType,
   AutoModerationRuleTriggerType,
-  type Client,
   DiscordAPIError,
-  type Guild,
   PermissionFlagsBits,
 } from "discord.js";
+import type {
+  AutoModRuleAction,
+  AutoModRuleInput,
+  AutoModRuleSummary,
+  BotGateway,
+} from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import {
   ADOBOS_NATIVE_RULE_NAMES,
@@ -35,11 +38,11 @@ const BLOCK_MESSAGE = "Your message was blocked by Auto-Mod (Adobos).";
  * No toca reglas que no empiecen por "Adobos · ".
  */
 export async function syncNativeAutoMod(
-  bot: Client,
+  gateway: BotGateway,
   guildId: string,
   config: AutoModConfig,
 ): Promise<NativeSyncResult> {
-  const guild = bot.guilds.cache.get(guildId);
+  const guild = await gateway.getGuild(guildId);
   if (!guild) {
     return {
       ok: false,
@@ -48,8 +51,11 @@ export async function syncNativeAutoMod(
     };
   }
 
-  const me = guild.members.me;
-  if (!me?.permissions.has(PermissionFlagsBits.ManageGuild)) {
+  const canManage = await gateway.botHasGuildPermission(
+    guildId,
+    PermissionFlagsBits.ManageGuild,
+  );
+  if (!canManage) {
     return {
       ok: false,
       message:
@@ -58,13 +64,13 @@ export async function syncNativeAutoMod(
   }
 
   try {
-    const existing = await guild.autoModerationRules.fetch();
-    const ours = [...existing.values()].filter((rule) =>
+    const existing = await gateway.listAutoModRules(guildId);
+    const ours = existing.filter((rule) =>
       rule.name.startsWith(ADOBOS_NATIVE_RULE_PREFIX),
     );
     // Key by filter, not by raw name, so rules still carrying a pre-1c-B
     // Spanish name are adopted and get renamed in place by the upsert.
-    const byKey = new Map<AutoModFilterKey, AutoModerationRule>();
+    const byKey = new Map<AutoModFilterKey, AutoModRuleSummary>();
     for (const rule of ours) {
       const key = nativeRuleKeyFromName(rule.name);
       if (!key) continue;
@@ -88,7 +94,7 @@ export async function syncNativeAutoMod(
         ? config.filters.bannedWords
         : [],
     );
-    await upsertKeywordRule(guild, byKey.get("bannedWords"), {
+    await upsertKeywordRule(gateway, guildId, byKey.get("bannedWords"), {
       name: ADOBOS_NATIVE_RULE_NAMES.bannedWords,
       enabled: words.length > 0,
       keywordFilter: words,
@@ -96,13 +102,13 @@ export async function syncNativeAutoMod(
       exemptChannels,
     });
 
-    await upsertInviteRule(guild, byKey.get("antiInvites"), {
+    await upsertInviteRule(gateway, guildId, byKey.get("antiInvites"), {
       enabled: Boolean(config.enabled && config.filters.antiInvites),
       exemptRoles,
       exemptChannels,
     });
 
-    await upsertMentionRule(guild, byKey.get("mentionSpam"), {
+    await upsertMentionRule(gateway, guildId, byKey.get("mentionSpam"), {
       enabled: Boolean(config.enabled && config.filters.mentionSpam),
       mentionTotalLimit: config.filters.mentionSpamLimit,
       exemptRoles,
@@ -129,18 +135,34 @@ export async function syncNativeAutoMod(
   }
 }
 
-function blockAction() {
+function blockAction(): AutoModRuleAction[] {
   return [
     {
       type: AutoModerationActionType.BlockMessage,
-      metadata: { customMessage: BLOCK_MESSAGE },
+      customMessage: BLOCK_MESSAGE,
     },
   ];
 }
 
+/** ¿Se puede editar en sitio o hay que recrear por cambio de `triggerType`? */
+async function upsert(
+  gateway: BotGateway,
+  guildId: string,
+  existing: AutoModRuleSummary | undefined,
+  rule: AutoModRuleInput,
+): Promise<void> {
+  if (existing && existing.triggerType === rule.triggerType) {
+    await gateway.editAutoModRule(guildId, existing.id, rule);
+    return;
+  }
+  if (existing) await gateway.deleteAutoModRule(guildId, existing.id, AUDIT);
+  await gateway.createAutoModRule(guildId, rule);
+}
+
 async function upsertKeywordRule(
-  guild: Guild,
-  existing: AutoModerationRule | undefined,
+  gateway: BotGateway,
+  guildId: string,
+  existing: AutoModRuleSummary | undefined,
   input: {
     name: string;
     enabled: boolean;
@@ -150,36 +172,26 @@ async function upsertKeywordRule(
   },
 ): Promise<void> {
   if (!input.enabled) {
-    if (existing) await existing.delete(AUDIT);
+    if (existing) await gateway.deleteAutoModRule(guildId, existing.id, AUDIT);
     return;
   }
-  const body = {
+  await upsert(gateway, guildId, existing, {
     name: input.name,
     enabled: true,
     eventType: AutoModerationRuleEventType.MessageSend,
-    triggerMetadata: { keywordFilter: input.keywordFilter },
+    triggerType: AutoModerationRuleTriggerType.Keyword,
+    keywordFilter: input.keywordFilter,
     actions: blockAction(),
     exemptRoles: input.exemptRoles,
     exemptChannels: input.exemptChannels,
     reason: AUDIT,
-  };
-  if (
-    existing &&
-    existing.triggerType === AutoModerationRuleTriggerType.Keyword
-  ) {
-    await existing.edit(body);
-    return;
-  }
-  if (existing) await existing.delete(AUDIT);
-  await guild.autoModerationRules.create({
-    ...body,
-    triggerType: AutoModerationRuleTriggerType.Keyword,
   });
 }
 
 async function upsertInviteRule(
-  guild: Guild,
-  existing: AutoModerationRule | undefined,
+  gateway: BotGateway,
+  guildId: string,
+  existing: AutoModRuleSummary | undefined,
   input: {
     enabled: boolean;
     exemptRoles: string[];
@@ -187,39 +199,27 @@ async function upsertInviteRule(
   },
 ): Promise<void> {
   if (!input.enabled) {
-    if (existing) await existing.delete(AUDIT);
+    if (existing) await gateway.deleteAutoModRule(guildId, existing.id, AUDIT);
     return;
   }
-  const body = {
+  await upsert(gateway, guildId, existing, {
     name: ADOBOS_NATIVE_RULE_NAMES.antiInvites,
     enabled: true,
     eventType: AutoModerationRuleEventType.MessageSend,
-    triggerMetadata: {
-      keywordFilter: [],
-      regexPatterns: discordInviteRegexPatterns(),
-    },
+    triggerType: AutoModerationRuleTriggerType.Keyword,
+    keywordFilter: [],
+    regexPatterns: discordInviteRegexPatterns(),
     actions: blockAction(),
     exemptRoles: input.exemptRoles,
     exemptChannels: input.exemptChannels,
     reason: AUDIT,
-  };
-  if (
-    existing &&
-    existing.triggerType === AutoModerationRuleTriggerType.Keyword
-  ) {
-    await existing.edit(body);
-    return;
-  }
-  if (existing) await existing.delete(AUDIT);
-  await guild.autoModerationRules.create({
-    ...body,
-    triggerType: AutoModerationRuleTriggerType.Keyword,
   });
 }
 
 async function upsertMentionRule(
-  guild: Guild,
-  existing: AutoModerationRule | undefined,
+  gateway: BotGateway,
+  guildId: string,
+  existing: AutoModRuleSummary | undefined,
   input: {
     enabled: boolean;
     mentionTotalLimit: number;
@@ -228,36 +228,23 @@ async function upsertMentionRule(
   },
 ): Promise<void> {
   if (!input.enabled) {
-    if (existing) await existing.delete(AUDIT);
+    if (existing) await gateway.deleteAutoModRule(guildId, existing.id, AUDIT);
     return;
   }
   const limit = Math.max(
     1,
     Math.min(50, Math.round(input.mentionTotalLimit || 5)),
   );
-  const body = {
+  await upsert(gateway, guildId, existing, {
     name: ADOBOS_NATIVE_RULE_NAMES.mentionSpam,
     enabled: true,
     eventType: AutoModerationRuleEventType.MessageSend,
-    triggerMetadata: {
-      mentionTotalLimit: limit,
-      mentionRaidProtectionEnabled: true,
-    },
+    triggerType: AutoModerationRuleTriggerType.MentionSpam,
+    mentionTotalLimit: limit,
+    mentionRaidProtectionEnabled: true,
     actions: blockAction(),
     exemptRoles: input.exemptRoles,
     exemptChannels: input.exemptChannels,
     reason: AUDIT,
-  };
-  if (
-    existing &&
-    existing.triggerType === AutoModerationRuleTriggerType.MentionSpam
-  ) {
-    await existing.edit(body);
-    return;
-  }
-  if (existing) await existing.delete(AUDIT);
-  await guild.autoModerationRules.create({
-    ...body,
-    triggerType: AutoModerationRuleTriggerType.MentionSpam,
   });
 }

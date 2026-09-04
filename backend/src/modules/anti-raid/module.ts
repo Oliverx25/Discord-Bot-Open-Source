@@ -16,7 +16,7 @@ export const antiRaidModule: AdobosModule = {
     GatewayIntentBits.GuildModeration,
   ],
   register(ctx) {
-    ctx.route("/api/anti-raid", antiRaidRoutes(ctx.client), {
+    ctx.route("/api/anti-raid", antiRaidRoutes(ctx.botGateway), {
       feature: "anti-raid",
     });
     ctx.command({

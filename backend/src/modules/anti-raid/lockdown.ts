@@ -1,10 +1,6 @@
 import type { LockdownOverwriteSnapshot } from "@adobos/shared";
-import {
-  ChannelType,
-  type Guild,
-  type GuildBasedChannel,
-  PermissionFlagsBits,
-} from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import {
   getAntiRaidSettings,
@@ -12,64 +8,58 @@ import {
   setLockdownState,
 } from "./domain/anti-raid.js";
 
-const LOCK_PERMS = {
-  SendMessages: false,
-  AddReactions: false,
-  SendMessagesInThreads: false,
-  CreatePublicThreads: false,
-  CreatePrivateThreads: false,
-  Connect: false,
-  Speak: false,
-} as const;
+/** Permisos que se deniegan a @everyone durante el lockdown. */
+const LOCK_BITS =
+  PermissionFlagsBits.SendMessages |
+  PermissionFlagsBits.AddReactions |
+  PermissionFlagsBits.SendMessagesInThreads |
+  PermissionFlagsBits.CreatePublicThreads |
+  PermissionFlagsBits.CreatePrivateThreads |
+  PermissionFlagsBits.Connect |
+  PermissionFlagsBits.Speak;
 
-function lockable(channel: GuildBasedChannel): boolean {
-  return (
-    channel.type === ChannelType.GuildText ||
-    channel.type === ChannelType.GuildAnnouncement ||
-    channel.type === ChannelType.GuildVoice ||
-    channel.type === ChannelType.GuildStageVoice
-  );
-}
-
-function canManage(guild: Guild, channel: GuildBasedChannel): boolean {
-  const me = guild.members.me;
-  if (!me) return false;
-  if (!("permissionOverwrites" in channel)) return false;
-  return Boolean(
-    channel.permissionsFor(me)?.has(PermissionFlagsBits.ManageChannels),
-  );
-}
+/** `ChannelType`: text, announcement, voice, stage. */
+const LOCKABLE_TYPES = new Set([0, 5, 2, 13]);
 
 export async function applyGuildLockdown(
-  guild: Guild,
+  gateway: BotGateway,
+  guildId: string,
   byUserId: string | null,
 ): Promise<{ channels: number }> {
-  const current = await getAntiRaidSettings(guild.id);
+  const current = await getAntiRaidSettings(guildId);
   if (current.lockdownActive) return { channels: 0 };
 
   await setLockdownState({
-    guildId: guild.id,
+    guildId,
     active: true,
     byUserId,
     snapshot: [],
   });
 
-  const everyoneId = guild.id;
+  const everyoneId = guildId;
   const snapshot: LockdownOverwriteSnapshot[] = [];
   let channels = 0;
 
-  for (const channel of guild.channels.cache.values()) {
-    if (!lockable(channel) || !canManage(guild, channel)) continue;
-    if (!("permissionOverwrites" in channel)) continue;
-    const existing = channel.permissionOverwrites.cache.get(everyoneId);
+  for (const channel of await gateway.listChannels(guildId)) {
+    if (!LOCKABLE_TYPES.has(channel.type)) continue;
+    const overwrites = await gateway.getChannelOverwrites(guildId, channel.id);
+    if (!overwrites) continue;
+
+    const existing = overwrites.find((o) => o.id === everyoneId);
     snapshot.push({
       channelId: channel.id,
       existed: Boolean(existing),
-      allow: existing ? existing.allow.bitfield.toString() : "0",
-      deny: existing ? existing.deny.bitfield.toString() : "0",
+      allow: existing?.allow ?? "0",
+      deny: existing?.deny ?? "0",
     });
+
+    const nextAllow = BigInt(existing?.allow ?? "0") & ~LOCK_BITS;
+    const nextDeny = BigInt(existing?.deny ?? "0") | LOCK_BITS;
     try {
-      await channel.permissionOverwrites.edit(everyoneId, LOCK_PERMS, {
+      await gateway.putChannelOverwrite(channel.id, everyoneId, {
+        type: 0,
+        allow: nextAllow.toString(),
+        deny: nextDeny.toString(),
         reason: "Anti-Raid lockdown",
       });
       channels += 1;
@@ -82,7 +72,7 @@ export async function applyGuildLockdown(
   }
 
   await setLockdownState({
-    guildId: guild.id,
+    guildId,
     active: true,
     byUserId,
     snapshot,
@@ -91,36 +81,34 @@ export async function applyGuildLockdown(
 }
 
 export async function liftGuildLockdown(
-  guild: Guild,
+  gateway: BotGateway,
+  guildId: string,
 ): Promise<{ channels: number }> {
-  const snapshot = await getLockdownSnapshot(guild.id);
-  const everyoneId = guild.id;
+  const snapshot = await getLockdownSnapshot(guildId);
+  const everyoneId = guildId;
   let channels = 0;
 
   for (const item of snapshot) {
-    const channel = guild.channels.cache.get(item.channelId);
-    if (!channel || !("permissionOverwrites" in channel)) continue;
-    if (!canManage(guild, channel)) continue;
+    const overwrites = await gateway.getChannelOverwrites(
+      guildId,
+      item.channelId,
+    );
+    if (!overwrites) continue;
     try {
-      const rest = [
-        ...channel.permissionOverwrites.cache
-          .filter((overwrite) => overwrite.id !== everyoneId)
-          .map((overwrite) => ({
-            id: overwrite.id,
-            type: overwrite.type,
-            allow: overwrite.allow.bitfield,
-            deny: overwrite.deny.bitfield,
-          })),
-      ];
+      const rest = overwrites.filter((o) => o.id !== everyoneId);
       if (item.existed) {
         rest.push({
           id: everyoneId,
-          type: 0 as const,
-          allow: BigInt(item.allow || "0"),
-          deny: BigInt(item.deny || "0"),
+          type: 0,
+          allow: item.allow || "0",
+          deny: item.deny || "0",
         });
       }
-      await channel.permissionOverwrites.set(rest, "Anti-Raid unlock");
+      await gateway.setChannelOverwrites(
+        item.channelId,
+        rest,
+        "Anti-Raid unlock",
+      );
       channels += 1;
     } catch (error: unknown) {
       logger.warn(
@@ -131,7 +119,7 @@ export async function liftGuildLockdown(
   }
 
   await setLockdownState({
-    guildId: guild.id,
+    guildId,
     active: false,
     byUserId: null,
     snapshot: [],

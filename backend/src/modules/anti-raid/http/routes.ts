@@ -1,9 +1,8 @@
-import { ChannelType, type Client } from "discord.js";
+import { ChannelType, EmbedBuilder } from "discord.js";
 import { Router } from "express";
-import { fetchChannelInGuild } from "#core/http/channelScope.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { defineRoute } from "#core/http/validate.js";
-import { resolveAlertChannel, sendAntiRaidAlert } from "../alerts.js";
 import {
   AntiRaidError,
   getAntiRaidConfig,
@@ -13,12 +12,17 @@ import {
 import { applyGuildLockdown, liftGuildLockdown } from "../lockdown.js";
 import { lockdownBodySchema, updateAntiRaidSettingsSchema } from "./schema.js";
 
+const ALERT_COLOR = 0xed4245;
+
 async function assertAlertChannel(
-  bot: Client,
+  gateway: BotGateway,
   channelId: string,
   guildId: string,
 ): Promise<void> {
-  const channel = await fetchChannelInGuild(bot, channelId, guildId);
+  const channel = await gateway.getChannel(guildId, channelId);
+  if (!channel) {
+    throw new AntiRaidError("Channel not found.", 404, "CHANNEL_NOT_FOUND");
+  }
   if (
     channel.type !== ChannelType.GuildText &&
     channel.type !== ChannelType.GuildAnnouncement
@@ -31,7 +35,32 @@ async function assertAlertChannel(
   }
 }
 
-export function antiRaidRoutes(bot: Client): Router {
+/** Alerta de lockdown al canal configurado — best-effort. */
+async function sendLockdownAlert(
+  gateway: BotGateway,
+  guildId: string,
+  channelId: string | null | undefined,
+  description: string,
+): Promise<void> {
+  if (!channelId) return;
+  try {
+    await gateway.sendMessage(guildId, channelId, {
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ALERT_COLOR)
+          .setTitle("Lockdown")
+          .setDescription(description.slice(0, 4096))
+          .setTimestamp(new Date())
+          .toJSON(),
+      ],
+      allowedMentions: { parse: [] },
+    });
+  } catch {
+    // best-effort: si la alerta no sale, el lockdown ya se aplicó.
+  }
+}
+
+export function antiRaidRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   router.get(
@@ -52,7 +81,7 @@ export function antiRaidRoutes(bot: Client): Router {
           valid.body.alertChannelId.trim()
         ) {
           await assertAlertChannel(
-            bot,
+            gateway,
             valid.body.alertChannelId.trim(),
             guildId,
           );
@@ -67,26 +96,26 @@ export function antiRaidRoutes(bot: Client): Router {
     "/lockdown",
     defineRoute({ body: lockdownBodySchema }, async (req, res, valid) => {
       const guildId = guildIdOf(req);
-      const guild = await bot.guilds.fetch(guildId).catch(() => null);
+      const guild = await gateway.getGuild(guildId);
       if (!guild) {
         throw new AntiRaidError("Server not found.", 404, "GUILD_NOT_FOUND");
       }
       const settings = await getAntiRaidSettings(guildId);
       const actorId = req.guild?.userId ?? null;
       if (valid.body.active) {
-        const result = await applyGuildLockdown(guild, actorId);
-        const alert = await resolveAlertChannel(guild, settings);
-        await sendAntiRaidAlert(
-          alert,
-          "Lockdown",
+        const result = await applyGuildLockdown(gateway, guildId, actorId);
+        await sendLockdownAlert(
+          gateway,
+          guildId,
+          settings.alertChannelId,
           `Lockdown activated from the panel. Channels: ${result.channels}.`,
         );
       } else {
-        const result = await liftGuildLockdown(guild);
-        const alert = await resolveAlertChannel(guild, settings);
-        await sendAntiRaidAlert(
-          alert,
-          "Lockdown",
+        const result = await liftGuildLockdown(gateway, guildId);
+        await sendLockdownAlert(
+          gateway,
+          guildId,
+          settings.alertChannelId,
           `Lockdown removed from the panel. Channels: ${result.channels}.`,
         );
       }

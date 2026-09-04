@@ -9,11 +9,13 @@ import {
 import { resolveMembersBatch, safeAvatarOptions } from "#lib/discordMember.js";
 import { BaseGateway } from "./baseGateway.js";
 import {
+  type AutoModRuleSummary,
   type BotGateway,
   BotGatewayError,
   type BotProfileSummary,
   type BotRoleAdminContext,
   type ChannelDetail,
+  type ChannelOverwrite,
   type ChannelSummary,
   type EmojiSummary,
   type FetchedMessage,
@@ -392,6 +394,53 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
         roleName: isEveryone ? null : (highest?.name ?? null),
       },
     };
+  }
+
+  async getChannelOverwrites(
+    guildId: string,
+    channelId: string,
+  ): Promise<ChannelOverwrite[] | null> {
+    const guild = this.guild(guildId);
+    if (!guild) return null;
+    const channel =
+      guild.channels.cache.get(channelId) ??
+      (await guild.channels.fetch(channelId).catch(() => null));
+    if (
+      !channel ||
+      channel.guildId !== guildId ||
+      !("permissionOverwrites" in channel)
+    ) {
+      return null;
+    }
+    return [...channel.permissionOverwrites.cache.values()].map(
+      (overwrite) => ({
+        id: overwrite.id,
+        type: overwrite.type,
+        allow: overwrite.allow.bitfield.toString(),
+        deny: overwrite.deny.bitfield.toString(),
+      }),
+    );
+  }
+
+  async botHasGuildPermission(
+    guildId: string,
+    permission: bigint,
+  ): Promise<boolean> {
+    const me = this.guild(guildId)?.members.me ?? null;
+    return Boolean(me?.permissions.has(permission));
+  }
+
+  async listAutoModRules(guildId: string): Promise<AutoModRuleSummary[]> {
+    const guild = this.guild(guildId);
+    if (!guild) return [];
+    const rules = await guild.autoModerationRules.fetch();
+    return [...rules.values()].map((rule) => ({
+      id: rule.id,
+      name: rule.name,
+      enabled: rule.enabled,
+      eventType: rule.eventType,
+      triggerType: rule.triggerType,
+    }));
   }
 
   private guildOrThrow(guildId: string): Guild {

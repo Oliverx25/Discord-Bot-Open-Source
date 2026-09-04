@@ -148,6 +148,15 @@ export interface ChannelDetail extends ChannelSummary {
   nsfw: boolean;
 }
 
+/** Un permission overwrite de canal. `allow`/`deny` son bitfields como string. */
+export interface ChannelOverwrite {
+  id: string;
+  /** 0 = rol, 1 = miembro. */
+  type: number;
+  allow: string;
+  deny: string;
+}
+
 export interface FetchedMessageEmbed {
   title?: string;
   description?: string;
@@ -231,6 +240,40 @@ export interface SentMessageResult {
 export interface EditMessageResult {
   orphaned: boolean;
   embedMedia?: PublishedEmbedMedia;
+}
+
+/** Regla de AutoMod nativo de Discord (resumen para el diffing del sync). */
+export interface AutoModRuleSummary {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /** `AutoModerationRuleEventType` numérico. */
+  eventType: number;
+  /** `AutoModerationRuleTriggerType` numérico. */
+  triggerType: number;
+}
+
+/** Acción de una regla de AutoMod (`type` = `AutoModerationActionType`). */
+export interface AutoModRuleAction {
+  type: number;
+  /** Mensaje custom para `BlockMessage`. */
+  customMessage?: string;
+}
+
+/** Alta/edición de una regla de AutoMod nativo — datos planos. */
+export interface AutoModRuleInput {
+  name: string;
+  enabled: boolean;
+  eventType: number;
+  triggerType: number;
+  keywordFilter?: string[];
+  regexPatterns?: string[];
+  mentionTotalLimit?: number;
+  mentionRaidProtectionEnabled?: boolean;
+  actions: AutoModRuleAction[];
+  exemptRoles?: string[];
+  exemptChannels?: string[];
+  reason?: string;
 }
 
 export interface BotGateway {
@@ -357,6 +400,41 @@ export interface BotGateway {
     token: string,
     payload: OutgoingMessage & { username?: string; avatarUrl?: string },
   ): Promise<{ messageId: string }>;
+
+  // — Overwrites de canal (anti-raid lockdown, tickets) —
+  /** Overwrites de un canal del guild. `null` si el canal no existe / no es del guild. */
+  getChannelOverwrites(
+    guildId: string,
+    channelId: string,
+  ): Promise<ChannelOverwrite[] | null>;
+  /** PUT absoluto de un overwrite (rol o miembro) — reemplaza allow/deny. */
+  putChannelOverwrite(
+    channelId: string,
+    overwriteId: string,
+    input: { type: number; allow: string; deny: string; reason?: string },
+  ): Promise<void>;
+  /** Reemplaza **todos** los overwrites del canal. */
+  setChannelOverwrites(
+    channelId: string,
+    overwrites: ChannelOverwrite[],
+    reason?: string,
+  ): Promise<void>;
+
+  // — AutoMod nativo (auto-mod) —
+  /** ¿El bot tiene ese permiso a nivel de guild? `permission` = bit de `PermissionFlagsBits`. */
+  botHasGuildPermission(guildId: string, permission: bigint): Promise<boolean>;
+  listAutoModRules(guildId: string): Promise<AutoModRuleSummary[]>;
+  createAutoModRule(guildId: string, rule: AutoModRuleInput): Promise<void>;
+  editAutoModRule(
+    guildId: string,
+    ruleId: string,
+    rule: AutoModRuleInput,
+  ): Promise<void>;
+  deleteAutoModRule(
+    guildId: string,
+    ruleId: string,
+    reason?: string,
+  ): Promise<void>;
 
   // — Perfil del bot en el guild —
   getBotProfile(guildId: string): Promise<BotProfileSummary>;

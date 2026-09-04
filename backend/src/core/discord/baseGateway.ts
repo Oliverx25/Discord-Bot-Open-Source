@@ -2,6 +2,7 @@ import type { REST } from "@discordjs/rest";
 import { Routes } from "discord.js";
 import { env } from "#core/env.js";
 import {
+  type AutoModRuleInput,
   BotGatewayError,
   type CreateRoleInput,
   type EditMessageResult,
@@ -74,6 +75,34 @@ function embedMediaOf(
   };
 }
 
+function autoModBody(rule: AutoModRuleInput): Record<string, unknown> {
+  const meta: Record<string, unknown> = {};
+  if (rule.keywordFilter !== undefined)
+    meta.keyword_filter = rule.keywordFilter;
+  if (rule.regexPatterns !== undefined)
+    meta.regex_patterns = rule.regexPatterns;
+  if (rule.mentionTotalLimit !== undefined) {
+    meta.mention_total_limit = rule.mentionTotalLimit;
+  }
+  if (rule.mentionRaidProtectionEnabled !== undefined) {
+    meta.mention_raid_protection_enabled = rule.mentionRaidProtectionEnabled;
+  }
+  return {
+    name: rule.name,
+    enabled: rule.enabled,
+    event_type: rule.eventType,
+    trigger_metadata: meta,
+    actions: rule.actions.map((action) => ({
+      type: action.type,
+      metadata: action.customMessage
+        ? { custom_message: action.customMessage }
+        : undefined,
+    })),
+    exempt_roles: rule.exemptRoles ?? [],
+    exempt_channels: rule.exemptChannels ?? [],
+  };
+}
+
 function isDiscordCode(error: unknown, code: number): boolean {
   if (!error || typeof error !== "object") return false;
   const e = error as { code?: unknown; rawError?: { code?: unknown } };
@@ -138,6 +167,31 @@ export abstract class BaseGateway {
     await this.restClient()
       .delete(Routes.channel(channelId), { reason })
       .catch(() => undefined);
+  }
+
+  async putChannelOverwrite(
+    channelId: string,
+    overwriteId: string,
+    input: { type: number; allow: string; deny: string; reason?: string },
+  ): Promise<void> {
+    await this.restClient().put(
+      Routes.channelPermission(channelId, overwriteId),
+      {
+        body: { type: input.type, allow: input.allow, deny: input.deny },
+        reason: input.reason,
+      },
+    );
+  }
+
+  async setChannelOverwrites(
+    channelId: string,
+    overwrites: { id: string; type: number; allow: string; deny: string }[],
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().patch(Routes.channel(channelId), {
+      body: { permission_overwrites: overwrites },
+      reason,
+    });
   }
 
   // ─────────── Mensajes ───────────
@@ -346,6 +400,40 @@ export abstract class BaseGateway {
     await this.restClient()
       .delete(Routes.channelMessageAllReactions(channelId, messageId))
       .catch(() => undefined);
+  }
+
+  // ─────────── AutoMod nativo ───────────
+
+  async createAutoModRule(
+    guildId: string,
+    rule: AutoModRuleInput,
+  ): Promise<void> {
+    await this.restClient().post(Routes.guildAutoModerationRules(guildId), {
+      body: { ...autoModBody(rule), trigger_type: rule.triggerType },
+      reason: rule.reason,
+    });
+  }
+
+  async editAutoModRule(
+    guildId: string,
+    ruleId: string,
+    rule: AutoModRuleInput,
+  ): Promise<void> {
+    await this.restClient().patch(
+      Routes.guildAutoModerationRule(guildId, ruleId),
+      { body: autoModBody(rule), reason: rule.reason },
+    );
+  }
+
+  async deleteAutoModRule(
+    guildId: string,
+    ruleId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().delete(
+      Routes.guildAutoModerationRule(guildId, ruleId),
+      { reason },
+    );
   }
 
   // ─────────── Webhooks ───────────
