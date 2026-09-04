@@ -7,6 +7,7 @@ import {
 import { initRedis } from "#core/cache/redis.js";
 import { RedisStore } from "#core/cache/redisStore.js";
 import { setCacheStore } from "#core/cache/store.js";
+import { installCacheWarmer } from "#core/discord/cacheWarmer.js";
 import { createBotClient } from "#core/discord/createClient.js";
 import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { RestGateway } from "#core/discord/restGateway.js";
@@ -96,6 +97,9 @@ async function main(): Promise<void> {
     : createHealthApp(botGateway);
 
   if (bot) {
+    // Warmer: reescribe la caché read-through de Redis por evento (solo si hay
+    // un `api` que la lea, i.e. Redis activo).
+    if (cfg.REDIS_URL) installCacheWarmer(bot, botGateway);
     if (cfg.DISCORD_TOKEN) {
       await bot.login(cfg.DISCORD_TOKEN);
     } else {

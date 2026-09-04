@@ -26,7 +26,14 @@ export const discordCacheKey = {
   botGuildIds: () => `${P}:botguilds`,
 } as const;
 
-/** TTLs conservadores (ms). Bajan a ~0 de staleness cuando entre el warmer (Fase 5). */
+/**
+ * TTL de las escrituras del **warmer** (rol `gateway`): más largo porque el
+ * warmer las mantiene frescas por evento. Si el `gateway` cae, la staleness
+ * máxima para un guild sin tráfico de `api` es este valor.
+ */
+export const DISCORD_CACHE_WARM_TTL = 5 * 60_000;
+
+/** TTLs conservadores (ms) de las lecturas read-through de `RestGateway`. */
 export const DISCORD_CACHE_TTL = {
   guild: 30_000,
   channels: 30_000,
