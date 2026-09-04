@@ -1,10 +1,10 @@
-# Producción — topología PARTIDA: gateway / api / worker como servicios
+# Producción — topología split: gateway / api / worker como servicios
 # independientes sobre Redis + BullMQ + Postgres. El binario es el mismo
 # (imagen `adobos-backend:latest`); `ADOBO_ROLE` decide qué corre.
 #
-#   docker compose -f docker-compose.split.yml build          # construye 1 vez
-#   docker compose -f docker-compose.split.yml up -d
-#   docker compose -f docker-compose.split.yml up -d --scale backend=3   # N api
+#   docker compose -f docker-compose.prod.yml build          # construye 1 vez
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml up -d --scale backend=3   # N api
 #
 # IMPORTANTE: solo `gateway` declara `build:` — las otras 3 (`migrate`, `worker`,
 # `backend`) referencian la misma imagen `adobos-backend:latest` YA construida.
@@ -14,9 +14,6 @@
 # canceladas a mitad). Si corrés `up --build`, incluí siempre `gateway` en la
 # lista de servicios (o mejor, `build` sin filtro) para que la imagen exista
 # antes de que arranquen los demás.
-#
-# vs `docker-compose.prod.yml` (nodo único `ADOBO_ROLE=all`): esta variante
-# solo hace falta pasados ~2.5k guilds o si querés escalar el panel aparte.
 #
 # `.env` (junto a este fichero) debe traer al menos:
 #   POSTGRES_PASSWORD, SESSION_SECRET, PUBLIC_APP_URL, CORS_ORIGIN,
