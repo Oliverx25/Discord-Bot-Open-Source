@@ -6,8 +6,6 @@ import type {
   ModActiveTimeoutsResponse,
   ModChannelInfoResponse,
   ModChannelSearchResponse,
-  ModFetchedMessageEmbed,
-  ModFetchedMessageReaction,
   ModFetchedMessageResponse,
   ModMemberInfoResponse,
   ModMemberSearchResponse,
@@ -17,15 +15,16 @@ import {
   ChannelType,
   type Client,
   DiscordAPIError,
-  type Embed,
   type Guild,
-  type GuildBasedChannel,
   type GuildMember,
-  type Message,
   type TextChannel,
 } from "discord.js";
 import { and, desc, eq } from "drizzle-orm";
-import type { BotGateway, MemberInfo } from "#core/discord/botGateway.js";
+import {
+  type BotGateway,
+  BotGatewayError,
+  type MemberInfo,
+} from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
 import {
@@ -34,7 +33,6 @@ import {
   modLogs,
   warnings,
 } from "#db/schema.js";
-import { safeMemberAvatarURL, safeUserAvatarURL } from "#lib/discordMember.js";
 import { getEmbedTemplate } from "#modules/messages/templates/service.js";
 import {
   applySanctionTextVars,
@@ -896,186 +894,49 @@ export async function executeModAction(
   }
 }
 
-function serializeMessageEmbed(embed: Embed): ModFetchedMessageEmbed {
-  return {
-    title: embed.title ?? undefined,
-    description: embed.description ?? undefined,
-    url: embed.url ?? undefined,
-    color: embed.hexColor ?? undefined,
-    authorName: embed.author?.name ?? undefined,
-    authorIconUrl: embed.author?.iconURL ?? undefined,
-    thumbnailUrl: embed.thumbnail?.url ?? undefined,
-    imageUrl: embed.image?.url ?? undefined,
-    footerText: embed.footer?.text ?? undefined,
-    footerIconUrl: embed.footer?.iconURL ?? undefined,
-    timestamp: Boolean(embed.timestamp),
-  };
-}
-
-function serializeMessageReactions(
-  message: Message,
-): ModFetchedMessageReaction[] {
-  return [...message.reactions.cache.values()].map((reaction) => {
-    const emoji = reaction.emoji;
-    const id = emoji.id;
-    const name = emoji.name;
-    if (id) {
-      return {
-        emojiKey: `custom:${id}`,
-        name,
-        id,
-        animated: Boolean(emoji.animated),
-        imageUrl:
-          typeof emoji.imageURL === "function"
-            ? emoji.imageURL({ size: 64 })
-            : null,
-        count: reaction.count,
-      };
-    }
-    return {
-      emojiKey: `unicode:${name ?? "?"}`,
-      name,
-      id: null,
-      animated: false,
-      imageUrl: null,
-      count: reaction.count,
-    };
-  });
-}
-
-/**
- * Obtiene un mensaje de un canal de texto del guild (vista previa / validación).
- */
 export async function fetchDiscordMessage(
-  bot: Client,
+  gateway: BotGateway,
   channelIdRaw: string,
   messageIdRaw: string,
   guildId?: string,
 ): Promise<ModFetchedMessageResponse> {
-  const guild = resolveGuild(bot, guildId);
+  const id = resolveGuildId(gateway, guildId);
   const channelId = assertSnowflake(channelIdRaw, "channelId");
   const messageId = assertSnowflake(messageIdRaw, "messageId");
 
-  let channel: GuildBasedChannel | null;
+  let msg: Awaited<ReturnType<BotGateway["fetchMessage"]>>;
   try {
-    channel = await guild.channels.fetch(channelId);
+    msg = await gateway.fetchMessage(id, channelId, messageId);
   } catch (error: unknown) {
-    if (error instanceof DiscordAPIError) {
-      if (error.code === 10003) {
-        throw new ModerationError(
-          "The channel does not exist in this server.",
-          404,
-          "CHANNEL_NOT_FOUND",
-        );
-      }
-      if (error.code === 50001 || error.code === 50013) {
-        throw new ModerationError(
-          "Missing Access: the bot can't see that channel.",
-          403,
-          "MISSING_ACCESS",
-        );
-      }
+    if (error instanceof BotGatewayError) {
+      throw new ModerationError(error.message, error.status, error.code);
     }
     mapDiscordError(error);
   }
 
-  if (!channel) {
-    throw new ModerationError(
-      "The channel does not exist in this server.",
-      404,
-      "CHANNEL_NOT_FOUND",
-    );
-  }
+  const alreadyConfigured = Boolean(
+    await one(
+      getDb()
+        .select({ id: autorolesRegistry.id })
+        .from(autorolesRegistry)
+        .where(
+          and(
+            eq(autorolesRegistry.guildId, id),
+            eq(autorolesRegistry.messageId, msg.id),
+          ),
+        )
+        .limit(1),
+    ),
+  );
 
-  if (
-    channel.type !== ChannelType.GuildText &&
-    channel.type !== ChannelType.GuildAnnouncement
-  ) {
-    throw new ModerationError(
-      "The channel must be a text or announcement channel.",
-      400,
-      "INVALID_CHANNEL_TYPE",
-    );
-  }
-
-  if (!channel.isTextBased() || channel.isDMBased()) {
-    throw new ModerationError(
-      "The channel does not support reading messages.",
-      400,
-      "INVALID_CHANNEL_TYPE",
-    );
-  }
-
-  try {
-    const message = await channel.messages.fetch(messageId);
-    if (message.channelId !== channel.id) {
-      throw new ModerationError(
-        "The message does not exist in the selected channel.",
-        404,
-        "MESSAGE_NOT_IN_CHANNEL",
-      );
-    }
-
-    const alreadyConfigured = Boolean(
-      await one(
-        getDb()
-          .select({ id: autorolesRegistry.id })
-          .from(autorolesRegistry)
-          .where(
-            and(
-              eq(autorolesRegistry.guildId, guild.id),
-              eq(autorolesRegistry.messageId, message.id),
-            ),
-          )
-          .limit(1),
-      ),
-    );
-
-    return {
-      id: message.id,
-      channelId: channel.id,
-      content: message.content ?? "",
-      embeds: message.embeds.map(serializeMessageEmbed),
-      author: {
-        id: message.author.id,
-        username: message.author.username,
-        displayName:
-          message.member?.displayName ||
-          message.author.globalName ||
-          message.author.username,
-        avatarUrl: message.member
-          ? safeMemberAvatarURL(message.member, 64)
-          : safeUserAvatarURL(message.author, 64),
-      },
-      isBotAuthor: Boolean(bot.user && message.author.id === bot.user.id),
-      alreadyConfigured,
-      reactions: serializeMessageReactions(message),
-    };
-  } catch (error: unknown) {
-    if (error instanceof ModerationError) throw error;
-    if (error instanceof DiscordAPIError) {
-      if (error.code === 10008) {
-        throw new ModerationError(
-          "The message does not exist in the selected channel.",
-          404,
-          "MESSAGE_NOT_FOUND",
-        );
-      }
-      if (error.code === 10003) {
-        throw new ModerationError(
-          "The channel does not exist in this server.",
-          404,
-          "CHANNEL_NOT_FOUND",
-        );
-      }
-      if (error.code === 50001 || error.code === 50013) {
-        throw new ModerationError(
-          "Missing Access: the bot can't read that channel's history.",
-          403,
-          "MISSING_ACCESS",
-        );
-      }
-    }
-    mapDiscordError(error);
-  }
+  return {
+    id: msg.id,
+    channelId: msg.channelId,
+    content: msg.content,
+    embeds: msg.embeds,
+    author: msg.author,
+    isBotAuthor: msg.isBotAuthor,
+    alreadyConfigured,
+    reactions: msg.reactions,
+  };
 }

@@ -146,6 +146,44 @@ export interface ChannelDetail extends ChannelSummary {
   nsfw: boolean;
 }
 
+export interface FetchedMessageEmbed {
+  title?: string;
+  description?: string;
+  url?: string;
+  color?: string;
+  authorName?: string;
+  authorIconUrl?: string;
+  thumbnailUrl?: string;
+  imageUrl?: string;
+  footerText?: string;
+  footerIconUrl?: string;
+  timestamp: boolean;
+}
+
+export interface FetchedMessageReaction {
+  emojiKey: string;
+  name: string | null;
+  id: string | null;
+  animated: boolean;
+  imageUrl: string | null;
+  count: number;
+}
+
+export interface FetchedMessage {
+  id: string;
+  channelId: string;
+  content: string;
+  embeds: FetchedMessageEmbed[];
+  author: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string;
+  };
+  isBotAuthor: boolean;
+  reactions: FetchedMessageReaction[];
+}
+
 /**
  * Contenido de un mensaje a enviar/editar. `embeds` / `components` van ya en
  * JSON (p. ej. `EmbedBuilder.toJSON()`), no como builders. Los adjuntos se pasan
@@ -232,6 +270,16 @@ export interface BotGateway {
     guildId: string,
     channelId: string,
   ): Promise<ChannelDetail | null>;
+  /**
+   * Un mensaje de un canal de texto del guild (vista previa del panel).
+   * Lanza `BotGatewayError` con `code` según el motivo (canal/mensaje no
+   * encontrado, sin acceso, tipo inválido).
+   */
+  fetchMessage(
+    guildId: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<FetchedMessage>;
   /**
    * Envía un mensaje a un canal del guild. Lanza `BotGatewayError` si el canal
    * no existe, no es de este guild o no admite mensajes.

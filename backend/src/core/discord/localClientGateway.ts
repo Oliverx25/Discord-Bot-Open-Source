@@ -23,6 +23,7 @@ import {
   type ChannelSummary,
   type CreateRoleInput,
   type EmojiSummary,
+  type FetchedMessage,
   type GuildBanEntry,
   type GuildSummary,
   type MemberInfo,
@@ -293,6 +294,118 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
           ? (channel.rateLimitPerUser ?? 0)
           : 0,
       nsfw: channel && "nsfw" in channel ? Boolean(channel.nsfw) : false,
+    };
+  }
+
+  async fetchMessage(
+    guildId: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<FetchedMessage> {
+    const guild = this.guild(guildId);
+    if (!guild) {
+      throw new BotGatewayError(
+        "The bot is not in that server.",
+        404,
+        "GUILD_NOT_FOUND",
+      );
+    }
+    const channel = await guild.channels
+      .fetch(channelId)
+      .catch((error: unknown) => {
+        if (error instanceof DiscordAPIError) {
+          if (error.code === 10003) {
+            throw new BotGatewayError(
+              "The channel does not exist in this server.",
+              404,
+              "CHANNEL_NOT_FOUND",
+            );
+          }
+          if (error.code === 50001 || error.code === 50013) {
+            throw new BotGatewayError(
+              "Missing Access: the bot can't see that channel.",
+              403,
+              "MISSING_ACCESS",
+            );
+          }
+        }
+        throw error;
+      });
+    if (!channel) {
+      throw new BotGatewayError(
+        "The channel does not exist in this server.",
+        404,
+        "CHANNEL_NOT_FOUND",
+      );
+    }
+    if (!channel.isTextBased() || channel.isDMBased()) {
+      throw new BotGatewayError(
+        "The channel does not support reading messages.",
+        400,
+        "INVALID_CHANNEL_TYPE",
+      );
+    }
+
+    const message = await channel.messages.fetch(messageId).catch(() => {
+      throw new BotGatewayError(
+        "The message does not exist in the selected channel.",
+        404,
+        "MESSAGE_NOT_FOUND",
+      );
+    });
+
+    return {
+      id: message.id,
+      channelId: channel.id,
+      content: message.content ?? "",
+      embeds: message.embeds.map((embed) => ({
+        title: embed.title ?? undefined,
+        description: embed.description ?? undefined,
+        url: embed.url ?? undefined,
+        color: embed.hexColor ?? undefined,
+        authorName: embed.author?.name ?? undefined,
+        authorIconUrl: embed.author?.iconURL ?? undefined,
+        thumbnailUrl: embed.thumbnail?.url ?? undefined,
+        imageUrl: embed.image?.url ?? undefined,
+        footerText: embed.footer?.text ?? undefined,
+        footerIconUrl: embed.footer?.iconURL ?? undefined,
+        timestamp: Boolean(embed.timestamp),
+      })),
+      author: {
+        id: message.author.id,
+        username: message.author.username,
+        displayName:
+          message.member?.displayName ||
+          message.author.globalName ||
+          message.author.username,
+        avatarUrl: message.member
+          ? message.member.displayAvatarURL(safeAvatarOptions(64))
+          : message.author.displayAvatarURL(safeAvatarOptions(64)),
+      },
+      isBotAuthor: Boolean(
+        this.client.user && message.author.id === this.client.user.id,
+      ),
+      reactions: [...message.reactions.cache.values()].map((reaction) => {
+        const emoji = reaction.emoji;
+        if (emoji.id) {
+          return {
+            emojiKey: `custom:${emoji.id}`,
+            name: emoji.name,
+            id: emoji.id,
+            animated: Boolean(emoji.animated),
+            imageUrl: emoji.imageURL({ size: 64 }),
+            count: reaction.count,
+          };
+        }
+        return {
+          emojiKey: `unicode:${emoji.name ?? "?"}`,
+          name: emoji.name,
+          id: null,
+          animated: false,
+          imageUrl: null,
+          count: reaction.count,
+        };
+      }),
     };
   }
 

@@ -74,22 +74,12 @@ export function moderationReadRoutes(gateway: BotGateway): Router {
     }),
   );
 
-  return router;
-}
-
-/**
- * Rutas que todavía necesitan `Client`: `/action` (executeModAction),
- * `/fetch-message` y `/discord-audit`. Se portan en waves siguientes.
- */
-export function moderationRoutes(bot: Client): Router {
-  const router = Router();
-
   router.get(
     "/fetch-message",
     defineRoute({ query: fetchMessageQuerySchema }, async (req, res, valid) => {
       res.json(
         await fetchDiscordMessage(
-          bot,
+          gateway,
           valid.query.channelId,
           valid.query.messageId,
           guildIdOf(req),
@@ -97,6 +87,16 @@ export function moderationRoutes(bot: Client): Router {
       );
     }),
   );
+
+  return router;
+}
+
+/**
+ * Rutas que todavía necesitan `Client`: `/action` (executeModAction) y
+ * `/discord-audit` (mapEntry resuelve nombres del guild). Se portan luego.
+ */
+export function moderationRoutes(bot: Client): Router {
+  const router = Router();
 
   router.post(
     "/action",
