@@ -52,31 +52,6 @@ export function safeUserAvatarURL(
 }
 
 /**
- * Preview síncrono: si hay miembro en caché usa apodo/avatar de servidor.
- */
-export function resolveUserPreview(
-  guild: Guild | null | undefined,
-  user: User,
-  size: 64 | 128 | 256 = 128,
-): Omit<ResolvedMemberData, "userId"> & { userId: string } {
-  const member = guild?.members.cache.get(user.id);
-  if (member) {
-    return {
-      userId: member.id,
-      username: member.user.username,
-      displayName: displayNameFromMember(member),
-      avatarUrl: safeMemberAvatarURL(member, size),
-    };
-  }
-  return {
-    userId: user.id,
-    username: user.username,
-    displayName: displayNameFromUser(user),
-    avatarUrl: safeUserAvatarURL(user, size),
-  };
-}
-
-/**
  * Resuelve nombre/avatar frescos desde la caché de discord.js (sin SQLite).
  * Prioriza GuildMember (avatar/apodo de servidor).
  */

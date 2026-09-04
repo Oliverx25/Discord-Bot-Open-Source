@@ -1,12 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { buildBotInviteUrl } from "@adobos/shared";
-import type { Client } from "discord.js";
 import {
   type CookieOptions,
   type Request,
   type Response,
   Router,
 } from "express";
+import type { BotGateway } from "../discord/botGateway.js";
 import { DiscordHttpError } from "../discord/discordHttpError.js";
 import { logger } from "../log.js";
 import { listManagedGuilds } from "./discordGuilds.js";
@@ -230,7 +230,7 @@ export function authRouter(): Router {
   return router;
 }
 
-export function meRouter(bot: Client): Router {
+export function meRouter(gateway: BotGateway): Router {
   const router = Router();
 
   router.get("/", async (req, res) => {
@@ -244,12 +244,15 @@ export function meRouter(bot: Client): Router {
     try {
       const managed = await listManagedGuilds(session);
       const inviteUrl = buildBotInviteUrl({ clientId: clientId() });
+      const botGuildIds = new Set(
+        await gateway.getBotGuildIds().catch(() => []),
+      );
       const guilds = managed.map((guild) => ({
         id: guild.id,
         name: guild.name,
         iconUrl: guild.iconUrl,
         owner: guild.owner,
-        botPresent: bot.guilds.cache.has(guild.id),
+        botPresent: botGuildIds.has(guild.id),
       }));
       res.json({
         user: toPanelUser(session),

@@ -1,4 +1,3 @@
-import type { EmojiIdentifierResolvable } from "discord.js";
 import { and, eq } from "drizzle-orm";
 import { getDb, one } from "./client.js";
 import { type ReactionRole, reactionRoles } from "./schema.js";
@@ -10,19 +9,6 @@ export function toEmojiKey(emoji: {
 }): string | null {
   if (emoji.id) return `custom:${emoji.id}`;
   if (emoji.name) return `unicode:${emoji.name}`;
-  return null;
-}
-
-/** Convierte emojiKey de vuelta a algo usable en message.react(). */
-export function emojiKeyToResolvable(
-  emojiKey: string,
-): EmojiIdentifierResolvable | null {
-  if (emojiKey.startsWith("custom:")) {
-    return emojiKey.slice("custom:".length);
-  }
-  if (emojiKey.startsWith("unicode:")) {
-    return emojiKey.slice("unicode:".length);
-  }
   return null;
 }
 

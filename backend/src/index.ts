@@ -8,6 +8,8 @@ import { initRedis } from "#core/cache/redis.js";
 import { RedisStore } from "#core/cache/redisStore.js";
 import { setCacheStore } from "#core/cache/store.js";
 import { createBotClient } from "#core/discord/createClient.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
+import { RestGateway } from "#core/discord/restGateway.js";
 import { loadEnv } from "#core/env.js";
 import { createApp, createHealthApp } from "#core/http/createApp.js";
 import {
@@ -64,16 +66,21 @@ async function main(): Promise<void> {
 
   const registry = loadModules(ENABLED_MODULES);
   wireCustomCommandsBuiltinSync();
+  // El rol `api` construye el Client (lo exige `registry.collect` + los
+  // schedulers de módulo), pero nunca hace `login()`: sirve Discord por REST.
   const bot = createBotClient(registry);
   onShutdown("discord", () => bot.destroy());
 
+  const botGateway =
+    cfg.ADOBO_ROLE === "api" ? new RestGateway() : new LocalClientGateway(bot);
+
   const app = roleRunsHttp(cfg.ADOBO_ROLE)
     ? createApp({
-        bot,
+        botGateway,
         registry,
         staticDir: cfg.STATIC_DIR ?? path.resolve(__dirname, "../public"),
       })
-    : createHealthApp(bot);
+    : createHealthApp(botGateway);
 
   if (roleRunsGateway(cfg.ADOBO_ROLE)) {
     if (cfg.DISCORD_TOKEN) {

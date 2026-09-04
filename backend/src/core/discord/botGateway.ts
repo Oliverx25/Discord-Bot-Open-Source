@@ -355,6 +355,8 @@ export interface AutoModRuleInput {
 export interface BotGateway {
   /** El gateway/Client está conectado. El adaptador REST devuelve siempre true. */
   isReady(): boolean;
+  /** IDs de todos los guilds donde está el bot (para el selector del panel). */
+  getBotGuildIds(): Promise<string[]>;
   /** `null` si el bot no está en ese guild (o aún no está cacheado). */
   getGuild(guildId: string): Promise<GuildSummary | null>;
   listChannels(guildId: string): Promise<ChannelSummary[]>;

@@ -256,6 +256,22 @@ export abstract class BaseGateway {
     return this.cachedBotUserId;
   }
 
+  async getBotGuildIds(): Promise<string[]> {
+    const ids: string[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < 100; page++) {
+      const query = new URLSearchParams({ limit: "200" });
+      if (after) query.set("after", after);
+      const batch = (await this.restClient().get(Routes.userGuilds(), {
+        query,
+      })) as { id: string }[];
+      for (const guild of batch) ids.push(guild.id);
+      if (batch.length < 200) break;
+      after = batch[batch.length - 1]!.id;
+    }
+    return ids;
+  }
+
   async listChannelMessages(
     channelId: string,
     opts: { limit?: number; before?: string } = {},

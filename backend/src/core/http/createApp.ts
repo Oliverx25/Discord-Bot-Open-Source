@@ -1,7 +1,6 @@
 import path from "node:path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import type { Client } from "discord.js";
 import express, {
   type Express,
   type Request,
@@ -10,6 +9,7 @@ import express, {
 import helmet from "helmet";
 import { getUploadsRoot } from "#lib/dataPaths.js";
 import { authRouter, meRouter } from "../auth/oauth.js";
+import type { BotGateway } from "../discord/botGateway.js";
 import { entitlementsRoutes, requireFeature } from "../entitlements/index.js";
 import { env } from "../env.js";
 import { logger } from "../log.js";
@@ -26,7 +26,7 @@ import { requestIdMiddleware } from "./requestContext.js";
 import { uploadRoutes } from "./uploads.js";
 
 export interface CreateAppOptions {
-  bot: Client;
+  botGateway: BotGateway;
   registry: ModuleRegistry;
   staticDir: string;
 }
@@ -134,13 +134,13 @@ export function createApp(options: CreateAppOptions): Express {
   app.use(express.json({ limit: "1mb" }));
 
   app.use("/auth", authRateLimiter(), authRouter());
-  app.use("/api/health", healthRouter(options.bot));
+  app.use("/api/health", healthRouter(options.botGateway));
 
   app.use("/api", apiRateLimiter(), (req, res, next) => {
     if (isPublicApiPath(req, registry)) return next();
     return requireAuth()(req, res, next);
   });
-  app.use("/api/me", meRouter(options.bot));
+  app.use("/api/me", meRouter(options.botGateway));
   app.use("/api/entitlements", requireGuildAccess(), entitlementsRoutes());
   app.use(
     "/api/uploads",
@@ -187,12 +187,12 @@ export function createApp(options: CreateAppOptions): Express {
 }
 
 /** App mínima para gateway/worker: solo probes. */
-export function createHealthApp(bot: Client): Express {
+export function createHealthApp(botGateway: BotGateway): Express {
   const app = express();
   app.set("trust proxy", 1);
   app.use(requestIdMiddleware());
   app.use(helmet()); // solo JSON de health: la CSP por defecto de helmet basta
-  app.use("/api/health", healthRouter(bot));
+  app.use("/api/health", healthRouter(botGateway));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

@@ -1,17 +1,17 @@
 import type { HealthResponse, ReadyResponse } from "@adobos/shared";
-import type { Client } from "discord.js";
 import { Router } from "express";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { roleRunsGateway } from "#core/runtime/index.js";
 import { pingDatabase } from "#db/client.js";
 
-export function healthRouter(bot: Client): Router {
+export function healthRouter(gateway: BotGateway): Router {
   const router = Router();
 
   router.get("/", (_req, res) => {
     const body: HealthResponse = {
       status: "ok",
       uptime: process.uptime(),
-      botReady: bot.isReady(),
+      botReady: gateway.isReady(),
       timestamp: new Date().toISOString(),
     };
     res.json(body);
@@ -20,7 +20,7 @@ export function healthRouter(bot: Client): Router {
   router.get("/ready", async (_req, res) => {
     const postgres = await pingDatabase();
     const checkDiscord = roleRunsGateway();
-    const discord = checkDiscord ? bot.isReady() : "skipped";
+    const discord = checkDiscord ? gateway.isReady() : "skipped";
     const ok = postgres && (discord === "skipped" || discord === true);
     const body: ReadyResponse = {
       status: ok ? "ok" : "degraded",

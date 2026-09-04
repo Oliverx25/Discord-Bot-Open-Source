@@ -89,6 +89,10 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
     return this.client.isReady();
   }
 
+  async getBotGuildIds(): Promise<string[]> {
+    return [...this.client.guilds.cache.keys()];
+  }
+
   private guild(guildId: string): Guild | null {
     return this.client.guilds.cache.get(guildId) ?? null;
   }
