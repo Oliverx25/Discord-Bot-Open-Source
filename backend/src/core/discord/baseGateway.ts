@@ -37,6 +37,30 @@ export abstract class BaseGateway {
     return this.rest;
   }
 
+  // ─────────── Reacciones ───────────
+
+  async addReaction(
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<void> {
+    await this.restClient()
+      .put(
+        Routes.channelMessageOwnReaction(
+          channelId,
+          messageId,
+          encodeURIComponent(emoji),
+        ),
+      )
+      .catch(() => undefined);
+  }
+
+  async clearReactions(channelId: string, messageId: string): Promise<void> {
+    await this.restClient()
+      .delete(Routes.channelMessageAllReactions(channelId, messageId))
+      .catch(() => undefined);
+  }
+
   // ─────────── Webhooks ───────────
 
   async listChannelWebhooks(

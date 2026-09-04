@@ -305,6 +305,17 @@ export interface BotGateway {
     messageId: string,
   ): Promise<{ orphaned: boolean }>;
   /**
+   * Reacción del bot a un mensaje. `emoji` = unicode (`👍`) o `nombre:id` para
+   * custom. Best-effort: no lanza si no se pudo (permisos, mensaje borrado).
+   */
+  addReaction(
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<void>;
+  /** Quita todas las reacciones de un mensaje. Best-effort. */
+  clearReactions(channelId: string, messageId: string): Promise<void>;
+  /**
    * DM a un usuario. Best-effort: no lanza si el usuario tiene los DMs cerrados
    * o no se puede resolver. `sent` indica si llegó.
    */
