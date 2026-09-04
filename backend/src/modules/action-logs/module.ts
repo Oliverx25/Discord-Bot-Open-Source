@@ -23,7 +23,9 @@ export const actionLogsModule: AdobosModule = {
     GatewayIntentBits.GuildInvites,
   ],
   register(ctx) {
-    ctx.route("/api/logs", actionLogsRoutes(ctx.client), { feature: "logs" });
+    ctx.route("/api/logs", actionLogsRoutes(ctx.botGateway), {
+      feature: "logs",
+    });
     registerActionLogListeners(ctx);
 
     ctx.once("ready", async () => {

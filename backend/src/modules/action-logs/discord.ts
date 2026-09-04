@@ -23,9 +23,11 @@ import {
   normalizeRetentionDays,
   normalizeRoutingMode,
 } from "@adobos/shared";
-import { ChannelType, type Client, EmbedBuilder, type Guild } from "discord.js";
+import { ChannelType, type Client, EmbedBuilder } from "discord.js";
 import { and, desc, eq, gte, like, lt, lte, or, sql } from "drizzle-orm";
 import { BoundedTtlMap } from "#core/cache/boundedTtlMap.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import {
   EntitlementError,
   getGuildTier,
@@ -378,26 +380,6 @@ function resolveGuildId(guildId?: string): string {
     throw new ActionLogsError("Missing guildId.", 400, "MISSING_GUILD_ID");
   }
   return id;
-}
-
-function resolveGuild(bot: Client, guildId?: string): Guild {
-  if (!bot.isReady()) {
-    throw new ActionLogsError(
-      "The Discord bot is not connected.",
-      503,
-      "BOT_NOT_READY",
-    );
-  }
-  const id = resolveGuildId(guildId);
-  const guild = bot.guilds.cache.get(id);
-  if (!guild) {
-    throw new ActionLogsError(
-      "The bot is not in that server.",
-      404,
-      "GUILD_NOT_FOUND",
-    );
-  }
-  return guild;
 }
 
 function mergeEnabledEvents(
@@ -828,7 +810,7 @@ export async function recordActionLog(
             | null) ?? undefined,
       });
 
-      await sendActionLogWebhook(bot, {
+      await sendActionLogWebhook(new LocalClientGateway(bot), {
         guildId: input.guildId,
         channelId: destinationId,
         embeds: [embed],
@@ -974,11 +956,18 @@ export async function listActionLogsHistory(
 }
 
 export async function sendActionLogsTestEmbed(
-  bot: Client,
+  gateway: BotGateway,
   guildId?: string,
 ): Promise<ActionLogsTestResponse> {
-  const guild = resolveGuild(bot, guildId);
-  const config = await getActionLogsConfig(guild.id);
+  const id = resolveGuildId(guildId);
+  if (!gateway.isReady()) {
+    throw new ActionLogsError(
+      "The Discord bot is not connected.",
+      503,
+      "BOT_NOT_READY",
+    );
+  }
+  const config = await getActionLogsConfig(id);
   const channelId =
     resolveLogChannelId(config, "MESSAGES") ?? config.globalChannelId;
 
@@ -990,12 +979,8 @@ export async function sendActionLogsTestEmbed(
     );
   }
 
-  const channel = await guild.channels.fetch(channelId).catch(() => null);
-  if (
-    !channel ||
-    channel.type !== ChannelType.GuildText ||
-    !channel.isTextBased()
-  ) {
+  const channel = await gateway.getChannel(id, channelId);
+  if (!channel || channel.type !== ChannelType.GuildText) {
     throw new ActionLogsError(
       "The log channel is not a valid text channel.",
       400,
@@ -1025,8 +1010,8 @@ export async function sendActionLogsTestEmbed(
     .setFooter({ text: "Adobos Bot · Action Logs" });
 
   try {
-    const result = await sendActionLogWebhook(bot, {
-      guildId: guild.id,
+    const result = await sendActionLogWebhook(gateway, {
+      guildId: id,
       channelId,
       embeds: [embed],
     });

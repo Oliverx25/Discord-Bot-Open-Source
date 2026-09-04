@@ -1,5 +1,5 @@
-import type { Client } from "discord.js";
 import { Router } from "express";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { defineRoute } from "#core/http/validate.js";
 import {
@@ -13,7 +13,7 @@ import {
   updateActionLogsConfigSchema,
 } from "./schema.js";
 
-export function actionLogsRoutes(bot: Client): Router {
+export function actionLogsRoutes(gateway: BotGateway): Router {
   const router = Router();
 
   /** GET /api/logs/config */
@@ -61,7 +61,7 @@ export function actionLogsRoutes(bot: Client): Router {
   router.post(
     "/test",
     defineRoute({}, async (req, res) => {
-      const result = await sendActionLogsTestEmbed(bot, guildIdOf(req));
+      const result = await sendActionLogsTestEmbed(gateway, guildIdOf(req));
       res.json(result);
     }),
   );

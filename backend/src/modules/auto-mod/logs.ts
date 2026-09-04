@@ -1,4 +1,5 @@
 import { type Client, EmbedBuilder, type User } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { logger } from "#core/log.js";
 import { sendActionLogWebhook } from "#modules/action-logs/webhooks.js";
 import { resolveAutoModLogChannelId } from "./domain/auto-mod.js";
@@ -70,7 +71,7 @@ export async function dispatchAutoModAlert(
     .setTimestamp(new Date());
 
   try {
-    await sendActionLogWebhook(bot, {
+    await sendActionLogWebhook(new LocalClientGateway(bot), {
       guildId: input.guildId,
       channelId,
       embeds: [embed],

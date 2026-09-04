@@ -1,13 +1,7 @@
 import type { ActionLogWebhooksMapping } from "@adobos/shared";
-import {
-  type Client,
-  DiscordAPIError,
-  type EmbedBuilder,
-  type GuildTextBasedChannel,
-  type Webhook,
-} from "discord.js";
+import type { EmbedBuilder } from "discord.js";
 import { eq } from "drizzle-orm";
-import { logger } from "#core/log.js";
+import { type BotGateway, BotGatewayError } from "#core/discord/botGateway.js";
 import { getDb, one } from "#db/client.js";
 import { actionLogsConfig } from "#db/schema.js";
 
@@ -76,83 +70,52 @@ async function rememberWebhook(
 }
 
 function isUnknownWebhook(error: unknown): boolean {
-  return (
-    error instanceof DiscordAPIError &&
-    (error.code === 10015 || error.status === 404)
-  );
+  return error instanceof BotGatewayError && error.code === "UNKNOWN_WEBHOOK";
 }
 
-/**
- * Identidad del bot en el servidor: apodo local + avatar de servidor (o global).
- * `displayAvatarURL()` ya elige avatar de guild si existe.
- */
-async function resolveBotServerIdentity(
-  bot: Client,
+/** Identidad del bot en el servidor: `<apodo> Audit` + avatar de servidor/global. */
+async function resolveAuditIdentity(
+  gateway: BotGateway,
   guildId: string,
-): Promise<{ username: string; avatarURL: string | null }> {
-  try {
-    const guild =
-      bot.guilds.cache.get(guildId) ?? (await bot.guilds.fetch(guildId));
-    const me = await guild.members.fetchMe();
-    const serverName =
-      me.nickname?.trim() ||
-      me.user.displayName ||
-      me.user.username ||
-      "Adobos";
-    return {
-      username: `${serverName} Audit`,
-      avatarURL: me.displayAvatarURL({ extension: "png", size: 128 }),
-    };
-  } catch (err) {
-    logger.warn(
-      { err: err },
-      "Couldn't resolve the bot identity in the server:",
-    );
-    const fallback = bot.user?.username?.trim() || "Adobos";
-    return {
-      username: `${fallback} Audit`,
-      avatarURL:
-        bot.user?.displayAvatarURL({ extension: "png", size: 128 }) ?? null,
-    };
-  }
+): Promise<{ username: string; avatarUrl?: string }> {
+  const profile = await gateway.getBotProfile(guildId).catch(() => null);
+  const serverName = profile?.nickname || profile?.username || "Adobos";
+  return {
+    username: `${serverName} Audit`.slice(0, 80),
+    avatarUrl:
+      profile?.serverAvatarUrl ?? profile?.globalAvatarUrl ?? undefined,
+  };
 }
 
 async function resolveOrCreateWebhook(
-  channel: GuildTextBasedChannel & {
-    fetchWebhooks: () => Promise<Map<string, Webhook>>;
-    createWebhook: (options: {
-      name: string;
-      avatar?: string | Buffer | null;
-      reason?: string;
-    }) => Promise<Webhook>;
-  },
+  gateway: BotGateway,
   guildId: string,
-  botAvatarURL?: string | null,
-): Promise<Webhook> {
+  channelId: string,
+): Promise<{ id: string; token: string }> {
   const mapping = await readWebhooksMapping(guildId);
-  const cachedId = mapping[channel.id];
+  const cachedId = mapping[channelId];
 
-  const hooks = await channel.fetchWebhooks();
+  const hooks = await gateway.listChannelWebhooks(channelId);
   if (cachedId) {
-    const cached = hooks.get(cachedId);
-    if (cached) return cached;
-    await forgetWebhook(guildId, channel.id);
+    const cached = hooks.find((hook) => hook.id === cachedId && hook.token);
+    if (cached?.token) return { id: cached.id, token: cached.token };
+    await forgetWebhook(guildId, channelId);
   }
 
-  const existing = [...hooks.values()].find(
+  const existing = hooks.find(
     (hook) => LEGACY_WEBHOOK_NAMES.has(hook.name) && hook.token,
   );
-  if (existing) {
-    await rememberWebhook(guildId, channel.id, existing.id);
-    return existing;
+  if (existing?.token) {
+    await rememberWebhook(guildId, channelId, existing.id);
+    return { id: existing.id, token: existing.token };
   }
 
-  const created = await channel.createWebhook({
-    name: ACTION_LOG_WEBHOOK_NAME,
-    avatar: botAvatarURL ?? undefined,
-    reason: "Adobos Action Logs — send via webhook",
-  });
-  await rememberWebhook(guildId, channel.id, created.id);
+  const created = await gateway.createChannelWebhook(
+    channelId,
+    ACTION_LOG_WEBHOOK_NAME,
+    "Adobos Action Logs — send via webhook",
+  );
+  await rememberWebhook(guildId, channelId, created.id);
   return created;
 }
 
@@ -164,61 +127,37 @@ export interface SendActionLogWebhookInput {
 
 /**
  * Envía embeds por webhook del canal.
- * Identidad = perfil del bot en el servidor (`nickname` + `displayAvatarURL`).
+ * Identidad = perfil del bot en el servidor (`nickname` + avatar).
  * Si Discord borró el webhook (10015), limpia cache y reintenta una vez.
  */
 export async function sendActionLogWebhook(
-  bot: Client,
+  gateway: BotGateway,
   input: SendActionLogWebhookInput,
 ): Promise<{ messageId: string }> {
-  const channel = await bot.channels.fetch(input.channelId);
-  if (!channel || !channel.isTextBased() || channel.isDMBased()) {
-    throw new Error("Invalid log channel for webhooks.");
-  }
-  if (
-    !("fetchWebhooks" in channel) ||
-    typeof channel.fetchWebhooks !== "function"
-  ) {
-    throw new Error("This channel does not support webhooks.");
-  }
-
-  const textChannel = channel as GuildTextBasedChannel & {
-    fetchWebhooks: () => Promise<Map<string, Webhook>>;
-    createWebhook: (options: {
-      name: string;
-      avatar?: string | Buffer | null;
-      reason?: string;
-    }) => Promise<Webhook>;
-  };
-
-  const identity = await resolveBotServerIdentity(bot, input.guildId);
-
+  const identity = await resolveAuditIdentity(gateway, input.guildId);
   const payload = {
-    embeds: input.embeds,
+    embeds: input.embeds.map((embed) => embed.toJSON()),
     username: identity.username,
-    avatarURL: identity.avatarURL ?? undefined,
+    avatarUrl: identity.avatarUrl,
     allowedMentions: { parse: [] as const },
   };
 
   let webhook = await resolveOrCreateWebhook(
-    textChannel,
+    gateway,
     input.guildId,
-    identity.avatarURL,
+    input.channelId,
   );
 
   try {
-    const message = await webhook.send(payload);
-    return { messageId: message.id };
+    return await gateway.executeWebhook(webhook.id, webhook.token, payload);
   } catch (error) {
     if (!isUnknownWebhook(error)) throw error;
-
     await forgetWebhook(input.guildId, input.channelId);
     webhook = await resolveOrCreateWebhook(
-      textChannel,
+      gateway,
       input.guildId,
-      identity.avatarURL,
+      input.channelId,
     );
-    const message = await webhook.send(payload);
-    return { messageId: message.id };
+    return await gateway.executeWebhook(webhook.id, webhook.token, payload);
   }
 }
