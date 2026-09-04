@@ -22,7 +22,8 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
       {
         err: error,
         method: req.method,
-        url: req.originalUrl,
+        // Nunca `req.originalUrl` — arrastra query string (OAuth code/state, etc.).
+        path: req.path,
         guildId: req.guild?.guildId,
         userId: req.panelSession?.userId,
       },
@@ -33,7 +34,7 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
       {
         err: error,
         method: req.method,
-        url: req.originalUrl,
+        path: req.path,
         code: mapped.body.code,
       },
       "Error HTTP 5xx de dominio",

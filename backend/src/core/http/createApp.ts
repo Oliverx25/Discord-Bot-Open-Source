@@ -113,7 +113,9 @@ export function createApp(options: CreateAppOptions): Express {
       logger.info(
         {
           method: req.method,
-          url: req.originalUrl,
+          // Fase 4 (SEC-01..04, logging seguro): nunca `req.originalUrl` —
+          // arrastra el query string completo (p. ej. `code`/`state` de OAuth).
+          path: req.path,
           status: res.statusCode,
           ms: Date.now() - start,
           guildId: req.guild?.guildId,
