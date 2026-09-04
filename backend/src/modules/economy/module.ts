@@ -39,14 +39,13 @@ export const economyModule: AdobosModule = {
     });
   },
   registerJobs(ctx) {
-    const client = ctx.client;
-    if (!client) return;
-    ctx.once("ready", async () => {
-      if (!isWorkerLeader()) return;
-      await startShopExpirationSweeper(client);
+    if (!isWorkerLeader()) return;
+    const gateway = ctx.botGateway;
+    void (async () => {
+      await startShopExpirationSweeper(gateway);
       const refunded = await refundAbandonedBlackjackStakes();
       logger.info({ refunded }, "economy: temporary grants sweeper active");
-    });
+    })();
   },
   registerGateway(ctx) {
     ctx.button(BUY_BUTTON_PREFIX, (interaction) =>

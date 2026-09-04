@@ -15,6 +15,13 @@
       "when": 1788468280435,
       "tag": "0001_worthless_captain_america",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788511252575,
+      "tag": "0002_silly_songbird",
+      "breakpoints": true
     }
   ]
 }

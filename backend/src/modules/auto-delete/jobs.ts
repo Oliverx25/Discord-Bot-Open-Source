@@ -8,13 +8,8 @@ import {
   messageMatchesAutoDeleteFilter,
   normalizeScheduledTimezone,
 } from "@adobos/shared";
-import {
-  type Channel,
-  ChannelType,
-  type Client,
-  type GuildTextBasedChannel,
-  type Message,
-} from "discord.js";
+import { ChannelType } from "discord.js";
+import type { BotGateway, ChannelSummary } from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import {
   clockPartsInZone,
@@ -37,127 +32,119 @@ const scheduledRules = new Map<string, ScheduledEntry[]>();
 /** `${guildId}:${channelId}` → último minuto (stamp de su zona) ya disparado. */
 const lastFired = new Map<string, string>();
 
-let botClient: Client | null = null;
+let botGateway: BotGateway | null = null;
 
-export function bindAutoDeleteScheduler(client: Client): void {
-  botClient = client;
+export function bindAutoDeleteScheduler(gateway: BotGateway): void {
+  botGateway = gateway;
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function toSnapshot(message: Message) {
-  return {
-    pinned: message.pinned,
-    authorIsBot: Boolean(message.author?.bot),
-    hasAttachments: message.attachments.size > 0,
-    createdTimestamp: message.createdTimestamp,
-  };
-}
+const SWEEPABLE_PARENT = new Set<number>([
+  ChannelType.GuildText,
+  ChannelType.GuildAnnouncement,
+  ChannelType.GuildForum,
+  ChannelType.GuildMedia,
+]);
 
-async function sweepTextChannel(
-  channel: GuildTextBasedChannel,
+/** Barrido paginado de un canal/hilo por REST. */
+async function sweepChannel(
+  gateway: BotGateway,
+  guildId: string,
+  channelId: string,
   filterType: AutoDeleteFilterType,
 ): Promise<void> {
-  if (!("bulkDelete" in channel)) return;
   let before: string | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
-    const fetched = await channel.messages
-      .fetch({ limit: 100, before })
-      .catch(() => null);
-    if (!fetched || fetched.size === 0) break;
+    const fetched = await gateway
+      .listChannelMessages(channelId, { limit: 100, before })
+      .catch(
+        () => [] as Awaited<ReturnType<BotGateway["listChannelMessages"]>>,
+      );
+    if (fetched.length === 0) break;
 
-    const oldest = [...fetched.values()].sort(
-      (a, b) => a.createdTimestamp - b.createdTimestamp,
-    )[0];
-    before = oldest?.id;
+    const sorted = [...fetched].sort(
+      (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+    );
+    before = sorted[0]?.id;
 
     const matching = fetched.filter((msg) =>
-      messageMatchesAutoDeleteFilter(toSnapshot(msg), filterType),
+      messageMatchesAutoDeleteFilter(
+        {
+          pinned: msg.pinned,
+          authorIsBot: msg.authorIsBot,
+          hasAttachments: msg.attachmentCount > 0,
+          createdTimestamp: Date.parse(msg.createdAt),
+        },
+        filterType,
+      ),
     );
     const young = matching.filter(
-      (msg) => !isOlderThanBulkWindow(msg.createdTimestamp),
+      (msg) => !isOlderThanBulkWindow(Date.parse(msg.createdAt)),
     );
     const old = matching.filter((msg) =>
-      isOlderThanBulkWindow(msg.createdTimestamp),
+      isOlderThanBulkWindow(Date.parse(msg.createdAt)),
     );
 
-    if (young.size > 0) {
-      rememberBotMessageDeletes(channel.client, channel.guild.id, young.keys());
-      await channel.bulkDelete(young, true).catch((error: unknown) => {
+    if (young.length > 0) {
+      const ids = young.map((m) => m.id);
+      await rememberBotMessageDeletes(guildId, ids);
+      await gateway.bulkDeleteMessageIds(channelId, ids).catch((error) => {
         logger.warn(
           { err: error },
-          `auto-delete: bulkDelete failed (${channel.id}):`,
+          `auto-delete: bulkDelete failed (${channelId}):`,
         );
       });
       await sleep(PAUSE_MS);
     }
 
-    for (const msg of old.values()) {
-      rememberBotMessageDeletes(channel.client, channel.guild.id, [msg.id]);
-      await msg.delete().catch(() => undefined);
+    for (const msg of old) {
+      await rememberBotMessageDeletes(guildId, [msg.id]);
+      await gateway
+        .deleteMessage(guildId, channelId, msg.id)
+        .catch(() => undefined);
     }
-    if (old.size > 0) await sleep(PAUSE_MS);
+    if (old.length > 0) await sleep(PAUSE_MS);
 
-    if (fetched.size < 100) break;
+    if (fetched.length < 100) break;
   }
 }
 
 async function sweepChannelAndThreads(
-  channel: Channel,
+  gateway: BotGateway,
+  guildId: string,
+  channel: ChannelSummary,
   filterType: AutoDeleteFilterType,
 ): Promise<void> {
   if (
-    (channel.type === ChannelType.GuildText ||
-      channel.type === ChannelType.GuildAnnouncement) &&
-    channel.isTextBased() &&
-    "bulkDelete" in channel
+    channel.type === ChannelType.GuildText ||
+    channel.type === ChannelType.GuildAnnouncement
   ) {
-    await sweepTextChannel(channel, filterType);
+    await sweepChannel(gateway, guildId, channel.id, filterType);
   }
 
-  if (
-    !("threads" in channel) ||
-    !channel.threads ||
-    typeof channel.threads.fetchActive !== "function"
-  ) {
-    return;
-  }
-  const active = await channel.threads.fetchActive().catch(() => null);
-  if (!active) return;
-  for (const thread of active.threads.values()) {
-    if (thread.isTextBased() && "bulkDelete" in thread) {
-      await sweepTextChannel(thread, filterType);
-      await sleep(PAUSE_MS);
-    }
+  const threads = await gateway
+    .listActiveThreads(guildId)
+    .catch(() => [] as Awaited<ReturnType<BotGateway["listActiveThreads"]>>);
+  for (const thread of threads.filter((t) => t.parentId === channel.id)) {
+    await sweepChannel(gateway, guildId, thread.id, filterType);
+    await sleep(PAUSE_MS);
   }
 }
 
 async function runScheduledCleanup(
-  client: Client,
+  gateway: BotGateway,
   guildId: string,
   rule: AutoDeleteRule,
 ): Promise<void> {
   try {
-    const guild =
-      client.guilds.cache.get(guildId) ??
-      (await client.guilds.fetch(guildId).catch(() => null));
-    if (!guild) return;
-
-    const channel = await guild.channels
-      .fetch(rule.channelId)
+    const channel = await gateway
+      .getChannel(guildId, rule.channelId)
       .catch(() => null);
-    if (!channel) return;
-
-    const allowed =
-      channel.type === ChannelType.GuildText ||
-      channel.type === ChannelType.GuildAnnouncement ||
-      channel.type === ChannelType.GuildForum ||
-      channel.type === ChannelType.GuildMedia;
-    if (!allowed) return;
-
-    await sweepChannelAndThreads(channel, rule.filterType);
+    if (!channel || !SWEEPABLE_PARENT.has(channel.type)) return;
+    await sweepChannelAndThreads(gateway, guildId, channel, rule.filterType);
   } catch (error) {
     logger.warn(
       { err: error },
@@ -184,7 +171,7 @@ export function stopAllAutoDeleteJobs(): void {
  */
 export function syncAutoDeleteJobsForConfig(config: AutoDeleteConfig): void {
   stopAutoDeleteJobsForGuild(config.guildId);
-  if (!botClient || !config.enabled) return;
+  if (!botGateway || !config.enabled) return;
 
   const timezone = normalizeScheduledTimezone(config.timezone);
   const entries = config.rules
@@ -201,7 +188,7 @@ export function syncAutoDeleteJobsForConfig(config: AutoDeleteConfig): void {
  * coincide con el minuto actual de su zona. De-dup por minuto/regla.
  */
 export async function processDueScheduledCleanups(
-  client: Client,
+  gateway: BotGateway,
   at: Date = new Date(),
 ): Promise<number> {
   let fired = 0;
@@ -217,7 +204,7 @@ export async function processDueScheduledCleanups(
       if (lastFired.get(key) === clock.stamp) continue;
       lastFired.set(key, clock.stamp);
       fired += 1;
-      void runScheduledCleanup(client, guildId, rule);
+      void runScheduledCleanup(gateway, guildId, rule);
     }
   }
   if (lastFired.size > 5_000) lastFired.clear();

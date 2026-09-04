@@ -1,5 +1,6 @@
 import type { Reminder } from "@adobos/shared";
-import { ChannelType, type Client, type TextBasedChannel } from "discord.js";
+import { ChannelType } from "discord.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import { defineQueue } from "#core/queue/index.js";
 import {
@@ -10,7 +11,7 @@ import {
   getReminder,
 } from "./domain/reminders.js";
 
-let botClient: Client | null = null;
+let botGateway: BotGateway | null = null;
 
 interface DueJob {
   id: number;
@@ -19,56 +20,42 @@ interface DueJob {
 
 const queue = defineQueue<DueJob>("reminders");
 
-export function bindRemindersScheduler(client: Client): void {
-  botClient = client;
+export function bindRemindersScheduler(gateway: BotGateway): void {
+  botGateway = gateway;
   queue.process((job) => processReminder(job.id, job.guildId));
 }
 
-async function tryDm(client: Client, reminder: Reminder): Promise<boolean> {
-  try {
-    const user = await client.users.fetch(reminder.userId);
-    await user.send(`⏰ Reminder: ${reminder.message}`);
-    return true;
-  } catch {
-    return false;
-  }
+async function tryDm(
+  gateway: BotGateway,
+  reminder: Reminder,
+): Promise<boolean> {
+  const { sent } = await gateway.sendDirectMessage(reminder.userId, {
+    content: `⏰ Reminder: ${reminder.message}`,
+  });
+  return sent;
 }
 
-function asSendable(channel: unknown): TextBasedChannel | null {
-  if (
-    !channel ||
-    typeof channel !== "object" ||
-    !("isTextBased" in channel) ||
-    typeof (channel as { isTextBased?: () => boolean }).isTextBased !==
-      "function"
-  ) {
-    return null;
-  }
-  const text = channel as {
-    isTextBased: () => boolean;
-    isDMBased?: () => boolean;
-    type?: number;
-  };
-  if (!text.isTextBased()) return null;
-  if (text.type === ChannelType.GuildVoice) return null;
-  return channel as TextBasedChannel;
-}
+/** Tipos de canal a los que NO se puede enviar el recordatorio. */
+const NON_SENDABLE = new Set<number>([
+  ChannelType.GuildVoice,
+  ChannelType.GuildStageVoice,
+  ChannelType.GuildCategory,
+  ChannelType.GuildForum,
+  ChannelType.GuildMedia,
+]);
 
 async function tryChannel(
-  client: Client,
+  gateway: BotGateway,
   reminder: Reminder,
 ): Promise<boolean> {
   try {
-    const guild =
-      client.guilds.cache.get(reminder.guildId) ??
-      (await client.guilds.fetch(reminder.guildId).catch(() => null));
-    if (!guild) return false;
-    const channel = await guild.channels
-      .fetch(reminder.channelId)
-      .catch(() => null);
-    const text = asSendable(channel);
-    if (!text || !("send" in text)) return false;
-    await text.send({
+    const channel = await gateway
+      .getChannel(reminder.guildId, reminder.channelId)
+      .catch(() => undefined);
+    // Solo descartamos si el canal existe y no admite mensajes; un `null`
+    // (fallo transitorio) deja que `sendMessage` lo intente igual.
+    if (channel && NON_SENDABLE.has(channel.type)) return false;
+    await gateway.sendMessage(reminder.guildId, reminder.channelId, {
       content: `<@${reminder.userId}> reminder: ${reminder.message}`,
       allowedMentions: { users: [reminder.userId] },
     });
@@ -83,16 +70,14 @@ async function tryChannel(
 }
 
 export async function deliverReminder(
-  client: Client,
+  gateway: BotGateway,
   reminder: Reminder,
 ): Promise<boolean> {
-  const dm = await tryDm(client, reminder);
-  if (dm) {
+  if (await tryDm(gateway, reminder)) {
     await deleteReminderById(reminder.id);
     return true;
   }
-  const channel = await tryChannel(client, reminder);
-  if (channel) {
+  if (await tryChannel(gateway, reminder)) {
     await deleteReminderById(reminder.id);
     return true;
   }
@@ -101,25 +86,25 @@ export async function deliverReminder(
 }
 
 /**
- * Consumidor: entrega un recordatorio. `deliverReminder` ya gestiona el estado
- * terminal (borra al entregar, o incrementa `attempts`). Si el bot no está
+ * Consumidor: entrega un recordatorio. `deliverReminder` gestiona el estado
+ * terminal (borra al entregar, o incrementa `attempts`). Si el gateway no está
  * listo lanza → BullMQ reintenta. Si no, libera el lease para el siguiente ciclo.
  */
 export async function processReminder(
   id: number,
   guildId: string,
 ): Promise<void> {
-  const client = botClient;
-  if (!client?.isReady()) throw new Error("reminders: bot no listo");
+  const gateway = botGateway;
+  if (!gateway?.isReady()) throw new Error("reminders: gateway no listo");
   const fresh = await getReminder(id, guildId).catch(() => null);
   if (!fresh) return;
-  await deliverReminder(client, fresh);
+  await deliverReminder(gateway, fresh);
   await clearReminderClaim(id).catch(() => undefined);
 }
 
 /** Productor (líder): reclama recordatorios vencidos y los encola. */
 export async function processDueReminders(): Promise<number> {
-  if (!botClient?.isReady()) return 0;
+  if (!botGateway?.isReady()) return 0;
   const claimed = await claimDueReminders();
   for (const job of claimed) {
     await queue.add(job);

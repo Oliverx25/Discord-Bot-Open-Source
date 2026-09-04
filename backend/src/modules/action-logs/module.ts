@@ -30,18 +30,19 @@ export const actionLogsModule: AdobosModule = {
   registerGateway(ctx) {
     registerActionLogListeners(ctx);
   },
-  registerJobs(ctx) {
-    ctx.once("ready", async () => {
-      if (!isWorkerLeader()) return;
-      try {
-        const n = await purgeAllExpiredActionLogs();
-        if (n > 0) {
-          logger.info(`action-logs: initial purge removed ${n} rows`);
+  registerJobs() {
+    if (isWorkerLeader()) {
+      void (async () => {
+        try {
+          const n = await purgeAllExpiredActionLogs();
+          if (n > 0) {
+            logger.info(`action-logs: initial purge removed ${n} rows`);
+          }
+        } catch (error) {
+          logger.warn({ err: error }, "action-logs: initial purge failed:");
         }
-      } catch (error) {
-        logger.warn({ err: error }, "action-logs: initial purge failed:");
-      }
-    });
+      })();
+    }
 
     const timer = setInterval(async () => {
       if (!isWorkerLeader()) return;

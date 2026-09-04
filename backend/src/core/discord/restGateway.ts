@@ -744,6 +744,7 @@ export class RestGateway extends BaseGateway implements BotGateway {
       id: string;
       channel_id: string;
       content?: string;
+      pinned?: boolean;
       embeds?: Record<string, unknown>[];
       author: APIUser;
       member?: { nick?: string | null };
@@ -793,6 +794,7 @@ export class RestGateway extends BaseGateway implements BotGateway {
         avatarUrl: userAvatarUrl(message.author),
       },
       isBotAuthor: Boolean(meRes && message.author.id === meRes.id),
+      pinned: Boolean(message.pinned),
       reactions: (message.reactions ?? []).map((r) => {
         if (r.emoji.id) {
           return {

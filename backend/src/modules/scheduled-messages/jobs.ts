@@ -3,10 +3,8 @@ import { computeNextRunAt, isScheduledOneShot } from "@adobos/shared";
 import {
   type AttachmentBuilder,
   ChannelType,
-  type Client,
   DiscordAPIError,
   EmbedBuilder,
-  type TextChannel,
 } from "discord.js";
 import { type BotGateway, BotGatewayError } from "#core/discord/botGateway.js";
 import { attachmentsToOutgoingFiles } from "#core/discord/outgoing.js";
@@ -22,7 +20,7 @@ import {
   ScheduledMessagesError,
 } from "./domain/scheduled-messages.js";
 
-let botClient: Client | null = null;
+let botGateway: BotGateway | null = null;
 
 interface DueJob {
   id: number;
@@ -31,8 +29,8 @@ interface DueJob {
 
 const queue = defineQueue<DueJob>("scheduled-messages");
 
-export function bindScheduledMessagesScheduler(client: Client): void {
-  botClient = client;
+export function bindScheduledMessagesScheduler(gateway: BotGateway): void {
+  botGateway = gateway;
   queue.process((job) => processScheduledMessage(job.id, job.guildId));
 }
 
@@ -107,39 +105,36 @@ function buildSendPayload(message: ScheduledMessage): {
 }
 
 async function deliverScheduledMessage(
-  client: Client,
+  gateway: BotGateway,
   message: ScheduledMessage,
 ): Promise<ScheduledSendResult> {
+  // Pre-check de tipo: solo pausa si el canal existe y NO es texto/anuncio.
+  // Un `null` (fallo transitorio) no pausa — deja que `sendMessage` decida.
+  const channel = await gateway
+    .getChannel(message.guildId, message.channelId)
+    .catch(() => undefined);
+  if (channel && !isScheduledDestinationChannel(channel)) {
+    logger.warn(
+      `scheduled-messages: channel is not text/announcement, pausing (id=${message.id} type=${channel.type})`,
+    );
+    return "invalid_channel";
+  }
+
+  const payload = buildSendPayload(message);
   try {
-    const guild =
-      client.guilds.cache.get(message.guildId) ??
-      (await client.guilds.fetch(message.guildId).catch(() => null));
-    if (!guild) return "failed";
-
-    const channel = await guild.channels
-      .fetch(message.channelId)
-      .catch((error: unknown) => {
-        if (isUnknownChannel(error)) return null;
-        throw error;
-      });
-    if (!channel) {
-      logger.warn(
-        `scheduled-messages: missing channel, pausing (id=${message.id} channel=${message.channelId})`,
-      );
-      return "invalid_channel";
-    }
-    if (!isScheduledDestinationChannel(channel) || !channel.isTextBased()) {
-      logger.warn(
-        `scheduled-messages: channel is not text/announcement, pausing (id=${message.id} type=${channel.type})`,
-      );
-      return "invalid_channel";
-    }
-
-    const textChannel = channel as TextChannel;
-    await textChannel.send(buildSendPayload(message));
+    await gateway.sendMessage(message.guildId, message.channelId, {
+      content: payload.content,
+      embeds: payload.embeds.map((embed) => embed.toJSON()),
+      files: attachmentsToOutgoingFiles(payload.files ?? []),
+      allowedMentions: payload.allowedMentions,
+    });
     return "sent";
   } catch (error) {
-    if (isUnknownChannel(error)) {
+    if (
+      isUnknownChannel(error) ||
+      (error instanceof BotGatewayError &&
+        INVALID_CHANNEL_CODES.has(error.code))
+    ) {
       logger.warn(
         { err: error },
         `scheduled-messages: invalid channel, pausing (id=${message.id})`,
@@ -233,8 +228,8 @@ export async function processScheduledMessage(
   id: number,
   guildId: string,
 ): Promise<void> {
-  const client = botClient;
-  if (!client) throw new Error("scheduled-messages: bot no listo");
+  const gateway = botGateway;
+  if (!gateway) throw new Error("scheduled-messages: gateway no listo");
 
   const fresh = await getScheduledMessage(id, guildId);
   if (!fresh.isActive) {
@@ -266,7 +261,7 @@ export async function processScheduledMessage(
     return;
   }
 
-  const result = await deliverScheduledMessage(client, fresh);
+  const result = await deliverScheduledMessage(gateway, fresh);
   if (result === "invalid_channel") {
     await applyScheduledMessageTick(id, guildId, {
       isActive: false,
@@ -294,7 +289,7 @@ export async function processScheduledMessage(
 
 /** Productor (líder): reclama filas vencidas y las encola. */
 export async function processDueScheduledMessages(): Promise<number> {
-  if (!botClient) return 0;
+  if (!botGateway) return 0;
   const claimed = await claimDueScheduledMessages();
   for (const job of claimed) {
     await queue.add(job);

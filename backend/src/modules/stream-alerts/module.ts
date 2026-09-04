@@ -17,13 +17,12 @@ export const streamAlertsModule: AdobosModule = {
     });
   },
   registerJobs(ctx) {
-    if (ctx.client) bindStreamAlertsPoller(ctx.client);
-    ctx.once("ready", () => {
-      if (!isWorkerLeader()) return;
+    bindStreamAlertsPoller(ctx.botGateway);
+    if (isWorkerLeader()) {
       void processStreamAlerts().catch((error: unknown) => {
         logger.warn({ err: error }, "stream-alerts: initial tick failed");
       });
-    });
+    }
     const timer = setInterval(() => {
       if (!isWorkerLeader()) return;
       void processStreamAlerts().catch((error: unknown) => {

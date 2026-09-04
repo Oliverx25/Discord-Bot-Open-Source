@@ -36,29 +36,29 @@ export const autoDeleteModule: AdobosModule = {
     registerAutoDeleteListeners(ctx);
   },
   registerJobs(ctx) {
-    const client = ctx.client;
-    if (!client) return;
-    bindAutoDeleteScheduler(client);
+    const gateway = ctx.botGateway;
+    bindAutoDeleteScheduler(gateway);
     setAutoDeleteConfigChangeListener((config) => {
       if (!isWorkerLeader()) return;
       syncAutoDeleteJobsForConfig(config);
     });
     onShutdown("auto-delete:scheduled-rules", () => stopAllAutoDeleteJobs());
 
-    ctx.once("ready", async () => {
-      if (!isWorkerLeader()) return;
-      await rehydrateAllAutoDeleteJobs();
-      logger.info("auto-delete: crons rehidratados");
-      try {
-        await processDueCountdownDeletes(client);
-      } catch (error) {
-        logger.warn({ err: error }, "auto-delete: initial tick failed:");
-      }
-    });
+    if (isWorkerLeader()) {
+      void (async () => {
+        await rehydrateAllAutoDeleteJobs();
+        logger.info("auto-delete: crons rehidratados");
+        try {
+          await processDueCountdownDeletes(gateway);
+        } catch (error) {
+          logger.warn({ err: error }, "auto-delete: initial tick failed:");
+        }
+      })();
+    }
 
     const countdownTimer = setInterval(() => {
       if (!isWorkerLeader()) return;
-      void processDueCountdownDeletes(client).catch((error: unknown) => {
+      void processDueCountdownDeletes(gateway).catch((error: unknown) => {
         logger.warn({ err: error }, "auto-delete: tick failed:");
       });
     }, COUNTDOWN_TICK_MS);
@@ -66,7 +66,7 @@ export const autoDeleteModule: AdobosModule = {
 
     const scheduledTimer = setInterval(() => {
       if (!isWorkerLeader()) return;
-      void processDueScheduledCleanups(client).catch((error: unknown) => {
+      void processDueScheduledCleanups(gateway).catch((error: unknown) => {
         logger.warn({ err: error }, "auto-delete: scheduled tick failed:");
       });
     }, SCHEDULED_TICK_MS);

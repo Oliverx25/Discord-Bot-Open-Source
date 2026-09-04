@@ -23,18 +23,15 @@ export function roleRunsHttp(role: AdobosRole = current): boolean {
   return role === "all" || role === "api";
 }
 
+/** Este rol mantiene un `Client` de discord.js conectado (login + listeners). */
 export function roleRunsGateway(role: AdobosRole = current): boolean {
-  return role === "all" || role === "gateway" || role === "worker";
+  return role === "all" || role === "gateway";
 }
 
 export function roleRunsWorker(role: AdobosRole = current): boolean {
   return role === "all" || role === "worker";
 }
 
-/**
- * Worker y gateway no deben desplegarse a la vez con el mismo token:
- * el worker también hace login para enviar mensajes (REST dedicado llega después).
- */
 export function setWorkerLeader(value: boolean): void {
   workerLeader = value;
 }

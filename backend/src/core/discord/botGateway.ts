@@ -185,6 +185,15 @@ export interface ChannelMessageBrief {
   createdAt: string;
   attachmentCount: number;
   hasComponents: boolean;
+  pinned: boolean;
+}
+
+/** Hilo activo de un guild (auto-delete SCHEDULED). */
+export interface ActiveThread {
+  id: string;
+  parentId: string | null;
+  /** `ChannelType` numérico. */
+  type: number;
 }
 
 /** Un cambio dentro de una entrada de audit log (valores crudos de Discord). */
@@ -268,6 +277,7 @@ export interface FetchedMessage {
     avatarUrl: string;
   };
   isBotAuthor: boolean;
+  pinned: boolean;
   reactions: FetchedMessageReaction[];
 }
 
@@ -492,6 +502,20 @@ export interface BotGateway {
   ): Promise<void>;
   unbanMember(guildId: string, userId: string, reason?: string): Promise<void>;
   kickMember(guildId: string, userId: string, reason?: string): Promise<void>;
+  /** Añade un rol a un miembro. No-op si ya lo tiene. */
+  addMemberRole(
+    guildId: string,
+    userId: string,
+    roleId: string,
+    reason?: string,
+  ): Promise<void>;
+  /** Quita un rol de un miembro. No-op si no lo tiene. */
+  removeMemberRole(
+    guildId: string,
+    userId: string,
+    roleId: string,
+    reason?: string,
+  ): Promise<void>;
   /** `until` = ISO8601, o `null` para quitar el timeout. */
   timeoutMember(
     guildId: string,
@@ -575,6 +599,14 @@ export interface BotGateway {
     channelId: string,
     opts?: { limit?: number; before?: string },
   ): Promise<ChannelMessageBrief[]>;
+  /** Borra un lote de mensajes por id (<14 días, 1–100). Best-effort. */
+  bulkDeleteMessageIds(
+    channelId: string,
+    messageIds: string[],
+    reason?: string,
+  ): Promise<void>;
+  /** Hilos activos del guild (para barridos de auto-delete). */
+  listActiveThreads(guildId: string): Promise<ActiveThread[]>;
 
   // — AutoMod nativo (auto-mod) —
   /** ¿El bot tiene ese permiso a nivel de guild? `permission` = bit de `PermissionFlagsBits`. */

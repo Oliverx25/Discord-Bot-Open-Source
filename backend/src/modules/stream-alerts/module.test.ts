@@ -38,7 +38,7 @@ describe("stream-alerts module", () => {
     });
     expect(commands).toEqual([]);
     expect(routes).toEqual(["/api/stream-alerts"]);
-    expect(once).toContain("ready");
+    expect(once).toEqual([]);
   });
 });
 

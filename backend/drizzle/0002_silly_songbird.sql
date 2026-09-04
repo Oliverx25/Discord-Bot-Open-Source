@@ -1,0 +1,1 @@
+ALTER TABLE "auto_delete_pending" ADD COLUMN "claimed_until" timestamp with time zone;

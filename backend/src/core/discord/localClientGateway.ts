@@ -352,6 +352,7 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
       isBotAuthor: Boolean(
         this.client.user && message.author.id === this.client.user.id,
       ),
+      pinned: message.pinned,
       reactions: [...message.reactions.cache.values()].map((reaction) => {
         const emoji = reaction.emoji;
         if (emoji.id) {
@@ -522,6 +523,20 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
     return this.client.user?.id ?? "";
   }
 
+  async listActiveThreads(
+    guildId: string,
+  ): Promise<{ id: string; parentId: string | null; type: number }[]> {
+    const guild = this.guild(guildId);
+    if (!guild) return [];
+    const active = await guild.channels.fetchActiveThreads().catch(() => null);
+    if (!active) return [];
+    return [...active.threads.values()].map((t) => ({
+      id: t.id,
+      parentId: t.parentId ?? null,
+      type: t.type,
+    }));
+  }
+
   async listChannelMessages(
     channelId: string,
     opts: { limit?: number; before?: string } = {},
@@ -549,6 +564,7 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
       createdAt: m.createdAt.toISOString(),
       attachmentCount: m.attachments.size,
       hasComponents: m.components.length > 0,
+      pinned: m.pinned,
     }));
   }
 

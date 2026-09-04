@@ -468,6 +468,15 @@ export const autoDeletePending = pgTable(
       withTimezone: true,
       mode: "date",
     }).notNull(),
+    /**
+     * Lease: un tick del worker reclama la fila poniendo `claimed_until` en el
+     * futuro antes de borrar en Discord. Otro worker la salta hasta que expire.
+     * `null` = libre.
+     */
+    claimedUntil: timestamp({
+      withTimezone: true,
+      mode: "date",
+    }),
   },
   (table) => [
     primaryKey({ columns: [table.guildId, table.messageId] }),

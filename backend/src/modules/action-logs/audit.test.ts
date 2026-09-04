@@ -76,22 +76,10 @@ describe("guildAuditLogEntryCreate cache", () => {
 });
 
 describe("bot delete hint", () => {
-  it("returns the bot as executor and is consumed", () => {
-    clearAuditCache();
-    const client = {
-      user: {
-        id: "bot-1",
-        tag: "Adobos#0",
-        username: "Adobos",
-        bot: true,
-        displayAvatarURL: () => "https://cdn.example/bot.png",
-      },
-    } as unknown as import("discord.js").Client;
-    rememberBotMessageDeletes(client, "g1", ["m1"]);
-    const hint = takeBotMessageDelete("g1", "m1");
-    expect(hint?.executor.id).toBe("bot-1");
+  it("marca la fuente auto-delete y se consume una sola vez", async () => {
+    await rememberBotMessageDeletes("g1", ["m1"]);
+    const hint = await takeBotMessageDelete("g1", "m1");
     expect(hint?.source).toBe("auto-delete");
-    expect(takeBotMessageDelete("g1", "m1")).toBeUndefined();
-    clearAuditCache();
+    expect(await takeBotMessageDelete("g1", "m1")).toBeUndefined();
   });
 });

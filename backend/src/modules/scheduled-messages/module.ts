@@ -26,18 +26,24 @@ export const scheduledMessagesModule: AdobosModule = {
     );
   },
   registerJobs(ctx) {
-    if (ctx.client) bindScheduledMessagesScheduler(ctx.client);
+    bindScheduledMessagesScheduler(ctx.botGateway);
 
-    ctx.once("ready", async () => {
-      if (!isWorkerLeader()) return;
-      await rehydrateScheduledMessages();
-      logger.info("scheduled-messages: next_run_at rehidratado");
-      try {
-        await processDueScheduledMessages();
-      } catch (error) {
-        logger.warn({ err: error }, "scheduled-messages: initial tick failed");
-      }
-    });
+    // Init de arranque: sin `once("ready")` — el worker no tiene Client. El
+    // scheduler y el envío van por `BotGateway` (REST/token).
+    if (isWorkerLeader()) {
+      void (async () => {
+        await rehydrateScheduledMessages();
+        logger.info("scheduled-messages: next_run_at rehidratado");
+        try {
+          await processDueScheduledMessages();
+        } catch (error) {
+          logger.warn(
+            { err: error },
+            "scheduled-messages: initial tick failed",
+          );
+        }
+      })();
+    }
 
     const timer = setInterval(() => {
       if (!isWorkerLeader()) return;

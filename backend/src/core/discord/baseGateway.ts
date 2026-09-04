@@ -317,6 +317,7 @@ export abstract class BaseGateway {
       };
       attachments?: unknown[];
       components?: unknown[];
+      pinned?: boolean;
     }[];
     return msgs.map((m) => ({
       id: m.id,
@@ -330,6 +331,43 @@ export abstract class BaseGateway {
       createdAt: m.timestamp,
       attachmentCount: m.attachments?.length ?? 0,
       hasComponents: (m.components?.length ?? 0) > 0,
+      pinned: Boolean(m.pinned),
+    }));
+  }
+
+  async bulkDeleteMessageIds(
+    channelId: string,
+    messageIds: string[],
+    reason?: string,
+  ): Promise<void> {
+    const ids = [...new Set(messageIds)].slice(0, 100);
+    if (ids.length === 0) return;
+    if (ids.length === 1) {
+      await this.restClient()
+        .delete(Routes.channelMessage(channelId, ids[0]!), { reason })
+        .catch(() => undefined);
+      return;
+    }
+    await this.restClient()
+      .post(Routes.channelBulkDelete(channelId), {
+        body: { messages: ids },
+        reason,
+      })
+      .catch(() => undefined);
+  }
+
+  async listActiveThreads(
+    guildId: string,
+  ): Promise<{ id: string; parentId: string | null; type: number }[]> {
+    const res = (await this.restClient().get(
+      Routes.guildActiveThreads(guildId),
+    )) as {
+      threads: { id: string; parent_id?: string | null; type: number }[];
+    };
+    return (res.threads ?? []).map((t) => ({
+      id: t.id,
+      parentId: t.parent_id ?? null,
+      type: t.type,
     }));
   }
 
@@ -418,6 +456,30 @@ export abstract class BaseGateway {
     await this.restClient().delete(Routes.guildMember(guildId, userId), {
       reason,
     });
+  }
+
+  async addMemberRole(
+    guildId: string,
+    userId: string,
+    roleId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().put(
+      Routes.guildMemberRole(guildId, userId, roleId),
+      { reason },
+    );
+  }
+
+  async removeMemberRole(
+    guildId: string,
+    userId: string,
+    roleId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().delete(
+      Routes.guildMemberRole(guildId, userId, roleId),
+      { reason },
+    );
   }
 
   async timeoutMember(

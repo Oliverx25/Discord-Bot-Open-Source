@@ -1,5 +1,5 @@
-import type { Client } from "discord.js";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { registerJob } from "#core/lifecycle.js";
 import { logger } from "#core/log.js";
 import { getDb } from "#db/client.js";
@@ -12,13 +12,16 @@ import {
 const SWEEP_MS = 60_000;
 
 /**
- * Expira roles/canales/boosts temporales de la tienda.
+ * Expira roles/canales/boosts temporales de la tienda (vía `BotGateway`, así
+ * corre en el `worker` sin `Client`).
  * - Roles creados: se borran de Discord.
  * - Roles asignados existentes: solo se quitan del miembro.
  * - Canales: se eliminan.
  * - Boosts: se borran de la BD.
  */
-export async function sweepExpiredShopGrants(bot: Client): Promise<void> {
+export async function sweepExpiredShopGrants(
+  gateway: BotGateway,
+): Promise<void> {
   const now = new Date();
 
   const expiredRoles = await getDb()
@@ -33,24 +36,19 @@ export async function sweepExpiredShopGrants(bot: Client): Promise<void> {
 
   for (const row of expiredRoles) {
     try {
-      const guild =
-        bot.guilds.cache.get(row.guildId) ??
-        (await bot.guilds.fetch(row.guildId).catch(() => null));
-      if (guild) {
-        if (row.deleteRoleOnExpire) {
-          const role = await guild.roles.fetch(row.roleId).catch(() => null);
-          if (role) await role.delete("Shop: temporary role expired");
-        } else {
-          const member = await guild.members
-            .fetch(row.userId)
-            .catch(() => null);
-          if (member?.roles.cache.has(row.roleId)) {
-            await member.roles.remove(
-              row.roleId,
-              "Shop: temporary role expired",
-            );
-          }
-        }
+      if (row.deleteRoleOnExpire) {
+        await gateway
+          .deleteRole(row.guildId, row.roleId, "Shop: temporary role expired")
+          .catch(() => undefined);
+      } else {
+        await gateway
+          .removeMemberRole(
+            row.guildId,
+            row.userId,
+            row.roleId,
+            "Shop: temporary role expired",
+          )
+          .catch(() => undefined);
       }
     } catch (error) {
       logger.warn({ detail: [row.id, error] }, "shop expire role:");
@@ -72,17 +70,13 @@ export async function sweepExpiredShopGrants(bot: Client): Promise<void> {
 
   for (const row of expiredChannels) {
     try {
-      const guild =
-        bot.guilds.cache.get(row.guildId) ??
-        (await bot.guilds.fetch(row.guildId).catch(() => null));
-      if (guild) {
-        const channel = await guild.channels
-          .fetch(row.channelId)
-          .catch(() => null);
-        if (channel) {
-          await channel.delete("Shop: temporary channel expired");
-        }
-      }
+      await gateway
+        .deleteChannel(
+          row.guildId,
+          row.channelId,
+          "Shop: temporary channel expired",
+        )
+        .catch(() => undefined);
     } catch (error) {
       logger.warn({ detail: [row.id, error] }, "shop expire channel:");
     }
@@ -110,11 +104,13 @@ export async function sweepExpiredShopGrants(bot: Client): Promise<void> {
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
-export async function startShopExpirationSweeper(bot: Client): Promise<void> {
+export async function startShopExpirationSweeper(
+  gateway: BotGateway,
+): Promise<void> {
   if (sweepTimer) return;
-  void sweepExpiredShopGrants(bot);
+  void sweepExpiredShopGrants(gateway);
   sweepTimer = setInterval(() => {
-    void sweepExpiredShopGrants(bot);
+    void sweepExpiredShopGrants(gateway);
   }, SWEEP_MS);
   registerJob("economy:shop-expiration", sweepTimer);
 }

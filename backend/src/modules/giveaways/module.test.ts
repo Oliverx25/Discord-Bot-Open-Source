@@ -39,6 +39,6 @@ describe("giveaways module", () => {
     expect(buttons).toContain("giveaway_join_");
     expect(events).toContain("messageDelete");
     expect(events).toContain("channelDelete");
-    expect(once).toContain("ready");
+    expect(once).toEqual([]);
   });
 });

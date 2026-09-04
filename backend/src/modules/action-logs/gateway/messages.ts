@@ -37,9 +37,18 @@ export async function onMessageDelete(
     ? [...message.attachments.values()].map((a) => a.url)
     : [];
 
-  const hinted = takeBotMessageDelete(message.guild.id, message.id);
+  const hinted = await takeBotMessageDelete(message.guild.id, message.id);
+  const botUser = message.client.user;
   const executor = hinted
-    ? { ...hinted.executor, roleIds: [] }
+    ? botUser
+      ? {
+          id: botUser.id,
+          tag: userTag(botUser),
+          bot: true,
+          roleIds: [] as string[],
+          avatarURL: botUser.displayAvatarURL({ size: 128 }),
+        }
+      : null
     : await resolveAuditExecutor(
         message.guild,
         AuditLogEvent.MessageDelete,
@@ -231,9 +240,10 @@ export async function onMessageDeleteBulk(
     return;
   }
 
-  const hintedIds = [...messages.keys()].filter((id) =>
-    takeBotMessageDelete(guild.id, id),
-  );
+  const hintedIds: string[] = [];
+  for (const id of messages.keys()) {
+    if (await takeBotMessageDelete(guild.id, id)) hintedIds.push(id);
+  }
   const hinted = hintedIds.length > 0;
   const botUser = first.client.user;
   const executor = hinted

@@ -92,10 +92,13 @@ export function loadEnv(): AppEnv {
       `ADOBO_ROLE=${raw.ADOBO_ROLE} requires REDIS_URL (shared cache / rate-limit / queue). Only ADOBO_ROLE=all runs without Redis.`,
     );
   }
-  // `api` sirve Discord vía REST por token (RestGateway) — no tiene gateway vivo.
-  if (raw.ADOBO_ROLE === "api" && !raw.DISCORD_TOKEN?.trim()) {
+  // `api` y `worker` hablan con Discord por REST (RestGateway) — sin gateway vivo.
+  if (
+    (raw.ADOBO_ROLE === "api" || raw.ADOBO_ROLE === "worker") &&
+    !raw.DISCORD_TOKEN?.trim()
+  ) {
     throw new Error(
-      "ADOBO_ROLE=api requires DISCORD_TOKEN (the panel talks to Discord via REST, not a gateway).",
+      `ADOBO_ROLE=${raw.ADOBO_ROLE} requires DISCORD_TOKEN (talks to Discord via REST, not a gateway).`,
     );
   }
   if (raw.NODE_ENV === "production" && !raw.CORS_ORIGIN?.trim()) {

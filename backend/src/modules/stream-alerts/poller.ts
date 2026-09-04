@@ -7,12 +7,8 @@ import {
   shouldPollStreamAlert,
   streamAlertMentionPrefix,
 } from "@adobos/shared";
-import {
-  ChannelType,
-  type Client,
-  EmbedBuilder,
-  type TextBasedChannel,
-} from "discord.js";
+import { ChannelType, EmbedBuilder } from "discord.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import {
   applyStreamLiveState,
@@ -26,47 +22,32 @@ import {
   offlineSnapshot,
 } from "./providers.js";
 
-let botClient: Client | null = null;
+let botGateway: BotGateway | null = null;
 const inFlight = new Set<number>();
 
-export function bindStreamAlertsPoller(client: Client): void {
-  botClient = client;
+export function bindStreamAlertsPoller(gateway: BotGateway): void {
+  botGateway = gateway;
 }
 
-function asSendable(channel: unknown): TextBasedChannel | null {
-  if (
-    !channel ||
-    typeof channel !== "object" ||
-    !("isTextBased" in channel) ||
-    typeof (channel as { isTextBased?: () => boolean }).isTextBased !==
-      "function"
-  ) {
-    return null;
-  }
-  const text = channel as {
-    isTextBased: () => boolean;
-    type?: number;
-  };
-  if (!text.isTextBased()) return null;
-  if (text.type === ChannelType.GuildVoice) return null;
-  return channel as TextBasedChannel;
-}
+/** Tipos de canal a los que NO se puede anunciar. */
+const NON_SENDABLE = new Set<number>([
+  ChannelType.GuildVoice,
+  ChannelType.GuildStageVoice,
+  ChannelType.GuildCategory,
+  ChannelType.GuildForum,
+  ChannelType.GuildMedia,
+]);
 
 async function announce(
-  client: Client,
+  gateway: BotGateway,
   alert: StreamAlert,
   snapshot: StreamLiveSnapshot,
 ): Promise<boolean> {
   try {
-    const guild =
-      client.guilds.cache.get(alert.guildId) ??
-      (await client.guilds.fetch(alert.guildId).catch(() => null));
-    if (!guild) return false;
-    const channel = await guild.channels
-      .fetch(alert.discordChannelId)
-      .catch(() => null);
-    const text = asSendable(channel);
-    if (!text || !("send" in text)) return false;
+    const channel = await gateway
+      .getChannel(alert.guildId, alert.discordChannelId)
+      .catch(() => undefined);
+    if (channel && NON_SENDABLE.has(channel.type)) return false;
 
     const name = snapshot.displayName || alert.displayName || alert.handle;
     const title = snapshot.title || "En directo";
@@ -89,9 +70,9 @@ async function announce(
     if (game) embed.setDescription(`Jugando a ${game}`.slice(0, 4096));
     if (snapshot.thumbnailUrl) embed.setThumbnail(snapshot.thumbnailUrl);
 
-    await text.send({
+    await gateway.sendMessage(alert.guildId, alert.discordChannelId, {
       content: `${mention}${body}`.trim() || undefined,
-      embeds: [embed],
+      embeds: [embed.toJSON()],
       allowedMentions: alert.mentionRoleId
         ? { roles: [alert.mentionRoleId], parse: [] }
         : { parse: [] },
@@ -107,7 +88,7 @@ async function announce(
 }
 
 async function applySnapshot(
-  client: Client,
+  gateway: BotGateway,
   alert: StreamAlert,
   snapshot: StreamLiveSnapshot,
 ): Promise<boolean> {
@@ -118,7 +99,7 @@ async function applySnapshot(
   });
   let announced = false;
   if (announceNow) {
-    announced = await announce(client, alert, snapshot);
+    announced = await announce(gateway, alert, snapshot);
   }
   if (announceNow && !announced) {
     await touchStreamAlertChecked(alert.id);
@@ -129,8 +110,8 @@ async function applySnapshot(
 }
 
 export async function processStreamAlerts(nowMs = Date.now()): Promise<number> {
-  const client = botClient;
-  if (!client?.isReady()) return 0;
+  const gateway = botGateway;
+  if (!gateway?.isReady()) return 0;
 
   const alerts = await listEnabledStreamAlerts();
   const due = alerts.filter((alert) => {
@@ -169,7 +150,7 @@ export async function processStreamAlerts(nowMs = Date.now()): Promise<number> {
         await touchStreamAlertChecked(alert.id);
         continue;
       }
-      if (await applySnapshot(client, alert, snapshot)) announced += 1;
+      if (await applySnapshot(gateway, alert, snapshot)) announced += 1;
     } catch (error: unknown) {
       logger.warn({ err: error, id: alert.id }, "stream-alerts: tick failed");
       await touchStreamAlertChecked(alert.id).catch(() => undefined);

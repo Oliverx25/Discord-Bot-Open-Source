@@ -32,13 +32,12 @@ export const giveawaysModule: AdobosModule = {
     });
   },
   registerJobs(ctx) {
-    if (ctx.client) bindGiveawaysScheduler(ctx.client);
-    ctx.once("ready", () => {
-      if (!isWorkerLeader()) return;
+    bindGiveawaysScheduler(ctx.botGateway);
+    if (isWorkerLeader()) {
       void processDueGiveaways().catch((error: unknown) => {
         logger.warn({ err: error }, "giveaways: initial tick failed");
       });
-    });
+    }
     const timer = setInterval(() => {
       if (!isWorkerLeader()) return;
       void processDueGiveaways().catch((error: unknown) => {

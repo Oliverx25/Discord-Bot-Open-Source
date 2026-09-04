@@ -1,10 +1,6 @@
-import type {
-  AuditLogEvent,
-  Client,
-  Guild,
-  GuildAuditLogsEntry,
-} from "discord.js";
+import type { AuditLogEvent, Guild, GuildAuditLogsEntry } from "discord.js";
 import { BoundedTtlMap } from "#core/cache/boundedTtlMap.js";
+import { cache } from "#core/cache/store.js";
 import { userTag } from "./helpers.js";
 
 /** Entradas de audit más viejas que esto no se usan como ejecutor. */
@@ -27,51 +23,50 @@ export interface CachedAuditEntry {
 }
 
 export interface BotDeleteHint {
-  executor: Omit<AuditExecutor, "roleIds">;
   source: "auto-delete";
 }
 
 const recentAudit = new BoundedTtlMap<string, CachedAuditEntry>(8_000, 10_000);
-const botMessageDeletes = new BoundedTtlMap<string, BotDeleteHint>(
-  8_000,
-  20_000,
-);
+
+/** Vía `CacheStore` (Redis en multi-proceso): el worker marca, el gateway lee. */
+const BOT_DELETE_TTL_MS = 20_000;
 
 function botDeleteKey(guildId: string, messageId: string): string {
-  return `${guildId}:msg:${messageId}`;
+  return `abd:${guildId}:msg:${messageId}`;
 }
 
-/** El bot va a borrar estos mensajes: action-logs no espera al Audit Log. */
-export function rememberBotMessageDeletes(
-  client: Client,
+/**
+ * El bot va a borrar estos mensajes: action-logs los atribuye a Auto-Delete sin
+ * esperar al Audit Log. En la topología partida, el `worker` marca y el
+ * `gateway` (que atiende `messageDelete`) lee — por eso va en `CacheStore`.
+ */
+export async function rememberBotMessageDeletes(
   guildId: string,
   messageIds: Iterable<string>,
   source: BotDeleteHint["source"] = "auto-delete",
-): void {
-  const user = client.user;
-  if (!user) return;
-  const executor = {
-    id: user.id,
-    tag: userTag(user),
-    bot: true,
-    avatarURL: user.displayAvatarURL({ size: 128 }),
-  };
-  for (const messageId of messageIds) {
-    botMessageDeletes.set(botDeleteKey(guildId, messageId), {
-      executor,
-      source,
-    });
-  }
+): Promise<void> {
+  await Promise.all(
+    [...messageIds].map((messageId) =>
+      cache()
+        .set(botDeleteKey(guildId, messageId), { source }, BOT_DELETE_TTL_MS)
+        .catch(() => undefined),
+    ),
+  );
 }
 
-export function takeBotMessageDelete(
+export async function takeBotMessageDelete(
   guildId: string,
   messageId: string,
-): BotDeleteHint | undefined {
+): Promise<BotDeleteHint | undefined> {
   const key = botDeleteKey(guildId, messageId);
-  const hint = botMessageDeletes.get(key);
-  if (hint) botMessageDeletes.delete(key);
-  return hint;
+  const hint = await cache()
+    .get<BotDeleteHint>(key)
+    .catch(() => undefined);
+  if (hint)
+    void cache()
+      .del(key)
+      .catch(() => undefined);
+  return hint ?? undefined;
 }
 
 function auditCacheKey(
@@ -109,7 +104,6 @@ export function getCachedAuditEntry(
 
 export function clearAuditCache(): void {
   recentAudit.clear();
-  botMessageDeletes.clear();
 }
 
 export interface PickAuditEntry {

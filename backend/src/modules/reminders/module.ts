@@ -32,13 +32,12 @@ export const remindersModule: AdobosModule = {
     );
   },
   registerJobs(ctx) {
-    if (ctx.client) bindRemindersScheduler(ctx.client);
-    ctx.once("ready", () => {
-      if (!isWorkerLeader()) return;
+    bindRemindersScheduler(ctx.botGateway);
+    if (isWorkerLeader()) {
       void processDueReminders().catch((error: unknown) => {
         logger.warn({ err: error }, "reminders: initial tick failed");
       });
-    });
+    }
     const timer = setInterval(() => {
       if (!isWorkerLeader()) return;
       void processDueReminders().catch((error: unknown) => {
