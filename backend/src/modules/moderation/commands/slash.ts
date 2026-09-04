@@ -56,7 +56,7 @@ async function runModAction(
   );
   try {
     const result = await executeModAction(
-      interaction.client,
+      new LocalClientGateway(interaction.client),
       input,
       interaction.user.id,
     );

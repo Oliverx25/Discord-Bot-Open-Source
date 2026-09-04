@@ -11,20 +11,15 @@ import type {
   ModMemberSearchResponse,
 } from "@adobos/shared";
 import { MOD_ACTION_TYPES } from "@adobos/shared";
-import {
-  ChannelType,
-  type Client,
-  DiscordAPIError,
-  type Guild,
-  type GuildMember,
-  type TextChannel,
-} from "discord.js";
+import { ChannelType, DiscordAPIError, PermissionFlagsBits } from "discord.js";
 import { and, desc, eq } from "drizzle-orm";
 import {
   type BotGateway,
   BotGatewayError,
+  type MemberActionability,
   type MemberInfo,
 } from "#core/discord/botGateway.js";
+import { attachmentsToOutgoingFiles } from "#core/discord/outgoing.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
 import {
@@ -37,14 +32,11 @@ import { getEmbedTemplate } from "#modules/messages/templates/service.js";
 import {
   applySanctionTextVars,
   buildEmbedFromPayload,
-  createOneUseInvite,
+  createReentryInvite,
   interpolateEmbedPayload,
   type SanctionDmContext,
 } from "./dm.js";
-import {
-  clampTimeoutSeconds,
-  everyoneSendMessagesOverwrite,
-} from "./duration.js";
+import { clampTimeoutSeconds } from "./duration.js";
 
 export class ModerationError extends Error {
   constructor(
@@ -57,21 +49,16 @@ export class ModerationError extends Error {
   }
 }
 
-function resolveGuild(bot: Client, guildId?: string): Guild {
-  if (!bot.isReady()) {
-    throw new ModerationError(
-      "The Discord bot is not connected.",
-      503,
-      "BOT_NOT_READY",
-    );
-  }
-
-  const id = (guildId ?? "").trim();
-  if (!id) {
-    throw new ModerationError("Missing guildId.", 400, "MISSING_GUILD_ID");
-  }
-
-  const guild = bot.guilds.cache.get(id);
+/**
+ * Valida el guildId y confirma que el bot está en el guild (vía `BotGateway`).
+ * Devuelve `{ id, name }` — `name` lo usa el DM de sanción.
+ */
+async function resolveGuild(
+  gateway: BotGateway,
+  guildId?: string,
+): Promise<{ id: string; name: string }> {
+  const id = resolveGuildId(gateway, guildId);
+  const guild = await gateway.getGuild(id);
   if (!guild) {
     throw new ModerationError(
       "The bot is not in that server.",
@@ -79,8 +66,7 @@ function resolveGuild(bot: Client, guildId?: string): Guild {
       "GUILD_NOT_FOUND",
     );
   }
-
-  return guild;
+  return { id, name: guild.name };
 }
 
 /** Validación mínima para las rutas de lectura (que van por `BotGateway`). */
@@ -128,6 +114,9 @@ async function ensureGuildRow(guildId: string): Promise<void> {
 
 function mapDiscordError(error: unknown): never {
   if (error instanceof ModerationError) throw error;
+  if (error instanceof BotGatewayError) {
+    throw new ModerationError(error.message, error.status, error.code);
+  }
 
   if (error instanceof DiscordAPIError) {
     if (error.code === 50013 || error.status === 403) {
@@ -159,12 +148,12 @@ function mapDiscordError(error: unknown): never {
 }
 
 function assertBotCanAct(
-  member: GuildMember,
+  act: MemberActionability,
+  targetUserId: string,
   action: "ban" | "kick" | "timeout" | "untimeout",
   actorUserId?: string,
 ): void {
-  const me = member.guild.members.me;
-  if (me && member.id === me.id) {
+  if (act.isBot) {
     throw new ModerationError(
       "You can't apply this action to the bot.",
       400,
@@ -173,7 +162,7 @@ function assertBotCanAct(
   }
   if (
     actorUserId &&
-    member.id === actorUserId &&
+    targetUserId === actorUserId &&
     (action === "ban" || action === "kick" || action === "timeout")
   ) {
     throw new ModerationError(
@@ -182,21 +171,21 @@ function assertBotCanAct(
       "TARGET_IS_SELF",
     );
   }
-  if (action === "ban" && !member.bannable) {
+  if (action === "ban" && !act.bannable) {
     throw new ModerationError(
       "Role hierarchy: I can't ban that member.",
       403,
       "MEMBER_NOT_BANNABLE",
     );
   }
-  if (action === "kick" && !member.kickable) {
+  if (action === "kick" && !act.kickable) {
     throw new ModerationError(
       "Role hierarchy: I can't kick that member.",
       403,
       "MEMBER_NOT_KICKABLE",
     );
   }
-  if ((action === "timeout" || action === "untimeout") && !member.moderatable) {
+  if ((action === "timeout" || action === "untimeout") && !act.moderatable) {
     throw new ModerationError(
       "Role hierarchy: I can't time out that member.",
       403,
@@ -502,8 +491,10 @@ async function writeModLog(input: {
 }
 
 async function sendSanctionDm(options: {
-  bot: Client;
-  guild: Guild;
+  gateway: BotGateway;
+  guildId: string;
+  guildName: string;
+  botUsername: string;
   userId: string;
   action: ModActionType;
   reason: string;
@@ -511,7 +502,7 @@ async function sendSanctionDm(options: {
   dmText?: string;
   templateId?: number;
 }): Promise<{ dmSent: boolean; dmSkipped: boolean; dmFailed: boolean }> {
-  const { bot, guild, userId, action, reason } = options;
+  const { gateway, guildId, guildName, userId, action, reason } = options;
 
   if (action === "unban") {
     return { dmSent: false, dmSkipped: true, dmFailed: false };
@@ -524,18 +515,22 @@ async function sendSanctionDm(options: {
 
   let inviteUrl: string | undefined;
   if (action === "kick") {
-    inviteUrl = (await createOneUseInvite(guild)) ?? undefined;
+    inviteUrl = (await createReentryInvite(gateway, guildId)) ?? undefined;
   }
 
-  const user = await bot.users.fetch(userId);
-  const member = await guild.members.fetch(userId).catch(() => null);
+  const [user, member] = await Promise.all([
+    gateway.getUser(userId),
+    gateway.getMember(guildId, userId),
+  ]);
+  const username = user?.username ?? userId;
   const vars: SanctionDmContext = {
     userMention: `<@${userId}>`,
-    username: user.username,
-    displayName: member?.displayName || user.globalName || user.username,
-    serverName: guild.name,
+    username,
+    displayName:
+      member?.displayName || user?.globalName || user?.username || username,
+    serverName: guildName,
     reason,
-    moderator: bot.user?.username ?? "Adobos Bot",
+    moderator: options.botUsername || "Adobos Bot",
     action,
     inviteUrl,
   };
@@ -550,8 +545,12 @@ async function sendSanctionDm(options: {
       if (inviteUrl) {
         content = `${content}\n\nYou can come back with this invite (1 use): ${inviteUrl}`;
       }
-      await user.send({ content: content.slice(0, 2000) });
-      return { dmSent: true, dmSkipped: false, dmFailed: false };
+      const { sent } = await gateway.sendDirectMessage(userId, {
+        content: content.slice(0, 2000),
+      });
+      return sent
+        ? { dmSent: true, dmSkipped: false, dmFailed: false }
+        : { dmSent: false, dmSkipped: false, dmFailed: true };
     }
 
     // template
@@ -559,7 +558,7 @@ async function sendSanctionDm(options: {
     if (!Number.isFinite(templateId)) {
       throw new ModerationError("Invalid templateId.", 400, "INVALID_TEMPLATE");
     }
-    const template = await getEmbedTemplate(templateId, guild.id);
+    const template = await getEmbedTemplate(templateId, guildId);
     const interpolated = interpolateEmbedPayload(template.embedData, vars);
     const built = buildEmbedFromPayload(interpolated);
     let content = built.content
@@ -570,12 +569,14 @@ async function sendSanctionDm(options: {
         ? `${content}\n\nYou can come back with this invite (1 use): ${inviteUrl}`
         : `You can come back with this invite (1 use): ${inviteUrl}`;
     }
-    await user.send({
+    const { sent } = await gateway.sendDirectMessage(userId, {
       content,
-      embeds: built.builder ? [built.builder] : undefined,
-      files: built.files.length > 0 ? built.files : undefined,
+      embeds: built.builder ? [built.builder.toJSON()] : undefined,
+      files: attachmentsToOutgoingFiles(built.files),
     });
-    return { dmSent: true, dmSkipped: false, dmFailed: false };
+    return sent
+      ? { dmSent: true, dmSkipped: false, dmFailed: false }
+      : { dmSent: false, dmSkipped: false, dmFailed: true };
   } catch (error: unknown) {
     if (error instanceof ModerationError) throw error;
     logger.warn(
@@ -586,13 +587,24 @@ async function sendSanctionDm(options: {
   }
 }
 
+/** Tipos de canal que admiten bulk delete de mensajes. */
+const BULK_DELETE_TYPES = new Set([
+  ChannelType.GuildText,
+  ChannelType.GuildAnnouncement,
+  ChannelType.GuildVoice,
+  ChannelType.GuildStageVoice,
+  ChannelType.AnnouncementThread,
+  ChannelType.PublicThread,
+  ChannelType.PrivateThread,
+]);
+
 export async function executeModAction(
-  bot: Client,
+  gateway: BotGateway,
   input: ModActionRequest,
   actorUserId?: string,
 ): Promise<ModActionResponse> {
   const action = assertAction(input.action);
-  const guild = resolveGuild(bot, input.guildId);
+  const guild = await resolveGuild(gateway, input.guildId);
   const reason = (input.reason ?? "").trim();
 
   if (
@@ -609,7 +621,7 @@ export async function executeModAction(
   }
 
   const auditReason = reason.slice(0, 400) || "Action from Adobos panel";
-  const moderatorId = actorUserId ?? bot.user?.id ?? "dashboard";
+  const moderatorId = actorUserId ?? "dashboard";
 
   try {
     await ensureGuildRow(guild.id);
@@ -634,9 +646,14 @@ export async function executeModAction(
       action !== "untimeout"
     ) {
       const userId = assertSnowflake(input.userId ?? "", "userId");
+      const botProfile = await gateway
+        .getBotProfile(guild.id)
+        .catch(() => null);
       dmResult = await sendSanctionDm({
-        bot,
-        guild,
+        gateway,
+        guildId: guild.id,
+        guildName: guild.name,
+        botUsername: botProfile?.username ?? "Adobos Bot",
         userId,
         action,
         reason: auditReason,
@@ -654,13 +671,14 @@ export async function executeModAction(
       case "warn": {
         const userId = assertSnowflake(input.userId ?? "", "userId");
         targetUserId = userId;
-        await guild.members.fetch(userId).catch(() => {
+        const member = await gateway.getMember(guild.id, userId);
+        if (!member) {
           throw new ModerationError(
             "Member not found.",
             404,
             "MEMBER_NOT_FOUND",
           );
-        });
+        }
         await getDb().insert(warnings).values({
           guildId: guild.id,
           userId,
@@ -675,10 +693,20 @@ export async function executeModAction(
       case "kick": {
         const userId = assertSnowflake(input.userId ?? "", "userId");
         targetUserId = userId;
-        const member = await guild.members.fetch(userId);
-        assertBotCanAct(member, "kick", actorUserId);
-        await member.kick(auditReason);
-        message = `${member.user.username} fue expulsado.`;
+        const [member, actionability] = await Promise.all([
+          gateway.getMember(guild.id, userId),
+          gateway.getMemberActionability(guild.id, userId),
+        ]);
+        if (!member || !actionability) {
+          throw new ModerationError(
+            "Member not found.",
+            404,
+            "MEMBER_NOT_FOUND",
+          );
+        }
+        assertBotCanAct(actionability, userId, "kick", actorUserId);
+        await gateway.kickMember(guild.id, userId, auditReason);
+        message = `${member.username} fue expulsado.`;
         break;
       }
 
@@ -689,9 +717,14 @@ export async function executeModAction(
           0,
           Math.min(7, Math.round(Number(input.deleteMessageDays ?? 0))),
         );
-        const member = await guild.members.fetch(userId).catch(() => null);
-        if (member) assertBotCanAct(member, "ban", actorUserId);
-        await guild.members.ban(userId, {
+        const actionability = await gateway.getMemberActionability(
+          guild.id,
+          userId,
+        );
+        if (actionability) {
+          assertBotCanAct(actionability, userId, "ban", actorUserId);
+        }
+        await gateway.banMember(guild.id, userId, {
           reason: auditReason,
           deleteMessageSeconds: days * 24 * 60 * 60,
         });
@@ -702,7 +735,7 @@ export async function executeModAction(
       case "unban": {
         const userId = assertSnowflake(input.userId ?? "", "userId");
         targetUserId = userId;
-        await guild.members.unban(userId, auditReason);
+        await gateway.unbanMember(guild.id, userId, auditReason);
         message = `User ${userId} unbanned.`;
         dmResult = { dmSent: false, dmSkipped: true, dmFailed: false };
         break;
@@ -719,20 +752,41 @@ export async function executeModAction(
             "INVALID_TIMEOUT",
           );
         }
-        const member = await guild.members.fetch(userId);
-        assertBotCanAct(member, "timeout", actorUserId);
-        await member.timeout(seconds * 1000, auditReason);
-        message = `${member.user.username} en timeout (${seconds}s).`;
+        const [member, actionability] = await Promise.all([
+          gateway.getMember(guild.id, userId),
+          gateway.getMemberActionability(guild.id, userId),
+        ]);
+        if (!member || !actionability) {
+          throw new ModerationError(
+            "Member not found.",
+            404,
+            "MEMBER_NOT_FOUND",
+          );
+        }
+        assertBotCanAct(actionability, userId, "timeout", actorUserId);
+        const until = new Date(Date.now() + seconds * 1000).toISOString();
+        await gateway.timeoutMember(guild.id, userId, until, auditReason);
+        message = `${member.username} en timeout (${seconds}s).`;
         break;
       }
 
       case "untimeout": {
         const userId = assertSnowflake(input.userId ?? "", "userId");
         targetUserId = userId;
-        const member = await guild.members.fetch(userId);
-        assertBotCanAct(member, "untimeout", actorUserId);
-        await member.timeout(null, auditReason);
-        message = `Timeout removido de ${member.user.username}.`;
+        const [member, actionability] = await Promise.all([
+          gateway.getMember(guild.id, userId),
+          gateway.getMemberActionability(guild.id, userId),
+        ]);
+        if (!member || !actionability) {
+          throw new ModerationError(
+            "Member not found.",
+            404,
+            "MEMBER_NOT_FOUND",
+          );
+        }
+        assertBotCanAct(actionability, userId, "untimeout", actorUserId);
+        await gateway.timeoutMember(guild.id, userId, null, auditReason);
+        message = `Timeout removido de ${member.username}.`;
         dmResult = { dmSent: false, dmSkipped: true, dmFailed: false };
         break;
       }
@@ -763,36 +817,25 @@ export async function executeModAction(
         const filterUserId = input.userId?.trim()
           ? assertSnowflake(input.userId, "userId")
           : null;
-        const channel = await guild.channels.fetch(channelId);
-        if (!channel || !channel.isTextBased() || channel.isDMBased()) {
+        const channel = await gateway.getChannel(guild.id, channelId);
+        if (!channel || !BULK_DELETE_TYPES.has(channel.type)) {
           throw new ModerationError(
             "Invalid channel for purge.",
             400,
             "CHANNEL_NOT_TEXT",
           );
         }
-        if (!("bulkDelete" in channel)) {
-          throw new ModerationError(
-            "This channel does not support bulk delete.",
-            400,
-            "CHANNEL_NOT_TEXT",
-          );
-        }
-        const channelName = "name" in channel ? channel.name : channelId;
+        const deleted = await gateway.bulkDeleteMessages(channelId, {
+          limit,
+          filterUserId,
+        });
         if (filterUserId) {
-          const fetched = await channel.messages.fetch({ limit: 100 });
-          const matched = [...fetched.values()]
-            .filter((msg) => msg.author.id === filterUserId)
-            .slice(0, limit);
-          if (matched.length === 0) {
-            message = `No recent messages from <@${filterUserId}> in #${channelName} (max 14 days).`;
-            break;
-          }
-          const deleted = await channel.bulkDelete(matched, true);
-          message = `Deleted ${deleted.size} messages from <@${filterUserId}> in #${channelName}.`;
+          message =
+            deleted === 0
+              ? `No recent messages from <@${filterUserId}> in #${channel.name} (max 14 days).`
+              : `Deleted ${deleted} messages from <@${filterUserId}> in #${channel.name}.`;
         } else {
-          const deleted = await channel.bulkDelete(limit, true);
-          message = `Deleted ${deleted.size} messages in #${channelName}.`;
+          message = `Deleted ${deleted} messages in #${channel.name}.`;
         }
         break;
       }
@@ -804,7 +847,7 @@ export async function executeModAction(
           0,
           Math.min(21600, Math.round(Number(input.slowmodeSeconds ?? 0))),
         );
-        const channel = await guild.channels.fetch(channelId);
+        const channel = await gateway.getChannel(guild.id, channelId);
         if (
           !channel ||
           (channel.type !== ChannelType.GuildText &&
@@ -816,7 +859,9 @@ export async function executeModAction(
             "CHANNEL_NOT_FOUND",
           );
         }
-        await (channel as TextChannel).setRateLimitPerUser(
+        await gateway.setChannelSlowmode(
+          guild.id,
+          channelId,
           seconds,
           auditReason,
         );
@@ -832,7 +877,7 @@ export async function executeModAction(
         const channelId = assertSnowflake(input.channelId ?? "", "channelId");
         targetChannelId = channelId;
         const locked = action === "lock";
-        const channel = await guild.channels.fetch(channelId);
+        const channel = await gateway.getChannel(guild.id, channelId);
         if (
           !channel ||
           (channel.type !== ChannelType.GuildText &&
@@ -844,11 +889,19 @@ export async function executeModAction(
             "CHANNEL_NOT_FOUND",
           );
         }
-        await (channel as TextChannel).permissionOverwrites.edit(
-          guild.roles.everyone,
-          everyoneSendMessagesOverwrite(locked),
-          { reason: auditReason },
-        );
+        const overwrites =
+          (await gateway.getChannelOverwrites(guild.id, channelId)) ?? [];
+        const everyone = overwrites.find((o) => o.id === guild.id);
+        const bit = PermissionFlagsBits.SendMessages;
+        const allow = BigInt(everyone?.allow ?? "0") & ~bit;
+        const currentDeny = BigInt(everyone?.deny ?? "0");
+        const deny = locked ? currentDeny | bit : currentDeny & ~bit;
+        await gateway.putChannelOverwrite(channelId, guild.id, {
+          type: 0,
+          allow: allow.toString(),
+          deny: deny.toString(),
+          reason: auditReason,
+        });
         message = locked
           ? `Channel #${channel.name} locked (@everyone can't send messages).`
           : `Channel #${channel.name} unlocked.`;

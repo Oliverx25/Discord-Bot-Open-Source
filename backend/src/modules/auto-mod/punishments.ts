@@ -1,5 +1,6 @@
 import type { AutoModConfig, AutoModPunishment } from "@adobos/shared";
 import type { Client, GuildMember } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { logger } from "#core/log.js";
 import {
   deductUserXp,
@@ -136,7 +137,7 @@ async function runDiscordAction(
   input: Parameters<typeof executeModAction>[1],
 ): Promise<void> {
   try {
-    await executeModAction(client, input);
+    await executeModAction(new LocalClientGateway(client), input);
   } catch (error) {
     if (error instanceof ModerationError) {
       logger.warn(

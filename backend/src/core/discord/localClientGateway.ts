@@ -21,6 +21,7 @@ import {
   type FetchedMessage,
   type GuildBanEntry,
   type GuildSummary,
+  type MemberActionability,
   type MemberInfo,
   type MemberProfile,
   type RoleDetail,
@@ -393,6 +394,25 @@ export class LocalClientGateway extends BaseGateway implements BotGateway {
         ),
         roleName: isEveryone ? null : (highest?.name ?? null),
       },
+    };
+  }
+
+  async getMemberActionability(
+    guildId: string,
+    userId: string,
+  ): Promise<MemberActionability | null> {
+    const guild = this.guild(guildId);
+    if (!guild) return null;
+    const member =
+      guild.members.cache.get(userId) ??
+      (await guild.members.fetch(userId).catch(() => null));
+    if (!member) return null;
+    return {
+      isBot: member.id === (guild.members.me?.id ?? this.client.user?.id),
+      isOwner: member.id === guild.ownerId,
+      bannable: member.bannable,
+      kickable: member.kickable,
+      moderatable: member.moderatable,
     };
   }
 

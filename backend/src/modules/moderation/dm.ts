@@ -1,11 +1,6 @@
 import type { EmbedPayload } from "@adobos/shared";
-import {
-  type AttachmentBuilder,
-  ChannelType,
-  EmbedBuilder,
-  type Guild,
-  type GuildTextBasedChannel,
-} from "discord.js";
+import { type AttachmentBuilder, ChannelType, EmbedBuilder } from "discord.js";
+import type { BotGateway } from "#core/discord/botGateway.js";
 import { requireHttpUrl, resolveEmbedMedia } from "#lib/embedMedia.js";
 
 export interface SanctionDmContext {
@@ -151,26 +146,21 @@ export function buildEmbedFromPayload(embed: EmbedPayload): {
   return { builder, files, content };
 }
 
-/** Invite de un solo uso (24h) desde el primer canal de texto usable. */
-export async function createOneUseInvite(guild: Guild): Promise<string | null> {
-  const channel = guild.channels.cache.find(
-    (entry) =>
-      (entry.type === ChannelType.GuildText ||
-        entry.type === ChannelType.GuildAnnouncement) &&
-      entry.viewable,
-  ) as GuildTextBasedChannel | undefined;
-
-  if (!channel || !("createInvite" in channel)) return null;
-
-  try {
-    const invite = await channel.createInvite({
-      maxUses: 1,
-      maxAge: 86_400,
-      unique: true,
-      reason: "Invite de reingreso tras kick (panel Adobos)",
-    });
-    return invite.url;
-  } catch {
-    return null;
-  }
+/** Invite de un solo uso (24h) desde el primer canal de texto del guild. */
+export async function createReentryInvite(
+  gateway: BotGateway,
+  guildId: string,
+): Promise<string | null> {
+  const target = (await gateway.listChannels(guildId)).find(
+    (channel) =>
+      channel.type === ChannelType.GuildText ||
+      channel.type === ChannelType.GuildAnnouncement,
+  );
+  if (!target) return null;
+  return gateway.createInvite(target.id, {
+    maxUses: 1,
+    maxAgeSeconds: 86_400,
+    unique: true,
+    reason: "Invite de reingreso tras kick (panel Adobos)",
+  });
 }

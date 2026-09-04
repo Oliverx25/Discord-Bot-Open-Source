@@ -1,6 +1,7 @@
 import type { AutoModConfig } from "@adobos/shared";
 import { AUTO_MOD_FILTER_LABELS, type AutoModFilterKey } from "@adobos/shared";
 import type { Client, GuildMember, Message, User } from "discord.js";
+import { LocalClientGateway } from "#core/discord/localClientGateway.js";
 import { logger } from "#core/log.js";
 import { executeModAction } from "#modules/moderation/discord.js";
 import { dispatchAutoModAlert } from "./logs.js";
@@ -30,7 +31,7 @@ export async function enforceAutoModHit(input: {
   let warned = false;
   if (input.config.warnOnHit) {
     try {
-      await executeModAction(input.client, {
+      await executeModAction(new LocalClientGateway(input.client), {
         action: "warn",
         guildId: input.guildId,
         userId: input.user.id,

@@ -13,6 +13,7 @@ import type {
   FetchedMessage,
   GuildBanEntry,
   GuildSummary,
+  MemberActionability,
   MemberInfo,
   MemberProfile,
   RoleDetail,
@@ -430,6 +431,65 @@ export class RestGateway extends BaseGateway implements BotGateway {
           }),
         )
         .sort((a, b) => b.position - a.position),
+    };
+  }
+
+  async getMemberActionability(
+    guildId: string,
+    userId: string,
+  ): Promise<MemberActionability | null> {
+    const [target, me, guildRaw, roles] = await Promise.all([
+      this.rawMember(guildId, userId),
+      this.rawMember(guildId, "@me"),
+      this.restClient()
+        .get(Routes.guild(guildId))
+        .catch(() => null) as Promise<{ owner_id?: string } | null>,
+      this.guildRoles(guildId),
+    ]);
+    if (!target || !me) return null;
+
+    const roleById = new Map(roles.map((r) => [r.id, r]));
+    const highestPos = (ids: string[]): number =>
+      ids.reduce(
+        (max, id) => Math.max(max, roleById.get(id)?.position ?? 0),
+        0,
+      );
+    const permsOf = (ids: string[]): bigint => {
+      const everyone = roleById.get(guildId);
+      let acc = everyone ? BigInt(everyone.permissions) : 0n;
+      for (const id of ids) {
+        const role = roleById.get(id);
+        if (role) acc |= BigInt(role.permissions);
+      }
+      return acc;
+    };
+
+    const botUserId = me.user.id;
+    const ownerId = guildRaw?.owner_id;
+    const botIsOwner = botUserId === ownerId;
+    const botPerms = permsOf(me.roles);
+    const isAdmin = (perms: bigint): boolean =>
+      (perms & PermissionFlagsBits.Administrator) ===
+      PermissionFlagsBits.Administrator;
+    const botHas = (bit: bigint): boolean =>
+      botIsOwner || isAdmin(botPerms) || (botPerms & bit) === bit;
+
+    const targetPerms = permsOf(target.roles);
+    const targetIsAdmin = target.user.id === ownerId || isAdmin(targetPerms);
+    const manageable =
+      target.user.id !== ownerId &&
+      target.user.id !== botUserId &&
+      (botIsOwner || highestPos(me.roles) > highestPos(target.roles));
+
+    return {
+      isBot: target.user.id === botUserId,
+      isOwner: target.user.id === ownerId,
+      bannable: manageable && botHas(PermissionFlagsBits.BanMembers),
+      kickable: manageable && botHas(PermissionFlagsBits.KickMembers),
+      moderatable:
+        manageable &&
+        botHas(PermissionFlagsBits.ModerateMembers) &&
+        !targetIsAdmin,
     };
   }
 

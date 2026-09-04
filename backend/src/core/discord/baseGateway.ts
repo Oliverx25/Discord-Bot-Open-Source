@@ -194,6 +194,118 @@ export abstract class BaseGateway {
     });
   }
 
+  async setChannelSlowmode(
+    _guildId: string,
+    channelId: string,
+    seconds: number,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().patch(Routes.channel(channelId), {
+      body: {
+        rate_limit_per_user: Math.max(0, Math.min(21600, Math.round(seconds))),
+      },
+      reason,
+    });
+  }
+
+  async createInvite(
+    channelId: string,
+    opts: {
+      maxUses?: number;
+      maxAgeSeconds?: number;
+      unique?: boolean;
+      reason?: string;
+    } = {},
+  ): Promise<string | null> {
+    try {
+      const invite = (await this.restClient().post(
+        Routes.channelInvites(channelId),
+        {
+          body: {
+            max_uses: opts.maxUses ?? 0,
+            max_age: opts.maxAgeSeconds ?? 86_400,
+            unique: opts.unique ?? true,
+          },
+          reason: opts.reason,
+        },
+      )) as { code: string };
+      return `https://discord.gg/${invite.code}`;
+    } catch {
+      return null;
+    }
+  }
+
+  // ─────────── Moderación de miembros ───────────
+
+  async banMember(
+    guildId: string,
+    userId: string,
+    opts: { reason?: string; deleteMessageSeconds?: number } = {},
+  ): Promise<void> {
+    await this.restClient().put(Routes.guildBan(guildId, userId), {
+      body: { delete_message_seconds: opts.deleteMessageSeconds ?? 0 },
+      reason: opts.reason,
+    });
+  }
+
+  async unbanMember(
+    guildId: string,
+    userId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().delete(Routes.guildBan(guildId, userId), {
+      reason,
+    });
+  }
+
+  async kickMember(
+    guildId: string,
+    userId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().delete(Routes.guildMember(guildId, userId), {
+      reason,
+    });
+  }
+
+  async timeoutMember(
+    guildId: string,
+    userId: string,
+    until: string | null,
+    reason?: string,
+  ): Promise<void> {
+    await this.restClient().patch(Routes.guildMember(guildId, userId), {
+      body: { communication_disabled_until: until },
+      reason,
+    });
+  }
+
+  async bulkDeleteMessages(
+    channelId: string,
+    opts: { limit: number; filterUserId?: string | null },
+  ): Promise<number> {
+    const limit = Math.max(1, Math.min(100, Math.round(opts.limit)));
+    const fetched = (await this.restClient().get(
+      Routes.channelMessages(channelId),
+      { query: new URLSearchParams({ limit: "100" }) },
+    )) as { id: string; author?: { id?: string }; timestamp?: string }[];
+    const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const ids = fetched
+      .filter((m) => !m.timestamp || Date.parse(m.timestamp) > twoWeeksAgo)
+      .filter((m) => !opts.filterUserId || m.author?.id === opts.filterUserId)
+      .map((m) => m.id)
+      .slice(0, limit);
+    if (ids.length === 0) return 0;
+    if (ids.length === 1) {
+      await this.restClient().delete(Routes.channelMessage(channelId, ids[0]!));
+      return 1;
+    }
+    await this.restClient().post(Routes.channelBulkDelete(channelId), {
+      body: { messages: ids },
+    });
+    return ids.length;
+  }
+
   // ─────────── Mensajes ───────────
 
   async sendMessage(

@@ -88,27 +88,27 @@ export function moderationReadRoutes(gateway: BotGateway): Router {
     }),
   );
 
-  return router;
-}
-
-/**
- * Rutas que todavía necesitan `Client`: `/action` (executeModAction) y
- * `/discord-audit` (mapEntry resuelve nombres del guild). Se portan luego.
- */
-export function moderationRoutes(bot: Client): Router {
-  const router = Router();
-
   router.post(
     "/action",
     defineRoute({ body: modActionSchema }, async (req, res, valid) => {
       const result = await executeModAction(
-        bot,
+        gateway,
         { ...valid.body, guildId: guildIdOf(req) },
         req.guild?.userId,
       );
       res.status(result.dmFailed ? 206 : 200).json(result);
     }),
   );
+
+  return router;
+}
+
+/**
+ * Ruta que todavía necesita `Client`: `/discord-audit` (mapEntry resuelve
+ * nombres de entidades del guild desde la caché). Se porta luego.
+ */
+export function moderationRoutes(bot: Client): Router {
+  const router = Router();
 
   router.get(
     "/discord-audit",

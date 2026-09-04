@@ -157,6 +157,17 @@ export interface ChannelOverwrite {
   deny: string;
 }
 
+/** Jerarquía + permisos del bot sobre un miembro concreto (para `/action`). */
+export interface MemberActionability {
+  /** El objetivo es el propio bot. */
+  isBot: boolean;
+  /** El objetivo es el dueño del servidor. */
+  isOwner: boolean;
+  bannable: boolean;
+  kickable: boolean;
+  moderatable: boolean;
+}
+
 export interface FetchedMessageEmbed {
   title?: string;
   description?: string;
@@ -400,6 +411,51 @@ export interface BotGateway {
     token: string,
     payload: OutgoingMessage & { username?: string; avatarUrl?: string },
   ): Promise<{ messageId: string }>;
+
+  // — Moderación de miembros (moderation /action) —
+  /** Jerarquía + permisos del bot sobre un miembro. `null` si no es miembro del guild. */
+  getMemberActionability(
+    guildId: string,
+    userId: string,
+  ): Promise<MemberActionability | null>;
+  banMember(
+    guildId: string,
+    userId: string,
+    opts?: { reason?: string; deleteMessageSeconds?: number },
+  ): Promise<void>;
+  unbanMember(guildId: string, userId: string, reason?: string): Promise<void>;
+  kickMember(guildId: string, userId: string, reason?: string): Promise<void>;
+  /** `until` = ISO8601, o `null` para quitar el timeout. */
+  timeoutMember(
+    guildId: string,
+    userId: string,
+    until: string | null,
+    reason?: string,
+  ): Promise<void>;
+  /**
+   * Borra hasta `limit` mensajes recientes (<14 días) de un canal.
+   * `filterUserId` acota a un autor. Devuelve cuántos borró.
+   */
+  bulkDeleteMessages(
+    channelId: string,
+    opts: { limit: number; filterUserId?: string | null },
+  ): Promise<number>;
+  setChannelSlowmode(
+    guildId: string,
+    channelId: string,
+    seconds: number,
+    reason?: string,
+  ): Promise<void>;
+  /** Crea un invite de un canal. `null` si Discord lo rechaza (permisos). */
+  createInvite(
+    channelId: string,
+    opts?: {
+      maxUses?: number;
+      maxAgeSeconds?: number;
+      unique?: boolean;
+      reason?: string;
+    },
+  ): Promise<string | null>;
 
   // — Overwrites de canal (anti-raid lockdown, tickets) —
   /** Overwrites de un canal del guild. `null` si el canal no existe / no es del guild. */
