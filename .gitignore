@@ -10,10 +10,10 @@ backend/public/
 
 # Environment & secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
-# Database
+# Database y uploads locales (DATA_DIR=./data)
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
@@ -23,12 +23,32 @@ data/
 # Logs & OS
 *.log
 .DS_Store
+._*
 Thumbs.db
 
 # IDE
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Docker: overrides locales (puertos, secrets, bind mounts)
+docker-compose.override.yml
+
+# AutoSkills (npx autoskills) — árboles generados, no el lockfile
+.agents/
+.claude/skills/
+
+# Settings locales de agentes (máquina / secretos). Rules e hooks sí se commitean.
+.claude/*.local.json
+.claude/*.local.md
+.claude/settings.local.json
+.cursor/*.log
+
+# Caches de tooling
+.vite/
+.cache/
+vite.config.*.timestamp-*
+*.lcov
 
 # Test / coverage
 coverage/

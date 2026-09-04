@@ -53,5 +53,4 @@ Verificación sin DB: correr `pnpm db:generate` otra vez debe decir **"No schema
 - biome: 2 espacios, comillas dobles, `;` siempre. `noExplicitAny` y `noNonNullAssertion` desactivados.
 - Comentarios de código en español; strings visibles al usuario en inglés (la i18n va después, sobre una base estable en inglés).
 - Los parsers de entrada multi-idioma aceptan tokens ES + EN **a propósito** — no "traducirlos": `packages/shared/src/reminders.ts` (unidades de duración), `backend/src/modules/moderation/duration.ts`, `backend/src/modules/auto-mod/filters.ts` (clases de caracteres), `packages/shared/src/auto-delete.ts`, `packages/shared/src/economy.ts` (`parseBankAmount` acepta `all`/`todo`/`max`).
-- `packages/shared/tsconfig.tsbuildinfo` lo reescribe el build de shared — revértelo, no lo commitees.
 - El nav del panel (`frontend/src/lib/nav.ts`) es la única fuente de verdad del menú; los `href` reflejan la estructura de carpetas en `frontend/src/pages/dashboard/<categoría>/`. Rutas renombradas dejan un stub de redirect en la ruta vieja.
