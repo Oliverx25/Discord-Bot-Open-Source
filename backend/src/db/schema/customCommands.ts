@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -21,12 +22,15 @@ export const customCommands = pgTable(
       .references(() => guildSettings.guildId, { onDelete: "cascade" }),
     name: text().notNull(),
     description: text().notNull().default("Custom command"),
-    /** JSON: CustomCommandResponseData */
-    responseData: text().notNull().default("{}"),
-    /** JSON: CustomCommandOptions */
-    options: text().notNull().default("{}"),
-    /** JSON: CustomCommandPermissions */
-    permissions: text().notNull().default("{}"),
+    /** CustomCommandResponseData — documento tipado. */
+    responseData: jsonb()
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    /** CustomCommandOptions — documento tipado. */
+    options: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    /** CustomCommandPermissions — documento tipado. */
+    permissions: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     isActive: boolean().notNull().default(true),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
@@ -54,10 +58,10 @@ export const defaultCommandPermissions = pgTable(
       .references(() => guildSettings.guildId, { onDelete: "cascade" }),
     commandName: text().notNull(),
     enabled: boolean().notNull().default(true),
-    /** JSON: string[] role IDs */
-    allowedRoles: text().notNull().default("[]"),
-    /** JSON: string[] channel IDs donde el comando no se puede usar */
-    ignoredChannels: text().notNull().default("[]"),
+    /** string[] role IDs — documento tipado. */
+    allowedRoles: jsonb().$type<string[]>().notNull().default([]),
+    /** string[] channel IDs donde el comando no se puede usar. */
+    ignoredChannels: jsonb().$type<string[]>().notNull().default([]),
     ephemeral: boolean().notNull().default(false),
     updatedAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()

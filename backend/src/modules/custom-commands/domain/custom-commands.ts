@@ -43,15 +43,6 @@ export function getReservedSlashCommandNames(): string[] {
   return [...reservedNames];
 }
 
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function resolveGuildId(guildId?: string): string {
   const id = (guildId ?? "").trim();
   if (!id) {
@@ -86,13 +77,13 @@ function rowToCommand(row: typeof customCommands.$inferSelect): CustomCommand {
     description:
       (row.description ?? "").trim().slice(0, 100) || "Custom command",
     responseData: normalizeCustomCommandResponseData(
-      parseJson<Partial<CustomCommandResponseData>>(row.responseData, {}),
+      row.responseData as Partial<CustomCommandResponseData>,
     ),
     options: normalizeCustomCommandOptions(
-      parseJson<Partial<CustomCommandOptions>>(row.options, {}),
+      row.options as Partial<CustomCommandOptions>,
     ),
     permissions: normalizeCustomCommandPermissions(
-      parseJson<Partial<CustomCommandPermissions>>(row.permissions, {}),
+      row.permissions as Partial<CustomCommandPermissions>,
     ),
     isActive: Boolean(row.isActive),
     createdAt: new Date(row.createdAt).toISOString(),
@@ -257,9 +248,9 @@ export async function createCustomCommand(
         guildId: id,
         name,
         description,
-        responseData: JSON.stringify(responseData),
-        options: JSON.stringify(options),
-        permissions: JSON.stringify(permissions),
+        responseData: responseData as unknown as Record<string, unknown>,
+        options: options as unknown as Record<string, unknown>,
+        permissions: permissions as unknown as Record<string, unknown>,
         isActive,
         createdAt: now,
         updatedAt: now,
@@ -363,9 +354,9 @@ export async function updateCustomCommand(
       .set({
         name: nextName,
         description: nextDescription,
-        responseData: JSON.stringify(nextResponse),
-        options: JSON.stringify(nextOptions),
-        permissions: JSON.stringify(nextPermissions),
+        responseData: nextResponse as unknown as Record<string, unknown>,
+        options: nextOptions as unknown as Record<string, unknown>,
+        permissions: nextPermissions as unknown as Record<string, unknown>,
         isActive: nextActive,
         updatedAt: new Date(),
       })

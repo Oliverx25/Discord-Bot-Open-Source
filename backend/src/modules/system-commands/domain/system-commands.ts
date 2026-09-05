@@ -23,17 +23,11 @@ export class SystemCommandsError extends Error {
   }
 }
 
-function parseIdArray(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-      .map((v) => v.trim());
-  } catch {
-    return [];
-  }
+function parseIdArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => v.trim());
 }
 
 function resolveGuildId(guildId?: string): string {
@@ -68,8 +62,8 @@ function rowToPermission(
   row:
     | {
         enabled: boolean;
-        allowedRoles: string;
-        ignoredChannels?: string | null;
+        allowedRoles: unknown;
+        ignoredChannels?: unknown;
         ephemeral: boolean;
       }
     | undefined,
@@ -197,8 +191,8 @@ export async function updateSystemCommandPermissions(
         guildId: id,
         commandName: name,
         enabled,
-        allowedRoles: JSON.stringify(allowedRoles),
-        ignoredChannels: JSON.stringify(ignoredChannels),
+        allowedRoles,
+        ignoredChannels,
         ephemeral: def.supportsEphemeral ? ephemeral : def.defaultEphemeral,
         updatedAt: now,
       })
@@ -209,8 +203,8 @@ export async function updateSystemCommandPermissions(
         ],
         set: {
           enabled,
-          allowedRoles: JSON.stringify(allowedRoles),
-          ignoredChannels: JSON.stringify(ignoredChannels),
+          allowedRoles,
+          ignoredChannels,
           ephemeral: def.supportsEphemeral ? ephemeral : def.defaultEphemeral,
           updatedAt: now,
         },
