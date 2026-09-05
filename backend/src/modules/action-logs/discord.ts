@@ -655,6 +655,159 @@ export interface RecordActionLogInput {
   executorUnknown?: boolean;
 }
 
+/** Author del embed: ejecutor, o el afectado/autor original si es desconocido. */
+async function resolveEmbedAuthor(
+  bot: Client,
+  input: RecordActionLogInput,
+): Promise<{
+  authorTag: string | null;
+  authorAvatar: string | null;
+  executorUnknown: boolean;
+}> {
+  let authorAvatar = input.executorAvatarURL ?? null;
+  let authorTag = input.executorTag ?? null;
+  const executorUnknown = Boolean(input.executorUnknown);
+
+  // Author = ejecutor; si es desconocido, Author = afectado/autor original
+  const authorUserId = executorUnknown
+    ? (input.targetId ?? null)
+    : (input.executorId ?? input.targetId ?? null);
+
+  if (authorUserId && (!authorAvatar || !authorTag)) {
+    try {
+      const user = await bot.users.fetch(authorUserId);
+      authorTag = authorTag ?? user.tag;
+      authorAvatar = authorAvatar ?? user.displayAvatarURL({ size: 128 });
+    } catch {
+      // ignore
+    }
+  }
+
+  // Si el ejecutor es desconocido, preferimos tag/avatar del target
+  if (executorUnknown && input.targetId) {
+    try {
+      const target = await bot.users.fetch(input.targetId);
+      authorTag = input.targetTag ?? target.tag;
+      authorAvatar = target.displayAvatarURL({ size: 128 });
+    } catch {
+      authorTag = input.targetTag ?? authorTag;
+    }
+  }
+
+  return { authorTag, authorAvatar, executorUnknown };
+}
+
+/** Avatar del afectado (footer del embed) — solo si el target es un usuario. */
+async function resolveEmbedTargetAvatar(
+  bot: Client,
+  input: RecordActionLogInput,
+  meta: (typeof EVENT_META)[ActionLogEventKey],
+  detailsTargetKind: string | null,
+): Promise<{ isUserTarget: boolean; targetAvatarURL: string | null }> {
+  const isUserTarget =
+    detailsTargetKind === "user" ||
+    (!detailsTargetKind &&
+      (meta.eventType.startsWith("MESSAGE_") ||
+        meta.eventType.startsWith("MEMBER_") ||
+        meta.eventType.startsWith("VOICE_")));
+
+  const affectedSnowflake =
+    isUserTarget && input.targetId && /^\d{17,20}$/.test(input.targetId)
+      ? input.targetId
+      : null;
+
+  let targetAvatarURL: string | null = null;
+  if (affectedSnowflake) {
+    try {
+      const targetUser = await bot.users.fetch(affectedSnowflake);
+      targetAvatarURL = targetUser.displayAvatarURL({ size: 64 });
+    } catch {
+      // Footer sin icono si el usuario no se puede resolver
+    }
+  }
+
+  return { isUserTarget, targetAvatarURL };
+}
+
+/** Avatar del bot en el guild (fallback al avatar global si no se puede resolver). */
+async function resolveEmbedSystemAvatar(
+  bot: Client,
+  guildId: string,
+): Promise<string | null> {
+  try {
+    const guild =
+      bot.guilds.cache.get(guildId) ?? (await bot.guilds.fetch(guildId));
+    const me = await guild.members.fetchMe();
+    return me.displayAvatarURL({ extension: "png", size: 64 });
+  } catch {
+    return bot.user?.displayAvatarURL({ extension: "png", size: 64 }) ?? null;
+  }
+}
+
+/** Construye el embed y lo envía por webhook. Best-effort: solo loguea si falla. */
+async function sendActionLogEmbedWebhook(
+  bot: Client,
+  input: RecordActionLogInput,
+  meta: (typeof EVENT_META)[ActionLogEventKey],
+  entry: ActionLogEntry,
+  details: Record<string, unknown>,
+  destinationId: string,
+): Promise<void> {
+  try {
+    const { authorTag, authorAvatar, executorUnknown } =
+      await resolveEmbedAuthor(bot, input);
+
+    const detailsTargetKind =
+      typeof details.targetKind === "string" ? details.targetKind : null;
+    const { isUserTarget, targetAvatarURL } = await resolveEmbedTargetAvatar(
+      bot,
+      input,
+      meta,
+      detailsTargetKind,
+    );
+
+    const systemAvatarURL = await resolveEmbedSystemAvatar(bot, input.guildId);
+
+    const messageId =
+      typeof details.messageId === "string" ? details.messageId : null;
+
+    const embed = buildActionLogEmbed({
+      entry,
+      actionLabel: meta.label,
+      tone: input.tone ?? meta.tone,
+      description: input.description ?? null,
+      authorTag,
+      authorAvatarURL: authorAvatar,
+      executorUnknown,
+      affectedUserId: isUserTarget ? entry.targetId : null,
+      targetAvatarURL,
+      systemAvatarURL,
+      messageId,
+      targetKind:
+        (detailsTargetKind as
+          | "user"
+          | "channel"
+          | "role"
+          | "emoji"
+          | "sticker"
+          | "invite"
+          | "resource"
+          | null) ?? undefined,
+    });
+
+    await sendActionLogWebhook(new LocalClientGateway(bot), {
+      guildId: input.guildId,
+      channelId: destinationId,
+      embeds: [embed],
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      `action-logs: couldn't send webhook to ${destinationId}:`,
+    );
+  }
+}
+
 /**
  * Pipeline de filtros (temprano) + insert Postgres + embed Discord vía webhook.
  * Retorna null si se aborta por filtros.
@@ -715,110 +868,14 @@ export async function recordActionLog(
   };
 
   if (destinationId) {
-    try {
-      let authorAvatar = input.executorAvatarURL ?? null;
-      let authorTag = input.executorTag ?? null;
-      const executorUnknown = Boolean(input.executorUnknown);
-
-      // Author = ejecutor; si es desconocido, Author = afectado/autor original
-      const authorUserId = executorUnknown
-        ? (input.targetId ?? null)
-        : (input.executorId ?? input.targetId ?? null);
-
-      if (authorUserId && (!authorAvatar || !authorTag)) {
-        try {
-          const user = await bot.users.fetch(authorUserId);
-          authorTag = authorTag ?? user.tag;
-          authorAvatar = authorAvatar ?? user.displayAvatarURL({ size: 128 });
-        } catch {
-          // ignore
-        }
-      }
-
-      // Si el ejecutor es desconocido, preferimos tag/avatar del target
-      if (executorUnknown && input.targetId) {
-        try {
-          const target = await bot.users.fetch(input.targetId);
-          authorTag = input.targetTag ?? target.tag;
-          authorAvatar = target.displayAvatarURL({ size: 128 });
-        } catch {
-          authorTag = input.targetTag ?? authorTag;
-        }
-      }
-
-      let targetAvatarURL: string | null = null;
-      const detailsTargetKind =
-        typeof details.targetKind === "string" ? details.targetKind : null;
-      const isUserTarget =
-        detailsTargetKind === "user" ||
-        (!detailsTargetKind &&
-          (meta.eventType.startsWith("MESSAGE_") ||
-            meta.eventType.startsWith("MEMBER_") ||
-            meta.eventType.startsWith("VOICE_")));
-
-      const affectedSnowflake =
-        isUserTarget && input.targetId && /^\d{17,20}$/.test(input.targetId)
-          ? input.targetId
-          : null;
-      if (affectedSnowflake) {
-        try {
-          const targetUser = await bot.users.fetch(affectedSnowflake);
-          targetAvatarURL = targetUser.displayAvatarURL({ size: 64 });
-        } catch {
-          // Footer sin icono si el usuario no se puede resolver
-        }
-      }
-
-      let systemAvatarURL: string | null = null;
-      try {
-        const guild =
-          bot.guilds.cache.get(input.guildId) ??
-          (await bot.guilds.fetch(input.guildId));
-        const me = await guild.members.fetchMe();
-        systemAvatarURL = me.displayAvatarURL({ extension: "png", size: 64 });
-      } catch {
-        systemAvatarURL =
-          bot.user?.displayAvatarURL({ extension: "png", size: 64 }) ?? null;
-      }
-
-      const messageId =
-        typeof details.messageId === "string" ? details.messageId : null;
-
-      const embed = buildActionLogEmbed({
-        entry,
-        actionLabel: meta.label,
-        tone: input.tone ?? meta.tone,
-        description: input.description ?? null,
-        authorTag,
-        authorAvatarURL: authorAvatar,
-        executorUnknown,
-        affectedUserId: isUserTarget ? entry.targetId : null,
-        targetAvatarURL,
-        systemAvatarURL,
-        messageId,
-        targetKind:
-          (detailsTargetKind as
-            | "user"
-            | "channel"
-            | "role"
-            | "emoji"
-            | "sticker"
-            | "invite"
-            | "resource"
-            | null) ?? undefined,
-      });
-
-      await sendActionLogWebhook(new LocalClientGateway(bot), {
-        guildId: input.guildId,
-        channelId: destinationId,
-        embeds: [embed],
-      });
-    } catch (error) {
-      logger.warn(
-        { err: error },
-        `action-logs: couldn't send webhook to ${destinationId}:`,
-      );
-    }
+    await sendActionLogEmbedWebhook(
+      bot,
+      input,
+      meta,
+      entry,
+      details,
+      destinationId,
+    );
   }
 
   return entry;
