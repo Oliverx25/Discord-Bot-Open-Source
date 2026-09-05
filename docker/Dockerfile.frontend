@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 # Panel Astro estático + nginx (proxy /api /auth /uploads → backend).
+#
+# Fase 8 (PLAN_FINAL_2026.md): ambas imágenes base fijadas por digest — ver
+# Dockerfile (prod backend) para cómo refrescarlas.
 
-ARG NODE_VERSION=24
-
-FROM node:${NODE_VERSION}-bookworm-slim AS build
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS build
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -21,7 +22,7 @@ COPY packages/shared ./packages/shared
 COPY frontend ./frontend
 RUN pnpm --filter @adobos/shared build && pnpm --filter @adobos/frontend build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 

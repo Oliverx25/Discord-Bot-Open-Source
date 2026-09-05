@@ -1,0 +1,30 @@
+# Fase 8 (PLAN_FINAL_2026.md, §14): "fijar imágenes Docker por versión/digest
+# y automatizar actualizaciones". Fijar sin automatizar el refresco solo
+# cambia el problema de lugar (una imagen fijada para siempre es tan mala
+# como una sin fijar) — Dependabot abre el PR cuando hay una versión más
+# nueva del tag fijado, con el diff del digest visible para revisar.
+
+version: 2
+updates:
+  # Dockerfile (backend prod) + docker-compose.yml + docker-compose.prod.yml.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  # docker/Dockerfile.dev + docker/Dockerfile.frontend.
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  # Mismo principio de supply chain aplicado a los actions de CI
+  # (actions/checkout, actions/setup-node, pnpm/action-setup en
+  # .github/workflows/ci.yml).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "ci"]

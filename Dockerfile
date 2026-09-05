@@ -1,10 +1,15 @@
 # syntax=docker/dockerfile:1
 # Backend prod: Discord gateway + API. El panel lo sirve el servicio `frontend`.
 # Canvas nativo se compila en TARGETPLATFORM (ARM64 local / AMD64 TrueNAS).
+#
+# Fase 8 (PLAN_FINAL_2026.md, MAINT/SUPPLY-01): imagen base fijada por digest,
+# no solo por tag — un tag como `24-bookworm-slim` puede apuntar a contenido
+# distinto de un día a otro. Dependabot (.github/dependabot.yml) abre un PR
+# cuando hay una versión más nueva; para refrescar a mano:
+#   docker pull node:24-bookworm-slim
+#   docker inspect --format='{{index .RepoDigests 0}}' node:24-bookworm-slim
 
-ARG NODE_VERSION=24
-
-FROM node:${NODE_VERSION}-bookworm-slim AS base
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS base
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates python3 make g++ fontconfig fonts-liberation \
   && rm -rf /var/lib/apt/lists/*
