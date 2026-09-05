@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   real,
@@ -26,15 +27,15 @@ export const xpConfig = pgTable("xp_config", {
   /** Multiplicador al transmitir pantalla (1.0 = sin bonus). */
   streamMultiplier: real().notNull().default(1),
   xpMultiplier: integer().notNull().default(1),
-  /** JSON: string[] */
-  ignoredRoles: text().notNull().default("[]"),
-  /** JSON: string[] */
-  ignoredChannels: text().notNull().default("[]"),
+  /** string[] — documento tipado. */
+  ignoredRoles: jsonb().$type<string[]>().notNull().default([]),
+  /** string[] — documento tipado. */
+  ignoredChannels: jsonb().$type<string[]>().notNull().default([]),
   levelUpChannelId: text(),
-  /** JSON: LevelsRoleMultiplier[] */
-  customMultipliers: text().notNull().default("[]"),
-  /** JSON: LevelsChannelMultiplier[] */
-  customChannelMultipliers: text().notNull().default("[]"),
+  /** LevelsRoleMultiplier[] — documento tipado. */
+  customMultipliers: jsonb().$type<unknown[]>().notNull().default([]),
+  /** LevelsChannelMultiplier[] — documento tipado. */
+  customChannelMultipliers: jsonb().$type<unknown[]>().notNull().default([]),
   /** TEXT | EMBED | IMAGE */
   levelUpFormat: text().notNull().default("TEXT"),
   levelUpMessage: text()

@@ -41,15 +41,6 @@ export class LevelsError extends Error {
 const CONFIG_TTL_MS = 60_000;
 const configKey = (guildId: string) => `levels:cfg:${guildId}`;
 
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function resolveGuildId(guildId?: string): string {
   const id = (guildId ?? "").trim();
   if (!id) {
@@ -177,13 +168,13 @@ async function rowToConfig(
     streamMultiplier: clampFloat(row.streamMultiplier, 0.1, 20, 1),
     xpMultiplier: row.xpMultiplier,
     customMultipliers: normalizeCustomMultipliers(
-      parseJson<LevelsRoleMultiplier[]>(row.customMultipliers, []),
+      row.customMultipliers as LevelsRoleMultiplier[],
     ),
     customChannelMultipliers: normalizeChannelMultipliers(
-      parseJson<LevelsChannelMultiplier[]>(row.customChannelMultipliers, []),
+      row.customChannelMultipliers as LevelsChannelMultiplier[],
     ),
-    ignoredRoles: parseJson<string[]>(row.ignoredRoles, []),
-    ignoredChannels: parseJson<string[]>(row.ignoredChannels, []),
+    ignoredRoles: row.ignoredRoles,
+    ignoredChannels: row.ignoredChannels,
     levelUpChannelId: row.levelUpChannelId ?? null,
     levelUpFormat: normalizeLevelUpFormat(row.levelUpFormat),
     levelUpMessage:
@@ -398,10 +389,10 @@ export async function updateLevelsConfig(
       voiceXpPerMinute: next.voiceXpPerMinute,
       streamMultiplier: next.streamMultiplier,
       xpMultiplier: next.xpMultiplier,
-      customMultipliers: JSON.stringify(next.customMultipliers),
-      customChannelMultipliers: JSON.stringify(next.customChannelMultipliers),
-      ignoredRoles: JSON.stringify(next.ignoredRoles),
-      ignoredChannels: JSON.stringify(next.ignoredChannels),
+      customMultipliers: next.customMultipliers as unknown[],
+      customChannelMultipliers: next.customChannelMultipliers as unknown[],
+      ignoredRoles: next.ignoredRoles,
+      ignoredChannels: next.ignoredChannels,
       levelUpChannelId: next.levelUpChannelId,
       levelUpFormat: next.levelUpFormat,
       levelUpMessage: next.levelUpMessage,
@@ -428,10 +419,10 @@ export async function updateLevelsConfig(
         voiceXpPerMinute: next.voiceXpPerMinute,
         streamMultiplier: next.streamMultiplier,
         xpMultiplier: next.xpMultiplier,
-        customMultipliers: JSON.stringify(next.customMultipliers),
-        customChannelMultipliers: JSON.stringify(next.customChannelMultipliers),
-        ignoredRoles: JSON.stringify(next.ignoredRoles),
-        ignoredChannels: JSON.stringify(next.ignoredChannels),
+        customMultipliers: next.customMultipliers as unknown[],
+        customChannelMultipliers: next.customChannelMultipliers as unknown[],
+        ignoredRoles: next.ignoredRoles,
+        ignoredChannels: next.ignoredChannels,
         levelUpChannelId: next.levelUpChannelId,
         levelUpFormat: next.levelUpFormat,
         levelUpMessage: next.levelUpMessage,
