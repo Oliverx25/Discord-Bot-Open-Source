@@ -30,15 +30,6 @@ export class ScheduledMessagesError extends Error {
   }
 }
 
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function resolveGuildId(guildId?: string): string {
   const id = (guildId ?? "").trim();
   if (!id) {
@@ -98,10 +89,10 @@ function rowToMessage(
   row: typeof scheduledMessages.$inferSelect,
 ): ScheduledMessage {
   const frequency = normalizeScheduledFrequency(
-    parseJson<Partial<ScheduledFrequency>>(row.frequency, {}),
+    row.frequency as Partial<ScheduledFrequency>,
   );
   const embedData = normalizeScheduledEmbedData(
-    parseJson<Partial<ScheduledEmbedData>>(row.embedData, {}),
+    row.embedData as Partial<ScheduledEmbedData>,
   );
   return {
     id: row.id,
@@ -276,8 +267,8 @@ export async function createScheduledMessage(
       guildId: id,
       channelId,
       timezone,
-      frequency: JSON.stringify(frequency),
-      embedData: JSON.stringify(embedData),
+      frequency: frequency as unknown as Record<string, unknown>,
+      embedData: embedData as unknown as Record<string, unknown>,
       content,
       pingRoleId,
       isActive: schedule.isActive,
@@ -343,8 +334,8 @@ export async function updateScheduledMessage(
     .set({
       channelId: nextChannelId,
       timezone: nextTimezone,
-      frequency: JSON.stringify(nextFrequency),
-      embedData: JSON.stringify(nextEmbed),
+      frequency: nextFrequency as unknown as Record<string, unknown>,
+      embedData: nextEmbed as unknown as Record<string, unknown>,
       content: nextContent,
       pingRoleId: nextPing,
       isActive: schedule.isActive,

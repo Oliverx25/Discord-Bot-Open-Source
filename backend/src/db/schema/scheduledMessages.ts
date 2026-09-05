@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -21,10 +22,10 @@ export const scheduledMessages = pgTable(
     channelId: text().notNull(),
     /** IANA timezone, ej. America/Mexico_City */
     timezone: text().notNull().default("UTC"),
-    /** JSON: ScheduledFrequency */
-    frequency: text().notNull().default("{}"),
-    /** JSON: ScheduledEmbedData */
-    embedData: text().notNull().default("{}"),
+    /** ScheduledFrequency — documento tipado. */
+    frequency: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    /** ScheduledEmbedData — documento tipado. */
+    embedData: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     content: text().notNull().default(""),
     pingRoleId: text(),
     isActive: boolean().notNull().default(true),

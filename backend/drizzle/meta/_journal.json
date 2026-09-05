@@ -134,6 +134,13 @@
       "when": 1788581417562,
       "tag": "0018_graceful_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788581539251,
+      "tag": "0019_last_shadowcat",
+      "breakpoints": true
     }
   ]
 }
