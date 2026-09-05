@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -45,8 +46,8 @@ export const welcomeSettings = pgTable("welcome_settings", {
   textY: integer().notNull().default(560),
   fontSize: integer().notNull().default(64),
   textColor: text().notNull().default("#FFFFFF"),
-  /** JSON: WelcomeTextLayer[] */
-  textLayers: text(),
+  /** WelcomeTextLayer[] — documento tipado, nullable (legacy sin migrar). */
+  textLayers: jsonb().$type<unknown[]>(),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),

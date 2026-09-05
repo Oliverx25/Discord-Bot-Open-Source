@@ -142,7 +142,7 @@ function layersFromLegacy(row: {
 }
 
 export function parseTextLayersJson(
-  raw: string | null | undefined,
+  raw: unknown,
   legacy?: {
     primaryText?: string | null;
     secondaryText?: string | null;
@@ -152,16 +152,9 @@ export function parseTextLayersJson(
     textColor?: string | null;
   },
 ): WelcomeTextLayer[] {
-  if (raw?.trim()) {
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const layers = normalizeTextLayers(parsed);
-        if (layers.length > 0) return layers;
-      }
-    } catch {
-      // fallback
-    }
+  if (Array.isArray(raw) && raw.length > 0) {
+    const layers = normalizeTextLayers(raw);
+    if (layers.length > 0) return layers;
   }
   if (legacy) return layersFromLegacy(legacy);
   return defaultWelcomeTextLayers();
@@ -332,7 +325,7 @@ export async function saveWelcomeSettings(
     avatarSize,
     avatarBorderWidth,
     avatarBorderColor,
-    textLayers: JSON.stringify(resolvedLayers),
+    textLayers: resolvedLayers,
     primaryText: first?.text ?? "Welcome!",
     secondaryText: second?.text ?? "{username}",
     textX: first?.x ?? DEFAULTS.avatarX,

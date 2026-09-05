@@ -92,6 +92,13 @@
       "when": 1788580457571,
       "tag": "0012_moaning_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788580637841,
+      "tag": "0013_chief_alex_power",
+      "breakpoints": true
     }
   ]
 }

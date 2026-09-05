@@ -340,7 +340,7 @@ export async function saveCanvasEventSettings(
     avatarSize,
     avatarBorderWidth,
     avatarBorderColor,
-    textLayers: JSON.stringify(resolvedLayers),
+    textLayers: resolvedLayers,
     primaryText: first?.text ?? DEFAULT_LAYERS_BY_TYPE[eventType][0]!.text,
     secondaryText: second?.text ?? "{username}",
     textX: first?.x ?? Math.round(WELCOME_CARD_WIDTH / 2),

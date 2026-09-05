@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -37,7 +38,8 @@ export const canvasEventSettings = pgTable(
     textY: integer().notNull().default(560),
     fontSize: integer().notNull().default(64),
     textColor: text().notNull().default("#FFFFFF"),
-    textLayers: text(),
+    /** WelcomeTextLayer[] — documento tipado, nullable. */
+    textLayers: jsonb().$type<unknown[]>(),
     updatedAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),
