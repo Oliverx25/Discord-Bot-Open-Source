@@ -598,6 +598,254 @@ const BULK_DELETE_TYPES = new Set([
   ChannelType.PrivateThread,
 ]);
 
+/** Contexto compartido que recibe cada handler de acción de moderación. */
+interface ModActionCtx {
+  gateway: BotGateway;
+  guild: { id: string; name: string };
+  input: ModActionRequest;
+  auditReason: string;
+  moderatorId: string;
+  actorUserId?: string;
+}
+
+/** Lo que produce un handler — `writeModLog` y el mensaje final salen de acá. */
+interface ModActionOutcome {
+  message: string;
+  targetUserId?: string | null;
+  targetChannelId?: string | null;
+}
+
+type ModActionHandler = (ctx: ModActionCtx) => Promise<ModActionOutcome>;
+
+async function handleWarn(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const userId = assertSnowflake(ctx.input.userId ?? "", "userId");
+  const member = await ctx.gateway.getMember(ctx.guild.id, userId);
+  if (!member) {
+    throw new ModerationError("Member not found.", 404, "MEMBER_NOT_FOUND");
+  }
+  await getDb().insert(warnings).values({
+    guildId: ctx.guild.id,
+    userId,
+    moderatorId: ctx.moderatorId,
+    reason: ctx.auditReason,
+    createdAt: new Date(),
+  });
+  return {
+    message: `Warning recorded for <@${userId}>.`,
+    targetUserId: userId,
+  };
+}
+
+async function handleKick(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const userId = assertSnowflake(ctx.input.userId ?? "", "userId");
+  const [member, actionability] = await Promise.all([
+    ctx.gateway.getMember(ctx.guild.id, userId),
+    ctx.gateway.getMemberActionability(ctx.guild.id, userId),
+  ]);
+  if (!member || !actionability) {
+    throw new ModerationError("Member not found.", 404, "MEMBER_NOT_FOUND");
+  }
+  assertBotCanAct(actionability, userId, "kick", ctx.actorUserId);
+  await ctx.gateway.kickMember(ctx.guild.id, userId, ctx.auditReason);
+  return { message: `${member.username} fue expulsado.`, targetUserId: userId };
+}
+
+async function handleBan(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const userId = assertSnowflake(ctx.input.userId ?? "", "userId");
+  const days = Math.max(
+    0,
+    Math.min(7, Math.round(Number(ctx.input.deleteMessageDays ?? 0))),
+  );
+  const actionability = await ctx.gateway.getMemberActionability(
+    ctx.guild.id,
+    userId,
+  );
+  if (actionability) {
+    assertBotCanAct(actionability, userId, "ban", ctx.actorUserId);
+  }
+  await ctx.gateway.banMember(ctx.guild.id, userId, {
+    reason: ctx.auditReason,
+    deleteMessageSeconds: days * 24 * 60 * 60,
+  });
+  return { message: `User ${userId} banned.`, targetUserId: userId };
+}
+
+async function handleUnban(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const userId = assertSnowflake(ctx.input.userId ?? "", "userId");
+  await ctx.gateway.unbanMember(ctx.guild.id, userId, ctx.auditReason);
+  return { message: `User ${userId} unbanned.`, targetUserId: userId };
+}
+
+async function handleTimeout(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const userId = assertSnowflake(ctx.input.userId ?? "", "userId");
+  const seconds = clampTimeoutSeconds(ctx.input.durationSeconds);
+  if (seconds === null) {
+    throw new ModerationError(
+      "Invalid timeout duration. Use between 1 second and 28 days (e.g. 10m, 1h, 24h).",
+      400,
+      "INVALID_TIMEOUT",
+    );
+  }
+  const [member, actionability] = await Promise.all([
+    ctx.gateway.getMember(ctx.guild.id, userId),
+    ctx.gateway.getMemberActionability(ctx.guild.id, userId),
+  ]);
+  if (!member || !actionability) {
+    throw new ModerationError("Member not found.", 404, "MEMBER_NOT_FOUND");
+  }
+  assertBotCanAct(actionability, userId, "timeout", ctx.actorUserId);
+  const until = new Date(Date.now() + seconds * 1000).toISOString();
+  await ctx.gateway.timeoutMember(ctx.guild.id, userId, until, ctx.auditReason);
+  return {
+    message: `${member.username} en timeout (${seconds}s).`,
+    targetUserId: userId,
+  };
+}
+
+async function handleUntimeout(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const userId = assertSnowflake(ctx.input.userId ?? "", "userId");
+  const [member, actionability] = await Promise.all([
+    ctx.gateway.getMember(ctx.guild.id, userId),
+    ctx.gateway.getMemberActionability(ctx.guild.id, userId),
+  ]);
+  if (!member || !actionability) {
+    throw new ModerationError("Member not found.", 404, "MEMBER_NOT_FOUND");
+  }
+  assertBotCanAct(actionability, userId, "untimeout", ctx.actorUserId);
+  await ctx.gateway.timeoutMember(ctx.guild.id, userId, null, ctx.auditReason);
+  return {
+    message: `Timeout removido de ${member.username}.`,
+    targetUserId: userId,
+  };
+}
+
+async function handleClearwarns(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const userId = assertSnowflake(ctx.input.userId ?? "", "userId");
+  const deleted = await getDb()
+    .delete(warnings)
+    .where(and(eq(warnings.guildId, ctx.guild.id), eq(warnings.userId, userId)))
+    .returning({ id: warnings.id });
+  const message =
+    deleted.length === 0
+      ? `There were no warnings for <@${userId}>.`
+      : `Removed ${deleted.length} warnings from <@${userId}>.`;
+  return { message, targetUserId: userId };
+}
+
+async function handlePurge(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const channelId = assertSnowflake(ctx.input.channelId ?? "", "channelId");
+  const limit = Math.max(
+    1,
+    Math.min(100, Math.round(Number(ctx.input.purgeLimit ?? 10))),
+  );
+  const filterUserId = ctx.input.userId?.trim()
+    ? assertSnowflake(ctx.input.userId, "userId")
+    : null;
+  const channel = await ctx.gateway.getChannel(ctx.guild.id, channelId);
+  if (!channel || !BULK_DELETE_TYPES.has(channel.type)) {
+    throw new ModerationError(
+      "Invalid channel for purge.",
+      400,
+      "CHANNEL_NOT_TEXT",
+    );
+  }
+  const deleted = await ctx.gateway.bulkDeleteMessages(channelId, {
+    limit,
+    filterUserId,
+  });
+  const message = filterUserId
+    ? deleted === 0
+      ? `No recent messages from <@${filterUserId}> in #${channel.name} (max 14 days).`
+      : `Deleted ${deleted} messages from <@${filterUserId}> in #${channel.name}.`
+    : `Deleted ${deleted} messages in #${channel.name}.`;
+  return { message, targetChannelId: channelId };
+}
+
+async function handleSlowmode(ctx: ModActionCtx): Promise<ModActionOutcome> {
+  const channelId = assertSnowflake(ctx.input.channelId ?? "", "channelId");
+  const seconds = Math.max(
+    0,
+    Math.min(21600, Math.round(Number(ctx.input.slowmodeSeconds ?? 0))),
+  );
+  const channel = await ctx.gateway.getChannel(ctx.guild.id, channelId);
+  if (
+    !channel ||
+    (channel.type !== ChannelType.GuildText &&
+      channel.type !== ChannelType.GuildAnnouncement)
+  ) {
+    throw new ModerationError(
+      "Text channel not found.",
+      404,
+      "CHANNEL_NOT_FOUND",
+    );
+  }
+  await ctx.gateway.setChannelSlowmode(
+    ctx.guild.id,
+    channelId,
+    seconds,
+    ctx.auditReason,
+  );
+  const message =
+    seconds === 0
+      ? `Slowmode desactivado en #${channel.name}.`
+      : `Slowmode de ${seconds}s en #${channel.name}.`;
+  return { message, targetChannelId: channelId };
+}
+
+/** Handler compartido de `lock`/`unlock` — solo difiere en el bit SendMessages. */
+function makeLockHandler(locked: boolean): ModActionHandler {
+  return async (ctx) => {
+    const channelId = assertSnowflake(ctx.input.channelId ?? "", "channelId");
+    const channel = await ctx.gateway.getChannel(ctx.guild.id, channelId);
+    if (
+      !channel ||
+      (channel.type !== ChannelType.GuildText &&
+        channel.type !== ChannelType.GuildAnnouncement)
+    ) {
+      throw new ModerationError(
+        "Text channel not found.",
+        404,
+        "CHANNEL_NOT_FOUND",
+      );
+    }
+    const overwrites =
+      (await ctx.gateway.getChannelOverwrites(ctx.guild.id, channelId)) ?? [];
+    const everyone = overwrites.find((o) => o.id === ctx.guild.id);
+    const bit = PermissionFlagsBits.SendMessages;
+    const allow = BigInt(everyone?.allow ?? "0") & ~bit;
+    const currentDeny = BigInt(everyone?.deny ?? "0");
+    const deny = locked ? currentDeny | bit : currentDeny & ~bit;
+    await ctx.gateway.putChannelOverwrite(channelId, ctx.guild.id, {
+      type: 0,
+      allow: allow.toString(),
+      deny: deny.toString(),
+      reason: ctx.auditReason,
+    });
+    const message = locked
+      ? `Channel #${channel.name} locked (@everyone can't send messages).`
+      : `Channel #${channel.name} unlocked.`;
+    return { message, targetChannelId: channelId };
+  };
+}
+
+/** Un handler por `ModActionType` — reemplaza el switch monolítico original. */
+const MOD_ACTION_HANDLERS: Record<ModActionType, ModActionHandler> = {
+  warn: handleWarn,
+  kick: handleKick,
+  ban: handleBan,
+  unban: handleUnban,
+  timeout: handleTimeout,
+  untimeout: handleUntimeout,
+  clearwarns: handleClearwarns,
+  purge: handlePurge,
+  slowmode: handleSlowmode,
+  lock: makeLockHandler(true),
+  unlock: makeLockHandler(false),
+};
+
+/** Acciones que envían DM de sanción antes de ejecutarse (`sendSanctionDm`). */
+const DM_ACTIONS = new Set<ModActionType>(["warn", "kick", "timeout", "ban"]);
+
 export async function executeModAction(
   gateway: BotGateway,
   input: ModActionRequest,
@@ -626,25 +874,8 @@ export async function executeModAction(
   try {
     await ensureGuildRow(guild.id);
 
-    const userActions = new Set([
-      "warn",
-      "kick",
-      "timeout",
-      "ban",
-      "unban",
-      "untimeout",
-    ]);
-    let dmResult = {
-      dmSent: false,
-      dmSkipped: true,
-      dmFailed: false,
-    };
-
-    if (
-      userActions.has(action) &&
-      action !== "unban" &&
-      action !== "untimeout"
-    ) {
+    let dmResult = { dmSent: false, dmSkipped: true, dmFailed: false };
+    if (DM_ACTIONS.has(action)) {
       const userId = assertSnowflake(input.userId ?? "", "userId");
       const botProfile = await gateway
         .getBotProfile(guild.id)
@@ -663,264 +894,26 @@ export async function executeModAction(
       });
     }
 
-    let message = "";
-    let targetUserId: string | null = null;
-    let targetChannelId: string | null = null;
-
-    switch (action) {
-      case "warn": {
-        const userId = assertSnowflake(input.userId ?? "", "userId");
-        targetUserId = userId;
-        const member = await gateway.getMember(guild.id, userId);
-        if (!member) {
-          throw new ModerationError(
-            "Member not found.",
-            404,
-            "MEMBER_NOT_FOUND",
-          );
-        }
-        await getDb().insert(warnings).values({
-          guildId: guild.id,
-          userId,
-          moderatorId,
-          reason: auditReason,
-          createdAt: new Date(),
-        });
-        message = `Warning recorded for <@${userId}>.`;
-        break;
-      }
-
-      case "kick": {
-        const userId = assertSnowflake(input.userId ?? "", "userId");
-        targetUserId = userId;
-        const [member, actionability] = await Promise.all([
-          gateway.getMember(guild.id, userId),
-          gateway.getMemberActionability(guild.id, userId),
-        ]);
-        if (!member || !actionability) {
-          throw new ModerationError(
-            "Member not found.",
-            404,
-            "MEMBER_NOT_FOUND",
-          );
-        }
-        assertBotCanAct(actionability, userId, "kick", actorUserId);
-        await gateway.kickMember(guild.id, userId, auditReason);
-        message = `${member.username} fue expulsado.`;
-        break;
-      }
-
-      case "ban": {
-        const userId = assertSnowflake(input.userId ?? "", "userId");
-        targetUserId = userId;
-        const days = Math.max(
-          0,
-          Math.min(7, Math.round(Number(input.deleteMessageDays ?? 0))),
-        );
-        const actionability = await gateway.getMemberActionability(
-          guild.id,
-          userId,
-        );
-        if (actionability) {
-          assertBotCanAct(actionability, userId, "ban", actorUserId);
-        }
-        await gateway.banMember(guild.id, userId, {
-          reason: auditReason,
-          deleteMessageSeconds: days * 24 * 60 * 60,
-        });
-        message = `User ${userId} banned.`;
-        break;
-      }
-
-      case "unban": {
-        const userId = assertSnowflake(input.userId ?? "", "userId");
-        targetUserId = userId;
-        await gateway.unbanMember(guild.id, userId, auditReason);
-        message = `User ${userId} unbanned.`;
-        dmResult = { dmSent: false, dmSkipped: true, dmFailed: false };
-        break;
-      }
-
-      case "timeout": {
-        const userId = assertSnowflake(input.userId ?? "", "userId");
-        targetUserId = userId;
-        const seconds = clampTimeoutSeconds(input.durationSeconds);
-        if (seconds === null) {
-          throw new ModerationError(
-            "Invalid timeout duration. Use between 1 second and 28 days (e.g. 10m, 1h, 24h).",
-            400,
-            "INVALID_TIMEOUT",
-          );
-        }
-        const [member, actionability] = await Promise.all([
-          gateway.getMember(guild.id, userId),
-          gateway.getMemberActionability(guild.id, userId),
-        ]);
-        if (!member || !actionability) {
-          throw new ModerationError(
-            "Member not found.",
-            404,
-            "MEMBER_NOT_FOUND",
-          );
-        }
-        assertBotCanAct(actionability, userId, "timeout", actorUserId);
-        const until = new Date(Date.now() + seconds * 1000).toISOString();
-        await gateway.timeoutMember(guild.id, userId, until, auditReason);
-        message = `${member.username} en timeout (${seconds}s).`;
-        break;
-      }
-
-      case "untimeout": {
-        const userId = assertSnowflake(input.userId ?? "", "userId");
-        targetUserId = userId;
-        const [member, actionability] = await Promise.all([
-          gateway.getMember(guild.id, userId),
-          gateway.getMemberActionability(guild.id, userId),
-        ]);
-        if (!member || !actionability) {
-          throw new ModerationError(
-            "Member not found.",
-            404,
-            "MEMBER_NOT_FOUND",
-          );
-        }
-        assertBotCanAct(actionability, userId, "untimeout", actorUserId);
-        await gateway.timeoutMember(guild.id, userId, null, auditReason);
-        message = `Timeout removido de ${member.username}.`;
-        dmResult = { dmSent: false, dmSkipped: true, dmFailed: false };
-        break;
-      }
-
-      case "clearwarns": {
-        const userId = assertSnowflake(input.userId ?? "", "userId");
-        targetUserId = userId;
-        const deleted = await getDb()
-          .delete(warnings)
-          .where(
-            and(eq(warnings.guildId, guild.id), eq(warnings.userId, userId)),
-          )
-          .returning({ id: warnings.id });
-        message =
-          deleted.length === 0
-            ? `There were no warnings for <@${userId}>.`
-            : `Removed ${deleted.length} warnings from <@${userId}>.`;
-        break;
-      }
-
-      case "purge": {
-        const channelId = assertSnowflake(input.channelId ?? "", "channelId");
-        targetChannelId = channelId;
-        const limit = Math.max(
-          1,
-          Math.min(100, Math.round(Number(input.purgeLimit ?? 10))),
-        );
-        const filterUserId = input.userId?.trim()
-          ? assertSnowflake(input.userId, "userId")
-          : null;
-        const channel = await gateway.getChannel(guild.id, channelId);
-        if (!channel || !BULK_DELETE_TYPES.has(channel.type)) {
-          throw new ModerationError(
-            "Invalid channel for purge.",
-            400,
-            "CHANNEL_NOT_TEXT",
-          );
-        }
-        const deleted = await gateway.bulkDeleteMessages(channelId, {
-          limit,
-          filterUserId,
-        });
-        if (filterUserId) {
-          message =
-            deleted === 0
-              ? `No recent messages from <@${filterUserId}> in #${channel.name} (max 14 days).`
-              : `Deleted ${deleted} messages from <@${filterUserId}> in #${channel.name}.`;
-        } else {
-          message = `Deleted ${deleted} messages in #${channel.name}.`;
-        }
-        break;
-      }
-
-      case "slowmode": {
-        const channelId = assertSnowflake(input.channelId ?? "", "channelId");
-        targetChannelId = channelId;
-        const seconds = Math.max(
-          0,
-          Math.min(21600, Math.round(Number(input.slowmodeSeconds ?? 0))),
-        );
-        const channel = await gateway.getChannel(guild.id, channelId);
-        if (
-          !channel ||
-          (channel.type !== ChannelType.GuildText &&
-            channel.type !== ChannelType.GuildAnnouncement)
-        ) {
-          throw new ModerationError(
-            "Text channel not found.",
-            404,
-            "CHANNEL_NOT_FOUND",
-          );
-        }
-        await gateway.setChannelSlowmode(
-          guild.id,
-          channelId,
-          seconds,
-          auditReason,
-        );
-        message =
-          seconds === 0
-            ? `Slowmode desactivado en #${channel.name}.`
-            : `Slowmode de ${seconds}s en #${channel.name}.`;
-        break;
-      }
-
-      case "lock":
-      case "unlock": {
-        const channelId = assertSnowflake(input.channelId ?? "", "channelId");
-        targetChannelId = channelId;
-        const locked = action === "lock";
-        const channel = await gateway.getChannel(guild.id, channelId);
-        if (
-          !channel ||
-          (channel.type !== ChannelType.GuildText &&
-            channel.type !== ChannelType.GuildAnnouncement)
-        ) {
-          throw new ModerationError(
-            "Text channel not found.",
-            404,
-            "CHANNEL_NOT_FOUND",
-          );
-        }
-        const overwrites =
-          (await gateway.getChannelOverwrites(guild.id, channelId)) ?? [];
-        const everyone = overwrites.find((o) => o.id === guild.id);
-        const bit = PermissionFlagsBits.SendMessages;
-        const allow = BigInt(everyone?.allow ?? "0") & ~bit;
-        const currentDeny = BigInt(everyone?.deny ?? "0");
-        const deny = locked ? currentDeny | bit : currentDeny & ~bit;
-        await gateway.putChannelOverwrite(channelId, guild.id, {
-          type: 0,
-          allow: allow.toString(),
-          deny: deny.toString(),
-          reason: auditReason,
-        });
-        message = locked
-          ? `Channel #${channel.name} locked (@everyone can't send messages).`
-          : `Channel #${channel.name} unlocked.`;
-        break;
-      }
-
-      default:
-        throw new ModerationError(
-          "Action not implemented.",
-          400,
-          "INVALID_ACTION",
-        );
-    }
+    const ctx: ModActionCtx = {
+      gateway,
+      guild,
+      input,
+      auditReason,
+      moderatorId,
+      actorUserId,
+    };
+    const {
+      message: outcomeMessage,
+      targetUserId,
+      targetChannelId,
+    } = await MOD_ACTION_HANDLERS[action](ctx);
+    let message = outcomeMessage;
 
     await writeModLog({
       guildId: guild.id,
       action,
-      targetUserId,
-      targetChannelId,
+      targetUserId: targetUserId ?? null,
+      targetChannelId: targetChannelId ?? null,
       moderatorId,
       reason: auditReason,
       meta: {
