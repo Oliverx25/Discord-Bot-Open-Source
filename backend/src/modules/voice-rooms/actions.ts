@@ -57,6 +57,180 @@ function mappedAction(action: VoiceActionInput["action"]): VoiceRoomAction {
   return action;
 }
 
+/** Contexto compartido que recibe cada handler — todo lo que `runVoiceRoomAction` ya tenía a mano. */
+interface VoiceActionCtx {
+  member: GuildMember;
+  room: VoiceRoomLive;
+  channel: VoiceChannel;
+  input: VoiceActionInput;
+}
+
+type VoiceActionHandler = (ctx: VoiceActionCtx) => Promise<string>;
+
+async function handleName(ctx: VoiceActionCtx): Promise<string> {
+  const name = sanitizeVoiceRoomName(ctx.input.name ?? "");
+  await setRoomName(ctx.channel, name);
+  return `Name: **${name}**.`;
+}
+
+async function handleLimit(ctx: VoiceActionCtx): Promise<string> {
+  const limit = clampVoiceUserLimit(ctx.input.limit ?? 0);
+  await setRoomLimit(ctx.channel, limit);
+  return limit === 0 ? "No user limit." : `Limit: **${limit}**.`;
+}
+
+function makeLockHandler(locked: boolean): VoiceActionHandler {
+  return async (ctx) => {
+    await applyLock(ctx.channel, locked);
+    await patchRoom(ctx.room.channelId, { locked });
+    return locked
+      ? "Room locked. No one new enters except via permit."
+      : "Room unlocked.";
+  };
+}
+
+function makeGhostHandler(ghosted: boolean): VoiceActionHandler {
+  return async (ctx) => {
+    await applyGhost(ctx.channel, ghosted);
+    await patchRoom(ctx.room.channelId, { ghosted });
+    return ghosted ? "Room hidden (ghost)." : "Room visible again.";
+  };
+}
+
+async function handleBitrate(ctx: VoiceActionCtx): Promise<string> {
+  const kbps = clampVoiceBitrateKbps(
+    ctx.input.bitrate ?? 64,
+    ctx.channel.guild.maximumBitrate,
+  );
+  await setRoomBitrate(ctx.channel, kbps);
+  return `Bitrate: **${kbps} kbps**.`;
+}
+
+async function handleStatus(ctx: VoiceActionCtx): Promise<string> {
+  const status = (ctx.input.status ?? "").trim();
+  if (!status) {
+    throw new VoiceRoomsError("Type a status.", 400, "INVALID_STATUS");
+  }
+  await setRoomStatus(ctx.channel, status);
+  return "Status updated.";
+}
+
+async function handleText(ctx: VoiceActionCtx): Promise<string> {
+  if (ctx.room.textChannelId) {
+    return `Text channel already exists: <#${ctx.room.textChannelId}>.`;
+  }
+  const textId = await ensureTextChannel(
+    ctx.channel.guild,
+    ctx.channel,
+    ctx.member,
+  );
+  await patchRoom(ctx.room.channelId, { textChannelId: textId });
+  return `Text channel: <#${textId}>.`;
+}
+
+async function handlePermit(ctx: VoiceActionCtx): Promise<string> {
+  const userId = ctx.input.targetUserId ?? null;
+  const roleId = ctx.input.targetRoleId ?? null;
+  if (!userId && !roleId) {
+    throw new VoiceRoomsError(
+      "Mention a user or a role.",
+      400,
+      "MISSING_TARGET",
+    );
+  }
+  if (userId) await permitTarget(ctx.channel, userId);
+  if (roleId) await permitTarget(ctx.channel, roleId);
+  return "Permitted.";
+}
+
+async function handleReject(ctx: VoiceActionCtx): Promise<string> {
+  const userId = ctx.input.targetUserId ?? null;
+  const roleId = ctx.input.targetRoleId ?? null;
+  if (!userId && !roleId) {
+    throw new VoiceRoomsError(
+      "Mention a user or a role.",
+      400,
+      "MISSING_TARGET",
+    );
+  }
+  if (userId) await rejectTarget(ctx.channel, userId, false);
+  if (roleId) await rejectTarget(ctx.channel, roleId, true);
+  return "Rejected.";
+}
+
+async function handleTransfer(ctx: VoiceActionCtx): Promise<string> {
+  const toId = ctx.input.targetUserId;
+  if (!toId) {
+    throw new VoiceRoomsError("Choose the new owner.", 400, "MISSING_TARGET");
+  }
+  if (toId === ctx.room.ownerId) {
+    throw new VoiceRoomsError(
+      "They are already the owner.",
+      400,
+      "ALREADY_OWNER",
+    );
+  }
+  if (!ctx.channel.members.has(toId)) {
+    throw new VoiceRoomsError(
+      "The new owner has to be in the room.",
+      400,
+      "NOT_IN_ROOM",
+    );
+  }
+  const occupied = await getRoomByOwner(ctx.room.guildId, toId);
+  if (occupied) {
+    throw new VoiceRoomsError(
+      "That person already has a room.",
+      400,
+      "ALREADY_HAS_ROOM",
+    );
+  }
+  await transferOwnerOverwrites(ctx.channel, ctx.room.ownerId, toId);
+  await patchRoom(ctx.room.channelId, { ownerId: toId });
+  return `Owner: <@${toId}>.`;
+}
+
+async function handleInvite(ctx: VoiceActionCtx): Promise<string> {
+  const toId = ctx.input.targetUserId;
+  if (!toId) {
+    throw new VoiceRoomsError("Choose who to invite.", 400, "MISSING_TARGET");
+  }
+  const url = await createInviteUrl(ctx.channel);
+  const note = ctx.input.inviteMessage?.trim();
+  const body = note
+    ? `${note}\n${url}`
+    : `You were invited to a voice room: ${url}`;
+  const user = await ctx.member.client.users.fetch(toId).catch(() => null);
+  if (user) {
+    const dm = await user.send(body).catch(() => null);
+    if (dm) return `Invite sent to <@${toId}>.`;
+  }
+  return `I couldn't send a DM. Link: ${url}`;
+}
+
+/**
+ * Un handler por acción (excepto `claim`, que se resuelve antes de llegar
+ * acá porque necesita `assertCanControl` con la acción YA mapeada y una
+ * validación extra sobre quién está presente en el canal).
+ */
+const VOICE_ACTION_HANDLERS: Partial<
+  Record<VoiceActionInput["action"], VoiceActionHandler>
+> = {
+  name: handleName,
+  limit: handleLimit,
+  lock: makeLockHandler(true),
+  unlock: makeLockHandler(false),
+  ghost: makeGhostHandler(true),
+  unghost: makeGhostHandler(false),
+  bitrate: handleBitrate,
+  status: handleStatus,
+  text: handleText,
+  permit: handlePermit,
+  reject: handleReject,
+  transfer: handleTransfer,
+  invite: handleInvite,
+};
+
 export async function runVoiceRoomAction(
   input: VoiceActionInput,
 ): Promise<string> {
@@ -91,148 +265,11 @@ export async function runVoiceRoomAction(
     return "You are now the room owner.";
   }
 
-  switch (input.action) {
-    case "name": {
-      const name = sanitizeVoiceRoomName(input.name ?? "");
-      await setRoomName(channel, name);
-      return `Name: **${name}**.`;
-    }
-    case "limit": {
-      const limit = clampVoiceUserLimit(input.limit ?? 0);
-      await setRoomLimit(channel, limit);
-      return limit === 0 ? "No user limit." : `Limit: **${limit}**.`;
-    }
-    case "lock": {
-      await applyLock(channel, true);
-      await patchRoom(room.channelId, { locked: true });
-      return "Room locked. No one new enters except via permit.";
-    }
-    case "unlock": {
-      await applyLock(channel, false);
-      await patchRoom(room.channelId, { locked: false });
-      return "Room unlocked.";
-    }
-    case "ghost": {
-      await applyGhost(channel, true);
-      await patchRoom(room.channelId, { ghosted: true });
-      return "Room hidden (ghost).";
-    }
-    case "unghost": {
-      await applyGhost(channel, false);
-      await patchRoom(room.channelId, { ghosted: false });
-      return "Room visible again.";
-    }
-    case "bitrate": {
-      const kbps = clampVoiceBitrateKbps(
-        input.bitrate ?? 64,
-        channel.guild.maximumBitrate,
-      );
-      await setRoomBitrate(channel, kbps);
-      return `Bitrate: **${kbps} kbps**.`;
-    }
-    case "status": {
-      const status = (input.status ?? "").trim();
-      if (!status) {
-        throw new VoiceRoomsError("Type a status.", 400, "INVALID_STATUS");
-      }
-      await setRoomStatus(channel, status);
-      return "Status updated.";
-    }
-    case "text": {
-      if (room.textChannelId) {
-        return `Text channel already exists: <#${room.textChannelId}>.`;
-      }
-      const textId = await ensureTextChannel(channel.guild, channel, member);
-      await patchRoom(room.channelId, { textChannelId: textId });
-      return `Text channel: <#${textId}>.`;
-    }
-    case "permit": {
-      const userId = input.targetUserId ?? null;
-      const roleId = input.targetRoleId ?? null;
-      if (!userId && !roleId) {
-        throw new VoiceRoomsError(
-          "Mention a user or a role.",
-          400,
-          "MISSING_TARGET",
-        );
-      }
-      if (userId) await permitTarget(channel, userId);
-      if (roleId) await permitTarget(channel, roleId);
-      return "Permitted.";
-    }
-    case "reject": {
-      const userId = input.targetUserId ?? null;
-      const roleId = input.targetRoleId ?? null;
-      if (!userId && !roleId) {
-        throw new VoiceRoomsError(
-          "Mention a user or a role.",
-          400,
-          "MISSING_TARGET",
-        );
-      }
-      if (userId) await rejectTarget(channel, userId, false);
-      if (roleId) await rejectTarget(channel, roleId, true);
-      return "Rejected.";
-    }
-    case "transfer": {
-      const toId = input.targetUserId;
-      if (!toId) {
-        throw new VoiceRoomsError(
-          "Choose the new owner.",
-          400,
-          "MISSING_TARGET",
-        );
-      }
-      if (toId === room.ownerId) {
-        throw new VoiceRoomsError(
-          "They are already the owner.",
-          400,
-          "ALREADY_OWNER",
-        );
-      }
-      if (!channel.members.has(toId)) {
-        throw new VoiceRoomsError(
-          "The new owner has to be in the room.",
-          400,
-          "NOT_IN_ROOM",
-        );
-      }
-      const occupied = await getRoomByOwner(room.guildId, toId);
-      if (occupied) {
-        throw new VoiceRoomsError(
-          "That person already has a room.",
-          400,
-          "ALREADY_HAS_ROOM",
-        );
-      }
-      await transferOwnerOverwrites(channel, room.ownerId, toId);
-      await patchRoom(room.channelId, { ownerId: toId });
-      return `Owner: <@${toId}>.`;
-    }
-    case "invite": {
-      const toId = input.targetUserId;
-      if (!toId) {
-        throw new VoiceRoomsError(
-          "Choose who to invite.",
-          400,
-          "MISSING_TARGET",
-        );
-      }
-      const url = await createInviteUrl(channel);
-      const note = input.inviteMessage?.trim();
-      const body = note
-        ? `${note}\n${url}`
-        : `You were invited to a voice room: ${url}`;
-      const user = await member.client.users.fetch(toId).catch(() => null);
-      if (user) {
-        const dm = await user.send(body).catch(() => null);
-        if (dm) return `Invite sent to <@${toId}>.`;
-      }
-      return `I couldn't send a DM. Link: ${url}`;
-    }
-    default:
-      throw new VoiceRoomsError("Unknown action.", 400, "UNKNOWN_ACTION");
+  const handler = VOICE_ACTION_HANDLERS[input.action];
+  if (!handler) {
+    throw new VoiceRoomsError("Unknown action.", 400, "UNKNOWN_ACTION");
   }
+  return handler({ member, room, channel, input });
 }
 
 export async function loadRoomContext(member: GuildMember): Promise<{
