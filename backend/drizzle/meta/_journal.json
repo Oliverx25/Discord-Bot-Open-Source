@@ -43,6 +43,13 @@
       "when": 1788569932888,
       "tag": "0005_whole_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788577121767,
+      "tag": "0006_happy_the_hunter",
+      "breakpoints": true
     }
   ]
 }

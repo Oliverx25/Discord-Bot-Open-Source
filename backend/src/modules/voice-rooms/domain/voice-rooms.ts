@@ -62,14 +62,6 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseJsonObject(raw: string): unknown {
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return {};
-  }
-}
-
 function mapGenerator(row: VoiceRoomGeneratorRow): VoiceRoomGenerator {
   return {
     id: row.id,
@@ -81,9 +73,10 @@ function mapGenerator(row: VoiceRoomGeneratorRow): VoiceRoomGenerator {
     defaultBitrate: row.defaultBitrate,
     autoText: row.autoText,
     enabled: row.enabled,
-    allowedActions: normalizeVoiceRoomActions(
-      parseJsonObject(row.allowedActions),
-    ),
+    // `allowedActions` es jsonb tipado (Fase 7, MAINT-01): Postgres ya lo
+    // entrega parseado. `normalizeVoiceRoomActions` sigue siendo la guarda
+    // de forma en runtime — protege contra filas de antes de esta migración.
+    allowedActions: normalizeVoiceRoomActions(row.allowedActions),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -273,7 +266,7 @@ export async function createGenerator(
         defaultBitrate: Math.max(0, Math.trunc(input.defaultBitrate ?? 0)),
         autoText: input.autoText === true,
         enabled: input.enabled !== false,
-        allowedActions: JSON.stringify(allowed),
+        allowedActions: allowed,
         updatedAt: new Date(),
       })
       .returning();
@@ -341,7 +334,7 @@ export async function updateGenerator(
           : Math.max(0, Math.trunc(input.defaultBitrate)),
       autoText: input.autoText ?? current.autoText,
       enabled: input.enabled ?? current.enabled,
-      allowedActions: JSON.stringify(allowed),
+      allowedActions: allowed,
       updatedAt: new Date(),
     })
     .where(
