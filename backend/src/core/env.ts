@@ -48,6 +48,7 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_PRO: z.string().optional(),
   STRIPE_PRICE_BUSINESS: z.string().optional(),
+  METRICS_TOKEN: z.string().optional(),
 });
 
 export interface AppEnv {
@@ -71,6 +72,7 @@ export interface AppEnv {
   SHARD_COUNT?: string;
   SHARDS?: string;
   SHARD_TOTAL?: string;
+  METRICS_TOKEN?: string;
 }
 
 function parseServeStatic(raw: string | undefined): boolean {
@@ -134,6 +136,7 @@ export function parseEnv(input: NodeJS.ProcessEnv): AppEnv {
     SHARD_COUNT: raw.SHARD_COUNT,
     SHARDS: raw.SHARDS,
     SHARD_TOTAL: raw.SHARD_TOTAL,
+    METRICS_TOKEN: raw.METRICS_TOKEN,
   };
 }
 

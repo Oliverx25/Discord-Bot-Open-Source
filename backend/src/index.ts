@@ -19,6 +19,7 @@ import {
   runShutdown,
 } from "#core/lifecycle.js";
 import { logger } from "#core/log.js";
+import { installDefaultMetrics } from "#core/metrics/registry.js";
 import { loadModules } from "#core/modules/index.js";
 import {
   roleRunsGateway,
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
 
   const cfg = loadEnv();
   setRuntimeRole(cfg.ADOBO_ROLE);
+  installDefaultMetrics();
 
   // Redis es obligatorio en los tres roles (cache/rate-limit/queue compartidos).
   if (cfg.REDIS_URL) {

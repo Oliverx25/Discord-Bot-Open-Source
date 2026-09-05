@@ -1,0 +1,19 @@
+diff --git a/package.json b/package.json
+index 1fae1b75719fbd38180d7f7dcd0d7822e7a8e8f0..10ad889f176bdb605e508ba08afc74724599f36e 100644
+--- a/package.json
++++ b/package.json
+@@ -8,14 +8,10 @@
+   "types": "build/src/index.d.ts",
+   "exports": {
+     ".": {
+-      "esnext": "./build/esnext/index.js",
+-      "module": "./build/esm/index.js",
+       "types": "./build/src/index.d.ts",
+       "default": "./build/src/index.js"
+     },
+     "./experimental": {
+-      "esnext": "./build/esnext/experimental/index.js",
+-      "module": "./build/esm/experimental/index.js",
+       "types": "./build/src/experimental/index.d.ts",
+       "default": "./build/src/experimental/index.js"
+     }

@@ -13,6 +13,7 @@ import type { BotGateway } from "../discord/botGateway.js";
 import { entitlementsRoutes, requireFeature } from "../entitlements/index.js";
 import { env } from "../env.js";
 import { logger } from "../log.js";
+import { metricsRouter } from "../metrics/route.js";
 import type { ModuleRegistry } from "../modules/registry.js";
 import { errorHandler, notFoundHandler } from "./errorHandler.js";
 import { requireAuth, requireGuildAccess } from "./guildContext.js";
@@ -176,6 +177,7 @@ export function createApp(options: CreateAppOptions): Express {
 
   app.use("/auth", authRateLimiter(), authRouter());
   app.use("/api/health", healthRouter(options.botGateway));
+  app.use("/metrics", metricsRouter());
 
   app.use("/api", apiRateLimiter(), (req, res, next) => {
     if (isPublicApiPath(req, registry)) return next();
@@ -262,6 +264,7 @@ export function createHealthApp(botGateway: BotGateway): Express {
   app.use(requestIdMiddleware());
   app.use(helmet()); // solo JSON de health: la CSP por defecto de helmet basta
   app.use("/api/health", healthRouter(botGateway));
+  app.use("/metrics", metricsRouter());
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

@@ -29,6 +29,9 @@
   "pnpm": {
     "overrides": {
       "qs": "^6.16.0"
+    },
+    "patchedDependencies": {
+      "@opentelemetry/api@1.9.1": "patches/@opentelemetry__api@1.9.1.patch"
     }
   }
 }
