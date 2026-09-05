@@ -64,6 +64,13 @@
       "when": 1788579828891,
       "tag": "0008_violet_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788579969750,
+      "tag": "0009_brave_killer_shrike",
+      "breakpoints": true
     }
   ]
 }

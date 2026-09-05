@@ -68,15 +68,6 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseJson(raw: string | null | undefined): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
-}
-
 function mapSettings(
   guildId: string,
   row: AntiRaidSettingsRow | undefined,
@@ -99,19 +90,15 @@ function mapSettings(
       ? row.lockdownJoinAction
       : "timeout",
     timeoutSeconds: clampRaidTimeoutSeconds(row.timeoutSeconds),
-    whitelistRoleIds: normalizeIdList(parseJson(row.whitelistRoleIds) ?? []),
+    whitelistRoleIds: normalizeIdList(row.whitelistRoleIds ?? []),
     nukeEnabled: row.nukeEnabled,
     nukeWindowSeconds: clampRaidWindowSeconds(row.nukeWindowSeconds),
     nukePunishment: isNukePunishment(row.nukePunishment)
       ? row.nukePunishment
       : "strip",
-    nukeThresholds: normalizeNukeThresholds(parseJson(row.nukeThresholds)),
-    nukeWhitelistUserIds: normalizeIdList(
-      parseJson(row.nukeWhitelistUserIds) ?? [],
-    ),
-    nukeWhitelistRoleIds: normalizeIdList(
-      parseJson(row.nukeWhitelistRoleIds) ?? [],
-    ),
+    nukeThresholds: normalizeNukeThresholds(row.nukeThresholds),
+    nukeWhitelistUserIds: normalizeIdList(row.nukeWhitelistUserIds ?? []),
+    nukeWhitelistRoleIds: normalizeIdList(row.nukeWhitelistRoleIds ?? []),
     lockdownActive: row.lockdownActive,
     lockdownStartedAt: row.lockdownStartedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
@@ -267,13 +254,13 @@ export async function updateAntiRaidSettings(
       accountAgeAction: next.accountAgeAction,
       lockdownJoinAction: next.lockdownJoinAction,
       timeoutSeconds: next.timeoutSeconds,
-      whitelistRoleIds: JSON.stringify(next.whitelistRoleIds),
+      whitelistRoleIds: next.whitelistRoleIds,
       nukeEnabled: next.nukeEnabled,
       nukeWindowSeconds: next.nukeWindowSeconds,
       nukePunishment: next.nukePunishment,
-      nukeThresholds: JSON.stringify(next.nukeThresholds),
-      nukeWhitelistUserIds: JSON.stringify(next.nukeWhitelistUserIds),
-      nukeWhitelistRoleIds: JSON.stringify(next.nukeWhitelistRoleIds),
+      nukeThresholds: next.nukeThresholds as Record<string, unknown>,
+      nukeWhitelistUserIds: next.nukeWhitelistUserIds,
+      nukeWhitelistRoleIds: next.nukeWhitelistRoleIds,
       lockdownActive: current.lockdownActive,
       lockdownStartedAt: current.lockdownStartedAt
         ? new Date(current.lockdownStartedAt)
@@ -294,13 +281,13 @@ export async function updateAntiRaidSettings(
         accountAgeAction: next.accountAgeAction,
         lockdownJoinAction: next.lockdownJoinAction,
         timeoutSeconds: next.timeoutSeconds,
-        whitelistRoleIds: JSON.stringify(next.whitelistRoleIds),
+        whitelistRoleIds: next.whitelistRoleIds,
         nukeEnabled: next.nukeEnabled,
         nukeWindowSeconds: next.nukeWindowSeconds,
         nukePunishment: next.nukePunishment,
-        nukeThresholds: JSON.stringify(next.nukeThresholds),
-        nukeWhitelistUserIds: JSON.stringify(next.nukeWhitelistUserIds),
-        nukeWhitelistRoleIds: JSON.stringify(next.nukeWhitelistRoleIds),
+        nukeThresholds: next.nukeThresholds as Record<string, unknown>,
+        nukeWhitelistUserIds: next.nukeWhitelistUserIds,
+        nukeWhitelistRoleIds: next.nukeWhitelistRoleIds,
         updatedAt: now,
       },
     });
@@ -318,7 +305,7 @@ export async function getLockdownSnapshot(
       .where(eq(antiRaidSettings.guildId, guildId))
       .limit(1),
   );
-  const parsed = parseJson(row?.snapshot);
+  const parsed = row?.snapshot;
   if (!Array.isArray(parsed)) return [];
   return parsed.filter(
     (item): item is LockdownOverwriteSnapshot =>
@@ -352,17 +339,17 @@ export async function setLockdownState(input: {
       accountAgeAction: current.accountAgeAction,
       lockdownJoinAction: current.lockdownJoinAction,
       timeoutSeconds: current.timeoutSeconds,
-      whitelistRoleIds: JSON.stringify(current.whitelistRoleIds),
+      whitelistRoleIds: current.whitelistRoleIds,
       nukeEnabled: current.nukeEnabled,
       nukeWindowSeconds: current.nukeWindowSeconds,
       nukePunishment: current.nukePunishment,
-      nukeThresholds: JSON.stringify(current.nukeThresholds),
-      nukeWhitelistUserIds: JSON.stringify(current.nukeWhitelistUserIds),
-      nukeWhitelistRoleIds: JSON.stringify(current.nukeWhitelistRoleIds),
+      nukeThresholds: current.nukeThresholds as Record<string, unknown>,
+      nukeWhitelistUserIds: current.nukeWhitelistUserIds,
+      nukeWhitelistRoleIds: current.nukeWhitelistRoleIds,
       lockdownActive: input.active,
       lockdownStartedAt: input.active ? now : null,
       lockdownByUserId: input.active ? input.byUserId : null,
-      lockdownSnapshot: JSON.stringify(input.snapshot),
+      lockdownSnapshot: input.snapshot,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -371,7 +358,7 @@ export async function setLockdownState(input: {
         lockdownActive: input.active,
         lockdownStartedAt: input.active ? now : null,
         lockdownByUserId: input.active ? input.byUserId : null,
-        lockdownSnapshot: JSON.stringify(input.snapshot),
+        lockdownSnapshot: input.snapshot,
         updatedAt: now,
       },
     });

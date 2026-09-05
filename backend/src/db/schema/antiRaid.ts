@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -8,7 +9,7 @@ import {
 import { guildSettings } from "./core.js";
 
 /**
- * Anti-Raid por guild. lockdown_snapshot y umbrales nuke son JSON texto.
+ * Anti-Raid por guild. lockdown_snapshot y umbrales nuke son documentos jsonb tipados.
  */
 export const antiRaidSettings = pgTable("anti_raid_settings", {
   guildId: text()
@@ -25,20 +26,23 @@ export const antiRaidSettings = pgTable("anti_raid_settings", {
   accountAgeAction: text().notNull().default("kick"),
   lockdownJoinAction: text().notNull().default("timeout"),
   timeoutSeconds: integer().notNull().default(3600),
-  whitelistRoleIds: text().notNull().default("[]"),
+  whitelistRoleIds: jsonb().$type<string[]>().notNull().default([]),
   nukeEnabled: boolean().notNull().default(false),
   nukeWindowSeconds: integer().notNull().default(10),
   nukePunishment: text().notNull().default("strip"),
-  nukeThresholds: text().notNull().default("{}"),
-  nukeWhitelistUserIds: text().notNull().default("[]"),
-  nukeWhitelistRoleIds: text().notNull().default("[]"),
+  nukeThresholds: jsonb()
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  nukeWhitelistUserIds: jsonb().$type<string[]>().notNull().default([]),
+  nukeWhitelistRoleIds: jsonb().$type<string[]>().notNull().default([]),
   lockdownActive: boolean().notNull().default(false),
   lockdownStartedAt: timestamp({
     withTimezone: true,
     mode: "date",
   }),
   lockdownByUserId: text(),
-  lockdownSnapshot: text().notNull().default("[]"),
+  lockdownSnapshot: jsonb().$type<unknown[]>().notNull().default([]),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),
