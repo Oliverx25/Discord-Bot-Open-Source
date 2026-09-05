@@ -9,6 +9,7 @@ import {
 import type { BotGateway } from "../discord/botGateway.js";
 import { DiscordHttpError } from "../discord/discordHttpError.js";
 import { logger } from "../log.js";
+import { hashSessionId } from "./crypto.js";
 import { listManagedGuilds } from "./discordGuilds.js";
 import {
   consumeOauthState,
@@ -213,18 +214,14 @@ export function authRouter(): Router {
     }
   });
 
+  // AUTH-01: solo POST — un logout por GET es un CSRF de un solo link/imagen
+  // (`sameSite=lax` todavía deja pasar la cookie en una navegación de nivel
+  // superior). El panel ya solo llama a este POST (`frontend/src/lib/api/me.ts`).
   router.post("/logout", async (req, res) => {
     const sid = sessionIdFrom(req);
-    if (sid) await deleteSession(sid);
+    if (sid) await deleteSession(hashSessionId(sid));
     res.clearCookie(SESSION_COOKIE, { path: "/" });
     res.status(204).end();
-  });
-
-  router.get("/logout", async (req, res) => {
-    const sid = sessionIdFrom(req);
-    if (sid) await deleteSession(sid);
-    res.clearCookie(SESSION_COOKIE, { path: "/" });
-    res.redirect("/login");
   });
 
   return router;

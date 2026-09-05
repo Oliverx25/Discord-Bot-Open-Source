@@ -20,6 +20,7 @@ import { healthRouter } from "./health.js";
 import {
   apiRateLimiter,
   authRateLimiter,
+  guildRateLimiter,
   uploadRateLimiter,
 } from "./rateLimit.js";
 import { requestIdMiddleware } from "./requestContext.js";
@@ -31,17 +32,54 @@ export interface CreateAppOptions {
   staticDir: string;
 }
 
-function corsOrigin(): string | string[] {
+/** Misma allowlist para CORS y para el check de Origin en mutaciones (CSRF). */
+export function allowedOrigins(): string[] {
   const raw = env().CORS_ORIGIN?.trim();
   if (raw) {
     const list = raw
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (list.length === 1) return list[0]!;
-    if (list.length > 1) return list;
+    if (list.length > 0) return list;
   }
-  return env().PUBLIC_APP_URL.replace(/\/$/, "") || "http://localhost:4321";
+  return [env().PUBLIC_APP_URL.replace(/\/$/, "") || "http://localhost:4321"];
+}
+
+function corsOrigin(): string | string[] {
+  const list = allowedOrigins();
+  return list.length === 1 ? list[0]! : list;
+}
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * AUTH-01: defensa en profundidad además de `sameSite=lax` (que ya bloquea
+ * POST/PUT/PATCH/DELETE cross-site) y CORS (que ya bloquea leer la
+ * respuesta) — un `Origin` presente y fuera de la allowlist en una mutación
+ * se rechaza directo, sin llegar a tocar sesión ni guild.
+ */
+export function requireTrustedOrigin(): RequestHandler {
+  return (req, res, next) => {
+    if (!MUTATING_METHODS.has(req.method)) {
+      next();
+      return;
+    }
+    const origin = req.headers.origin;
+    if (!origin) {
+      // Sin header Origin (curl, clientes nativos, algunos same-origin
+      // legacy) — `sameSite=lax` sigue siendo la defensa principal para estos.
+      next();
+      return;
+    }
+    if (!allowedOrigins().includes(origin)) {
+      res.status(403).json({
+        error: "Cross-origin request blocked.",
+        code: "CSRF_ORIGIN_MISMATCH",
+      });
+      return;
+    }
+    next();
+  };
 }
 
 function isPublicApiPath(req: Request, registry: ModuleRegistry): boolean {
@@ -103,6 +141,7 @@ export function createApp(options: CreateAppOptions): Express {
   app.use(helmetMiddleware());
   app.use(cors({ origin: corsOrigin(), credentials: true }));
   app.use(cookieParser());
+  app.use(requireTrustedOrigin());
   app.use((req, res, next) => {
     if (req.path === "/api/health" || req.path.startsWith("/api/health/")) {
       next();
@@ -143,16 +182,24 @@ export function createApp(options: CreateAppOptions): Express {
     return requireAuth()(req, res, next);
   });
   app.use("/api/me", meRouter(options.botGateway));
-  app.use("/api/entitlements", requireGuildAccess(), entitlementsRoutes());
+  app.use(
+    "/api/entitlements",
+    requireGuildAccess(),
+    guildRateLimiter(),
+    entitlementsRoutes(),
+  );
   app.use(
     "/api/uploads",
     uploadRateLimiter(),
     requireGuildAccess(),
+    guildRateLimiter(),
     uploadRoutes(),
   );
 
   for (const entry of registry.routes) {
-    const guards: RequestHandler[] = [requireGuildAccess()];
+    // AUTH-01: `guildRateLimiter()` va DESPUÉS de `requireGuildAccess()` —
+    // usa `req.guild.{userId,guildId}` ya autorizados, no un query param.
+    const guards: RequestHandler[] = [requireGuildAccess(), guildRateLimiter()];
     if (entry.feature) guards.push(requireFeature(entry.feature));
     app.use(entry.basePath, ...guards, entry.router);
   }

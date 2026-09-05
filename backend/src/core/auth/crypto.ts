@@ -1,6 +1,7 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHash,
   randomBytes,
   scryptSync,
 } from "node:crypto";
@@ -63,4 +64,14 @@ export function decryptSecret(packed: string): string {
 
 export function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
+}
+
+/**
+ * AUTH-01: la cookie de sesión guarda el token crudo (alta entropía, no hace
+ * falta salt/slow-hash como una contraseña); la fila en `panel_sessions`
+ * guarda `sha256(token)`. Un dump de la base ya no entrega sesiones listas
+ * para usar — solo el hash, inútil sin el token original.
+ */
+export function hashSessionId(rawSessionId: string): string {
+  return createHash("sha256").update(rawSessionId, "utf8").digest("hex");
 }

@@ -7,6 +7,9 @@
 process.env.DATABASE_URL ??=
   "postgresql://adobos:adobos@127.0.0.1:5432/adobos";
 process.env.ADOBO_ROLE ??= "api";
+// `encryptSecret`/`decryptSecret` (sessionStore.ts) lo exigen — cualquier
+// valor de ≥16 chars sirve para un runner de tests descartable.
+process.env.SESSION_SECRET ??= "test-session-secret-not-for-prod";
 
 export async function connectTestDb() {
   const { connectDatabase, migrateDatabase } = await import("#db/client.js");
