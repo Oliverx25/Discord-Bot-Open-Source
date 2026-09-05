@@ -170,7 +170,7 @@ export async function listAllActiveScheduledMessages(): Promise<
  */
 export async function claimDueScheduledMessages(
   limit = 25,
-): Promise<Array<{ id: number; guildId: string }>> {
+): Promise<Array<{ id: number; guildId: string; nextRunAt: string }>> {
   const rows = await getDb().execute(sql`
     WITH due AS (
       SELECT id FROM scheduled_messages
@@ -186,11 +186,23 @@ export async function claimDueScheduledMessages(
        SET claimed_until = now() + interval '2 minutes'
       FROM due
      WHERE s.id = due.id
-    RETURNING s.id, s.guild_id AS "guildId"
+    RETURNING s.id, s.guild_id AS "guildId", s.next_run_at AS "nextRunAt"
   `);
   return (
-    rows as unknown as Array<{ id: number | string; guildId: string }>
-  ).map((r) => ({ id: Number(r.id), guildId: String(r.guildId) }));
+    rows as unknown as Array<{
+      id: number | string;
+      guildId: string;
+      nextRunAt: string | Date;
+    }>
+  ).map((r) => ({
+    id: Number(r.id),
+    guildId: String(r.guildId),
+    // ISO estable para el jobId — misma ocurrencia siempre deriva el mismo id.
+    nextRunAt:
+      r.nextRunAt instanceof Date
+        ? r.nextRunAt.toISOString()
+        : new Date(r.nextRunAt).toISOString(),
+  }));
 }
 
 /** Libera el lease (fila sobrevive con `next_run_at` futuro o inactiva). */

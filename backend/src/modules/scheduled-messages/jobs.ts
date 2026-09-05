@@ -291,8 +291,15 @@ export async function processScheduledMessage(
 export async function processDueScheduledMessages(): Promise<number> {
   if (!botGateway) return 0;
   const claimed = await claimDueScheduledMessages();
-  for (const job of claimed) {
-    await queue.add(job);
+  for (const claim of claimed) {
+    // JOB-01: jobId estable por ocurrencia (id + next_run_at que se está
+    // cumpliendo) — si el lease expira y el productor reclama de nuevo la
+    // MISMA ocurrencia antes de que BullMQ la complete, `.add()` deduplica en
+    // vez de encolar un segundo job que reenviaría el mensaje.
+    const job: DueJob = { id: claim.id, guildId: claim.guildId };
+    await queue.add(job, {
+      jobId: `scheduled-message:${claim.id}:${claim.nextRunAt}`,
+    });
   }
   return claimed.length;
 }

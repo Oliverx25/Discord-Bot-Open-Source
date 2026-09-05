@@ -107,7 +107,9 @@ export async function processDueReminders(): Promise<number> {
   if (!botGateway?.isReady()) return 0;
   const claimed = await claimDueReminders();
   for (const job of claimed) {
-    await queue.add(job);
+    // JOB-01: jobId estable — un recordatorio es de una sola entrega (se
+    // borra al enviarse); deduplica reclamos concurrentes/tras expirar el lease.
+    await queue.add(job, { jobId: `reminder:${job.id}` });
   }
   return claimed.length;
 }

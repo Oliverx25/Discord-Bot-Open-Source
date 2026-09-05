@@ -45,7 +45,11 @@ export async function processDueGiveaways(): Promise<number> {
   if (!botGateway?.isReady()) return 0;
   const claimed = await claimDueGiveaways();
   for (const job of claimed) {
-    await queue.add(job);
+    // JOB-01: jobId estable por transición (start vs end del mismo id) — si
+    // el lease expira y el productor reclama de nuevo la misma transición
+    // antes de que BullMQ la complete, `.add()` deduplica en vez de encolar
+    // un segundo job que dispararía un start/end duplicado.
+    await queue.add(job, { jobId: `giveaway:${job.id}:${job.status}` });
   }
   if (claimed.length > 0) {
     logger.debug({ n: claimed.length }, "giveaways: encolados");
