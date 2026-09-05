@@ -24,6 +24,7 @@ import { installDiscordMetrics } from "#core/metrics/discord.js";
 import { installQueueDepthMetrics } from "#core/metrics/queueDepth.js";
 import { installDefaultMetrics } from "#core/metrics/registry.js";
 import { loadModules } from "#core/modules/index.js";
+import { startOpsAlertsJob, stopOpsAlertsJob } from "#core/ops/alerts.js";
 import {
   roleRunsGateway,
   roleRunsHttp,
@@ -68,6 +69,8 @@ async function main(): Promise<void> {
     // TEN-01: huérfanos son inequívocos por diseño (archivo sin fila en DB
     // tras la gracia) — no hace falta liderazgo para borrarlos.
     startOrphanedUploadsSweeper();
+    startOpsAlertsJob();
+    onShutdown("ops-alerts", () => stopOpsAlertsJob());
   }
 
   if (roleRunsHttp(cfg.ADOBO_ROLE)) {
