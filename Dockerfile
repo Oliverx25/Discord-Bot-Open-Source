@@ -18,6 +18,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches ./patches
 COPY packages/shared/package.json ./packages/shared/
 COPY backend/package.json ./backend/
 COPY frontend/package.json ./frontend/
@@ -41,6 +42,7 @@ ENV SERVE_STATIC=false
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches ./patches
 COPY packages/shared/package.json ./packages/shared/
 COPY backend/package.json ./backend/
 RUN pnpm install --filter @adobos/backend... --prod --frozen-lockfile
