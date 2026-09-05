@@ -485,7 +485,7 @@ async function writeModLog(input: {
       targetChannelId: input.targetChannelId ?? null,
       moderatorId: input.moderatorId,
       reason: input.reason,
-      meta: input.meta ? JSON.stringify(input.meta) : null,
+      meta: input.meta ?? null,
       createdAt: new Date(),
     });
 }

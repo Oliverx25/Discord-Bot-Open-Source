@@ -89,7 +89,8 @@ export const modLogs = pgTable(
     targetChannelId: text(),
     moderatorId: text().notNull(),
     reason: text().notNull().default(""),
-    meta: text(),
+    /** Contexto libre de la acción — documento tipado, nullable. */
+    meta: jsonb().$type<Record<string, unknown>>(),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),
