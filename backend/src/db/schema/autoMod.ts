@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -16,12 +17,12 @@ export const autoModConfig = pgTable("auto_mod_config", {
     .primaryKey()
     .references(() => guildSettings.guildId, { onDelete: "cascade" }),
   enabled: boolean().notNull().default(false),
-  /** JSON: AutoModFilters */
-  filters: text().notNull().default("{}"),
-  /** JSON: string[] */
-  ignoredRoles: text().notNull().default("[]"),
-  /** JSON: string[] */
-  ignoredChannels: text().notNull().default("[]"),
+  /** Documento tipado (Fase 7, MAINT-01): antes JSON como text(). */
+  filters: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+  /** string[] role IDs. */
+  ignoredRoles: jsonb().$type<string[]>().notNull().default([]),
+  /** string[] channel IDs. */
+  ignoredChannels: jsonb().$type<string[]>().notNull().default([]),
   logChannelId: text(),
   /** Días para caducidad de Warns activos; 0 = nunca. */
   warnDecayDays: integer().notNull().default(30),
@@ -31,8 +32,8 @@ export const autoModConfig = pgTable("auto_mod_config", {
   dmOnHit: boolean().notNull().default(true),
   /** Saltar Administrator / ManageMessages. */
   skipStaff: boolean().notNull().default(false),
-  /** JSON: AutoModPunishment[] */
-  punishments: text().notNull().default("[]"),
+  /** AutoModPunishment[] — documento tipado. */
+  punishments: jsonb().$type<unknown[]>().notNull().default([]),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),

@@ -50,6 +50,13 @@
       "when": 1788577121767,
       "tag": "0006_happy_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788579602258,
+      "tag": "0007_fair_mojo",
+      "breakpoints": true
     }
   ]
 }

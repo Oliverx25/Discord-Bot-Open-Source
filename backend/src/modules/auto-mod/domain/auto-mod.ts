@@ -37,15 +37,6 @@ export class AutoModError extends Error {
 const CONFIG_TTL_MS = 60_000;
 const configKey = (guildId: string) => `auto-mod:cfg:${guildId}`;
 
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function resolveGuildId(guildId?: string): string {
   const id = (guildId ?? "").trim();
   if (!id) {
@@ -154,19 +145,18 @@ function rowToConfig(
   row: typeof autoModConfig.$inferSelect | undefined,
 ): AutoModConfig {
   if (!row) return defaultAutoModConfig(guildId);
-  const parsedFilters = parseJson<Partial<AutoModFilters>>(row.filters, {});
   return {
     guildId,
     enabled: Boolean(row.enabled),
-    filters: mergeFilters(parsedFilters),
-    ignoredRoles: parseJson<string[]>(row.ignoredRoles, []),
-    ignoredChannels: parseJson<string[]>(row.ignoredChannels, []),
+    filters: mergeFilters(row.filters as Partial<AutoModFilters>),
+    ignoredRoles: row.ignoredRoles,
+    ignoredChannels: row.ignoredChannels,
     logChannelId: row.logChannelId ?? null,
     warnDecayDays: normalizeWarnDecayDays(row.warnDecayDays),
     warnOnHit: row.warnOnHit !== false,
     dmOnHit: row.dmOnHit !== false,
     skipStaff: Boolean(row.skipStaff),
-    punishments: normalizeAutoModPunishments(parseJson(row.punishments, [])),
+    punishments: normalizeAutoModPunishments(row.punishments),
     updatedAt: new Date(row.updatedAt).toISOString(),
   };
 }
@@ -244,30 +234,30 @@ export async function updateAutoModConfig(
     .values({
       guildId: id,
       enabled: next.enabled,
-      filters: JSON.stringify(next.filters),
-      ignoredRoles: JSON.stringify(next.ignoredRoles),
-      ignoredChannels: JSON.stringify(next.ignoredChannels),
+      filters: next.filters as unknown as Record<string, unknown>,
+      ignoredRoles: next.ignoredRoles,
+      ignoredChannels: next.ignoredChannels,
       logChannelId: next.logChannelId,
       warnDecayDays: next.warnDecayDays,
       warnOnHit: next.warnOnHit,
       dmOnHit: next.dmOnHit,
       skipStaff: next.skipStaff,
-      punishments: JSON.stringify(next.punishments),
+      punishments: next.punishments,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: autoModConfig.guildId,
       set: {
         enabled: next.enabled,
-        filters: JSON.stringify(next.filters),
-        ignoredRoles: JSON.stringify(next.ignoredRoles),
-        ignoredChannels: JSON.stringify(next.ignoredChannels),
+        filters: next.filters as unknown as Record<string, unknown>,
+        ignoredRoles: next.ignoredRoles,
+        ignoredChannels: next.ignoredChannels,
         logChannelId: next.logChannelId,
         warnDecayDays: next.warnDecayDays,
         warnOnHit: next.warnOnHit,
         dmOnHit: next.dmOnHit,
         skipStaff: next.skipStaff,
-        punishments: JSON.stringify(next.punishments),
+        punishments: next.punishments,
         updatedAt: new Date(),
       },
     });
