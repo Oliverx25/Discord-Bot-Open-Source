@@ -1,61 +1,24 @@
-import { eq } from "drizzle-orm";
 import type { RequestHandler } from "express";
 import Stripe from "stripe";
 import { HttpError } from "#core/http/httpError.js";
 import { logger } from "#core/log.js";
-import { getDb, one } from "#db/client.js";
-import { webhookEvents } from "#db/schema.js";
 import {
-  applyCheckoutSession,
-  applyInvoiceEvent,
-  applyStripeSubscription,
-} from "./domain/billing.js";
+  claimWebhookEvent,
+  objectIdOfEvent,
+  processAndFinalize,
+} from "./inbox.js";
 import { requireStripe, requireWebhookSecret } from "./stripe.js";
-
-async function alreadyProcessed(eventId: string): Promise<boolean> {
-  const row = await one(
-    getDb()
-      .select({ eventId: webhookEvents.eventId })
-      .from(webhookEvents)
-      .where(eq(webhookEvents.eventId, eventId))
-      .limit(1),
-  );
-  return Boolean(row);
-}
-
-async function markProcessed(
-  eventId: string,
-  eventType: string,
-): Promise<void> {
-  await getDb()
-    .insert(webhookEvents)
-    .values({ eventId, eventType, processedAt: new Date() })
-    .onConflictDoNothing();
-}
-
-async function processStripeEvent(event: Stripe.Event): Promise<void> {
-  switch (event.type) {
-    case "checkout.session.completed":
-      await applyCheckoutSession(event.data.object);
-      break;
-    case "customer.subscription.created":
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted":
-      await applyStripeSubscription(event.data.object);
-      break;
-    case "invoice.paid":
-    case "invoice.payment_failed":
-      await applyInvoiceEvent(event.data.object);
-      break;
-    default:
-      break;
-  }
-}
 
 /**
  * POST /api/billing/webhook — público, body crudo, firma verificada.
  * Express 5 enruta el throw síncrono y la promesa rechazada al errorHandler;
  * el `try/catch` interno se queda porque traduce el error de firma de Stripe.
+ *
+ * BILL-01: responde 2xx justo después de reclamar el evento (persistido en
+ * `webhook_events`), no después de `processStripeEvent` — Stripe recomienda
+ * responder rápido y no depende de que el efecto ya haya corrido. Si el
+ * proceso muere entre el claim y el resultado, `reconcileStaleWebhookEvents`
+ * (inbox.ts) lo recoge más tarde releyendo el evento vigente desde Stripe.
  */
 export const stripeWebhookHandler: RequestHandler = async (req, res) => {
   if (!Buffer.isBuffer(req.body)) {
@@ -96,13 +59,32 @@ export const stripeWebhookHandler: RequestHandler = async (req, res) => {
     throw error;
   }
 
-  if (await alreadyProcessed(event.id)) {
+  const claim = await claimWebhookEvent(
+    event.id,
+    event.type,
+    objectIdOfEvent(event),
+  );
+
+  if (claim.kind === "duplicate") {
     res.json({ received: true, duplicate: true });
     return;
   }
+  if (claim.kind === "in_flight") {
+    // Otra entrega concurrente ya lo tiene, o un intento previo sigue en
+    // curso/colgado — nunca se ejecuta el efecto dos veces por esta vía.
+    res.json({ received: true, inFlight: true });
+    return;
+  }
+  if (claim.kind === "dead_letter") {
+    logger.error(
+      { eventId: event.id, type: event.type },
+      "webhook stripe: dead-lettered, no more retries",
+    );
+    res.json({ received: true, deadLettered: true });
+    return;
+  }
 
-  await processStripeEvent(event);
-  await markProcessed(event.id, event.type);
-  logger.info({ eventId: event.id, type: event.type }, "webhook stripe");
+  // claim.kind === "claimed": ganamos la carrera. Responder ya, procesar después.
   res.json({ received: true });
+  void processAndFinalize(event);
 };

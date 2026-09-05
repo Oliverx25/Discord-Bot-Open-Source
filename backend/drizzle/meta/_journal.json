@@ -22,6 +22,13 @@
       "when": 1788511252575,
       "tag": "0002_silly_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788567347311,
+      "tag": "0003_neat_bishop",
+      "breakpoints": true
     }
   ]
 }

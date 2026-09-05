@@ -1232,12 +1232,29 @@ export const guildEntitlements = pgTable(
 /**
  * Idempotencia de webhooks de Stripe (`event.id`).
  */
+/**
+ * Inbox de eventos Stripe (BILL-01). `eventId` como PK es el claim atómico:
+ * `INSERT ... ON CONFLICT DO NOTHING` decide quién procesa. `status` +
+ * `attempts` + `lastError` permiten reconciliar los que se quedan en
+ * `pending` (crash entre claim y processed) o `failed` (reintento con backoff).
+ */
 export const webhookEvents = pgTable("webhook_events", {
   eventId: text().primaryKey(),
   eventType: text().notNull(),
-  processedAt: timestamp({ withTimezone: true, mode: "date" })
+  /** ID del objeto Stripe (subscription/invoice/checkout session) para reconciliar sin releer el payload. */
+  objectId: text(),
+  /** pending | processed | failed. */
+  status: text().notNull().default("pending"),
+  attempts: integer().notNull().default(0),
+  // `.defaultNow()` (DEFAULT SQL, no `$defaultFn` de solo-Drizzle): la columna
+  // se agrega a una tabla ya existente — sin default de base de datos, el
+  // ALTER TABLE ... NOT NULL falla en cualquier entorno con filas previas.
+  receivedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
-    .$defaultFn(() => new Date()),
+    .defaultNow(),
+  /** Solo se fija cuando status = processed. */
+  processedAt: timestamp({ withTimezone: true, mode: "date" }),
+  lastError: text(),
 });
 
 export type SubscriptionRow = typeof subscriptions.$inferSelect;

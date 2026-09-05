@@ -9,7 +9,7 @@ import {
   seatsAtCapacity,
   seatsMaxForTier,
 } from "@adobos/shared";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
   assertSeatsAvailable,
@@ -249,28 +249,41 @@ export async function assignGuildToSubscription(input: {
   tier: PlanTier;
   userId: string;
 }): Promise<void> {
-  const existing = await getGuildEntitlementRow(input.guildId);
-  if (
-    existing?.subscriptionId &&
-    existing.subscriptionId !== input.subscriptionId
-  ) {
-    const other = await getSubscriptionById(existing.subscriptionId);
-    if (other && isPaidSubscriptionStatus(other.status)) {
-      throw new HttpError(
-        "This server is already covered by another subscription.",
-        409,
-        "GUILD_ALREADY_COVERED",
-      );
-    }
-  }
+  // BILL-01 (asientos): sin esto, dos guilds distintos compitiendo por el
+  // último asiento de la MISMA suscripción pueden pasar ambos el check de
+  // `assertSeatsAvailable` (SELECT) antes de que ninguno haga el upsert
+  // (INSERT) — no hay unique constraint que lo detecte, cada fila tiene un
+  // guildId distinto. El advisory lock serializa por `subscriptionId`: la
+  // segunda llamada espera a que la primera transacción entera termine antes
+  // de poder siquiera leer el conteo de asientos.
+  await getDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${input.subscriptionId})`,
+    );
 
-  const paidTier =
-    isPlanTier(input.tier) && input.tier !== "free" ? input.tier : "pro";
-  await assertSeatsAvailable(input.subscriptionId, paidTier, input.guildId);
-  await upsertGuildEntitlement({
-    guildId: input.guildId,
-    tier: paidTier,
-    subscriptionId: input.subscriptionId,
+    const existing = await getGuildEntitlementRow(input.guildId);
+    if (
+      existing?.subscriptionId &&
+      existing.subscriptionId !== input.subscriptionId
+    ) {
+      const other = await getSubscriptionById(existing.subscriptionId);
+      if (other && isPaidSubscriptionStatus(other.status)) {
+        throw new HttpError(
+          "This server is already covered by another subscription.",
+          409,
+          "GUILD_ALREADY_COVERED",
+        );
+      }
+    }
+
+    const paidTier =
+      isPlanTier(input.tier) && input.tier !== "free" ? input.tier : "pro";
+    await assertSeatsAvailable(input.subscriptionId, paidTier, input.guildId);
+    await upsertGuildEntitlement({
+      guildId: input.guildId,
+      tier: paidTier,
+      subscriptionId: input.subscriptionId,
+    });
   });
 }
 
