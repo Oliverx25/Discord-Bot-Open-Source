@@ -50,6 +50,23 @@ COPY --from=backend-build /app/backend/dist ./backend/dist
 COPY --from=backend-build /app/backend/drizzle ./backend/drizzle
 COPY --from=backend-build /app/backend/assets ./backend/assets
 
+# Fase 8 (PLAN_FINAL_2026.md): la imagen final nunca invoca `npm`/`npx`/
+# `corepack` (CMD usa `node` directo, el build ya corrió en las etapas
+# anteriores) — solo los trae por venir bundleados en la imagen base de
+# Node, más la caché de pnpm que `corepack prepare` (etapa `base`) dejó en
+# `/root/.cache` (inalcanzable en runtime: el proceso corre como `USER
+# node`, sin permiso sobre `/root`). Esa caché trae un `tar` vulnerable
+# (CVE-2026-59873, CRITICAL, ya parcheado en 7.5.19) que el scan de Trivy
+# en CI bloquearía sin motivo real. Se quita en vez de silenciar el
+# hallazgo.
+RUN rm -rf \
+  /usr/local/lib/node_modules/npm \
+  /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm \
+  /usr/local/bin/npx \
+  /usr/local/bin/corepack \
+  /root/.cache/node/corepack
+
 RUN mkdir -p /data \
   && chown -R node:node /app /data
 
