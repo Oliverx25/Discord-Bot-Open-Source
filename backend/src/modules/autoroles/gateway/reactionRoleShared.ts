@@ -5,7 +5,10 @@ import type {
   User,
 } from "discord.js";
 import { logger } from "#core/log.js";
-import { findReactionRole, toEmojiKey } from "#db/reaction-roles.js";
+import {
+  findReactionRole,
+  toEmojiKey,
+} from "#modules/autoroles/domain/reactionRoles.js";
 import { isRoleAssignableInGuild } from "../assignable.js";
 
 type ReactionLike = MessageReaction | PartialMessageReaction;

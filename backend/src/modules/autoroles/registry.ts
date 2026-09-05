@@ -25,11 +25,11 @@ import { BotGatewayError } from "#core/discord/botGateway.js";
 import { attachmentsToOutgoingFiles } from "#core/discord/outgoing.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
+import { autorolesRegistry, guildSettings } from "#db/schema.js";
 import {
   deleteReactionRolesForMessage,
   upsertReactionRoles,
-} from "#db/reaction-roles.js";
-import { autorolesRegistry, guildSettings } from "#db/schema.js";
+} from "#modules/autoroles/domain/reactionRoles.js";
 import { getEmbedTemplate } from "#modules/messages/templates/service.js";
 import { buildEmbedFromPayload } from "#modules/moderation/dm.js";
 import { assertAssignableRoleIdsViaGateway } from "./assignable.js";

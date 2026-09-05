@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { getDb, one } from "./client.js";
-import { type ReactionRole, reactionRoles } from "./schema.js";
+import { getDb, one } from "#db/client.js";
+import { type ReactionRole, reactionRoles } from "#db/schema.js";
 
 /** Normaliza un emoji de reacción a la clave usada en la tabla. */
 export function toEmojiKey(emoji: {

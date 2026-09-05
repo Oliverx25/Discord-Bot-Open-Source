@@ -24,16 +24,16 @@ import { eq } from "drizzle-orm";
 import type { BotGateway } from "#core/discord/botGateway.js";
 import { attachmentsToOutgoingFiles } from "#core/discord/outgoing.js";
 import { getDb, one } from "#db/client.js";
-import {
-  deleteReactionRolesForMessage,
-  upsertReactionRoles,
-} from "#db/reaction-roles.js";
 import { guildSettings, reactionRolesMenus } from "#db/schema.js";
 import {
   EmbedMediaError,
   requireHttpUrl,
   resolveEmbedMedia,
 } from "#lib/embedMedia.js";
+import {
+  deleteReactionRolesForMessage,
+  upsertReactionRoles,
+} from "#modules/autoroles/domain/reactionRoles.js";
 import { assertAssignableRoleIdsViaGateway } from "../assignable.js";
 import { AutoRoleError } from "../errors.js";
 

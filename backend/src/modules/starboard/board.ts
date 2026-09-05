@@ -18,7 +18,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { logger } from "#core/log.js";
-import { toEmojiKey } from "#db/reaction-roles.js";
+import { toEmojiKey } from "#modules/autoroles/domain/reactionRoles.js";
 import {
   deleteStarboardPost,
   getPostByOriginal,
