@@ -165,6 +165,33 @@ export async function pingDatabase(): Promise<boolean> {
   }
 }
 
+export interface PoolStateCount {
+  state: string;
+  count: number;
+}
+
+/**
+ * Fase 8 (métricas): conexiones reales vistas por Postgres para el
+ * `application_name` de este proceso (`adobos-<role>`, seteado en
+ * `connectDatabase()`). `postgres` (porsager) no expone contadores de pool
+ * en su API pública (`open`/`busy`/`full`/etc. son closures internas del
+ * módulo) — `pg_stat_activity` da el mismo dato, y de la fuente de verdad
+ * real (el propio servidor), sin depender de internals de la librería.
+ */
+export async function poolStats(): Promise<PoolStateCount[]> {
+  if (!sql) return [];
+  const rows = await sql<{ state: string | null; count: string }[]>`
+    SELECT state, count(*)::text AS count
+    FROM pg_stat_activity
+    WHERE application_name = ${`adobos-${runtimeRole()}`}
+    GROUP BY state
+  `;
+  return rows.map((r) => ({
+    state: r.state ?? "unknown",
+    count: Number(r.count),
+  }));
+}
+
 export async function closeDatabase(): Promise<void> {
   if (sql) {
     await sql.end({ timeout: 5 }).catch(() => undefined);

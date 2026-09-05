@@ -13,6 +13,10 @@ import { Queue, Worker } from "bullmq";
 import { redisUrl } from "#core/cache/redis.js";
 import { onShutdown } from "#core/lifecycle.js";
 import { logger } from "#core/log.js";
+import {
+  queueJobFailures,
+  queueJobStalled,
+} from "#core/metrics/queueCounters.js";
 import { roleRunsWorker } from "#core/runtime/index.js";
 import { newBullConnection } from "./connection.js";
 
@@ -28,6 +32,13 @@ const activeWorkers = new Set<string>();
 
 export function activeQueueWorkerNames(): string[] {
   return [...activeWorkers];
+}
+
+/** Fase 8 (métricas): `Queue` vivas para muestrear profundidad (`queueDepth.ts`). */
+const queueInstances = new Map<string, Queue>();
+
+export function queueRegistrySnapshot(): ReadonlyMap<string, Queue> {
+  return queueInstances;
 }
 
 const WORKER_CONCURRENCY = 4;
@@ -49,7 +60,11 @@ export function defineQueue<T>(name: string): QueueHandle<T> {
     const connection = newBullConnection();
     if (!connection) return null;
     queue = new Queue(name, { connection });
-    onShutdown(`queue:${name}`, () => queue?.close());
+    queueInstances.set(name, queue);
+    onShutdown(`queue:${name}`, () => {
+      queueInstances.delete(name);
+      return queue?.close();
+    });
     return queue;
   }
 
@@ -82,6 +97,10 @@ export function defineQueue<T>(name: string): QueueHandle<T> {
       if (!useRedis || worker || !roleRunsWorker()) return;
       const connection = newBullConnection();
       if (!connection) return;
+      // Fase 8 (métricas): mantiene un `Queue` vivo también en el rol
+      // `worker` — sin esto, un worker puro (que nunca llama `.add()`) nunca
+      // tendría de dónde muestrear su propia profundidad de cola.
+      ensureQueue();
       worker = new Worker(
         name,
         async (job) => {
@@ -90,10 +109,20 @@ export function defineQueue<T>(name: string): QueueHandle<T> {
         { connection, concurrency: WORKER_CONCURRENCY },
       );
       worker.on("failed", (job, err) => {
+        const attempts = job?.attemptsMade ?? 0;
+        const maxAttempts = job?.opts?.attempts ?? 1;
+        queueJobFailures.inc({
+          queue: name,
+          final: String(attempts >= maxAttempts),
+        });
         logger.warn(
-          { err, queue: name, jobId: job?.id, attempts: job?.attemptsMade },
+          { err, queue: name, jobId: job?.id, attempts },
           "queue: job falló",
         );
+      });
+      worker.on("stalled", (jobId) => {
+        queueJobStalled.inc({ queue: name });
+        logger.warn({ queue: name, jobId }, "queue: job stalled");
       });
       activeWorkers.add(name);
       onShutdown(`worker:${name}`, () => {

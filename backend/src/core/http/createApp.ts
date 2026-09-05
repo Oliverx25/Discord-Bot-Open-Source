@@ -13,6 +13,7 @@ import type { BotGateway } from "../discord/botGateway.js";
 import { entitlementsRoutes, requireFeature } from "../entitlements/index.js";
 import { env } from "../env.js";
 import { logger } from "../log.js";
+import { httpMetricsMiddleware } from "../metrics/http.js";
 import { metricsRouter } from "../metrics/route.js";
 import type { ModuleRegistry } from "../modules/registry.js";
 import { errorHandler, notFoundHandler } from "./errorHandler.js";
@@ -143,6 +144,7 @@ export function createApp(options: CreateAppOptions): Express {
   app.use(cors({ origin: corsOrigin(), credentials: true }));
   app.use(cookieParser());
   app.use(requireTrustedOrigin());
+  app.use(httpMetricsMiddleware());
   app.use((req, res, next) => {
     if (req.path === "/api/health" || req.path.startsWith("/api/health/")) {
       next();

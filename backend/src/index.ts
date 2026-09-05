@@ -19,6 +19,9 @@ import {
   runShutdown,
 } from "#core/lifecycle.js";
 import { logger } from "#core/log.js";
+import { installDbPoolMetrics } from "#core/metrics/dbPool.js";
+import { installDiscordMetrics } from "#core/metrics/discord.js";
+import { installQueueDepthMetrics } from "#core/metrics/queueDepth.js";
 import { installDefaultMetrics } from "#core/metrics/registry.js";
 import { loadModules } from "#core/modules/index.js";
 import {
@@ -55,6 +58,8 @@ async function main(): Promise<void> {
   // OPS-01: nunca migra acá — el one-shot `migrate` de Compose ya corrió
   // antes de que este proceso arranque (ver docker-compose*.yml).
   await connectDatabase();
+  installDbPoolMetrics();
+  installQueueDepthMetrics();
   onShutdown("db", () => closeDatabase());
 
   if (roleRunsWorker(cfg.ADOBO_ROLE)) {
@@ -102,6 +107,7 @@ async function main(): Promise<void> {
     : createHealthApp(botGateway);
 
   if (bot) {
+    installDiscordMetrics(bot);
     // Warmer: reescribe la caché read-through de Redis por evento (solo si hay
     // un `api` que la lea, i.e. Redis activo).
     if (cfg.REDIS_URL) installCacheWarmer(bot, botGateway);
