@@ -57,15 +57,6 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseJsonList(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    return normalizeAutoReplyChannelIds(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
 function mapReply(row: AutoReplyRow): AutoReply {
   return {
     id: row.id,
@@ -78,8 +69,8 @@ function mapReply(row: AutoReplyRow): AutoReply {
     wholeWord: row.wholeWord,
     useReply: row.useReply,
     cooldownSeconds: row.cooldownSeconds,
-    allowedChannelIds: parseJsonList(row.allowedChannelIds),
-    ignoredChannelIds: parseJsonList(row.ignoredChannelIds),
+    allowedChannelIds: normalizeAutoReplyChannelIds(row.allowedChannelIds),
+    ignoredChannelIds: normalizeAutoReplyChannelIds(row.ignoredChannelIds),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -189,12 +180,8 @@ export async function createAutoReply(
       wholeWord: input.wholeWord === true,
       useReply: input.useReply !== false,
       cooldownSeconds: clampAutoReplyCooldown(input.cooldownSeconds),
-      allowedChannelIds: JSON.stringify(
-        normalizeAutoReplyChannelIds(input.allowedChannelIds),
-      ),
-      ignoredChannelIds: JSON.stringify(
-        normalizeAutoReplyChannelIds(input.ignoredChannelIds),
-      ),
+      allowedChannelIds: normalizeAutoReplyChannelIds(input.allowedChannelIds),
+      ignoredChannelIds: normalizeAutoReplyChannelIds(input.ignoredChannelIds),
       createdAt: now,
       updatedAt: now,
     })
@@ -265,16 +252,14 @@ export async function updateAutoReply(
         input.cooldownSeconds !== undefined
           ? clampAutoReplyCooldown(input.cooldownSeconds)
           : current.cooldownSeconds,
-      allowedChannelIds: JSON.stringify(
+      allowedChannelIds:
         input.allowedChannelIds !== undefined
           ? normalizeAutoReplyChannelIds(input.allowedChannelIds)
           : current.allowedChannelIds,
-      ),
-      ignoredChannelIds: JSON.stringify(
+      ignoredChannelIds:
         input.ignoredChannelIds !== undefined
           ? normalizeAutoReplyChannelIds(input.ignoredChannelIds)
           : current.ignoredChannelIds,
-      ),
       updatedAt: new Date(),
     })
     .where(and(eq(autoReplies.id, replyId), eq(autoReplies.guildId, id)))

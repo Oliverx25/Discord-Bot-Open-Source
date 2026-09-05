@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -26,8 +27,8 @@ export const autoReplies = pgTable(
     wholeWord: boolean().notNull().default(false),
     useReply: boolean().notNull().default(true),
     cooldownSeconds: integer().notNull().default(0),
-    allowedChannelIds: text().notNull().default("[]"),
-    ignoredChannelIds: text().notNull().default("[]"),
+    allowedChannelIds: jsonb().$type<string[]>().notNull().default([]),
+    ignoredChannelIds: jsonb().$type<string[]>().notNull().default([]),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),
