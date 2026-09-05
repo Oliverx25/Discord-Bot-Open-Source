@@ -103,9 +103,9 @@ export type ModuleRegisterFn = (ctx: ModuleContext) => void;
 /**
  * Contrato plug-and-play de un bloque Lego del bot. Cada módulo declara solo
  * las fases que necesita:
- * - `registerHttp`  → rutas del panel. Roles: `all`, `api`.
- * - `registerGateway` → listeners de gateway + comandos + interacciones. Roles: `all`, `gateway`.
- * - `registerJobs`  → schedulers, colas, side-effects de crons. Roles: `all`, `worker`.
+ * - `registerHttp`  → rutas del panel. Rol: `api`.
+ * - `registerGateway` → listeners de gateway + comandos + interacciones. Rol: `gateway`.
+ * - `registerJobs`  → schedulers, colas, side-effects de crons. Rol: `worker`.
  */
 export interface AdobosModule {
   id: ModuleId;
