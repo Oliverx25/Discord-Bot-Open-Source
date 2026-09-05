@@ -92,7 +92,11 @@ export type EconomyPurchaseStatus =
   | "fulfilled"
   | "pending"
   | "failed"
-  | "refunded";
+  | "refunded"
+  // ECO-01: una recompensa parcial (p. ej. rol) no pudo revertirse antes de
+  // reembolsar — nunca se reembolsa sin compensar primero, así que esto
+  // queda para que soporte lo resuelva a mano en vez de perder el registro.
+  | "needs_reconciliation";
 
 export interface EconomyPurchase {
   id: string;

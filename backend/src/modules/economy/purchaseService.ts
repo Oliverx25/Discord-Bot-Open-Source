@@ -12,6 +12,7 @@ import {
   PermissionFlagsBits,
   type TextChannel,
 } from "discord.js";
+import { eq } from "drizzle-orm";
 import { logger } from "#core/log.js";
 import { getDb } from "#db/client.js";
 import {
@@ -308,6 +309,80 @@ async function preflightRewards(
   }
 }
 
+type RewardKind = "role" | "channel" | "boost" | "manual";
+
+interface CompletedStep {
+  kind: RewardKind;
+  meta: Record<string, unknown>;
+}
+
+/**
+ * ECO-01 (PLAN_FINAL_2026.md): deshace un paso ya concedido cuando un paso
+ * posterior falla. Devuelve `false` cuando el efecto real no pudo revertirse
+ * (Discord rechazó el `remove`/`delete`, o el reward es un ticket manual que
+ * ya notificó a staff y no se puede des-notificar) — el caller nunca reembolsa
+ * automáticamente en ese caso, para no regalar la recompensa Y el dinero.
+ */
+async function compensateStep(
+  guild: Guild,
+  member: GuildMember,
+  purchaseId: string,
+  step: CompletedStep,
+): Promise<boolean> {
+  try {
+    switch (step.kind) {
+      case "role": {
+        const roleId = String(step.meta.roleId ?? "");
+        if (roleId) {
+          await member.roles.remove(roleId, "Purchase rollback (ECO-01)");
+        }
+        await getDb()
+          .delete(economyOwnedRoles)
+          .where(eq(economyOwnedRoles.purchaseId, purchaseId));
+        return true;
+      }
+      case "channel": {
+        const channelId = String(step.meta.channelId ?? "");
+        const channel = channelId
+          ? (guild.channels.cache.get(channelId) ??
+            (await guild.channels.fetch(channelId).catch(() => null)))
+          : null;
+        if (channel) {
+          await channel.delete("Purchase rollback (ECO-01)");
+        }
+        await getDb()
+          .delete(economyOwnedChannels)
+          .where(eq(economyOwnedChannels.purchaseId, purchaseId));
+        return true;
+      }
+      case "boost": {
+        await getDb()
+          .delete(economyUserBoosts)
+          .where(eq(economyUserBoosts.purchaseId, purchaseId));
+        return true;
+      }
+      case "manual": {
+        // No hay fila propia que borrar y el ping/hilo de staff ya se vio —
+        // no hay forma real de "des-notificar". No se puede garantizar la
+        // reversión, así que se trata como compensación fallida a propósito.
+        logger.warn(
+          { purchaseId, messageId: step.meta.messageId },
+          "shop rollback: manual ticket needs staff cancellation (can't auto-compensate)",
+        );
+        return false;
+      }
+      default:
+        return true;
+    }
+  } catch (error: unknown) {
+    logger.error(
+      { err: error, purchaseId, kind: step.kind },
+      "shop rollback: compensation failed",
+    );
+    return false;
+  }
+}
+
 export interface PurchaseResult {
   purchaseId: string;
   item: EconomyShopItem;
@@ -352,62 +427,10 @@ export async function purchaseShopItem(
   );
 
   const purchaseId = crypto.randomUUID();
-  const results: Record<string, unknown>[] = [];
-  let anyPending = false;
 
-  try {
-    const tasks: Array<() => Promise<RewardResult>> = [];
-    if (item.rewards.hasRole) {
-      tasks.push(() => fulfillRole(guild, member, item, purchaseId));
-    }
-    if (item.rewards.hasChannel) {
-      tasks.push(() => fulfillChannel(guild, member, item, purchaseId));
-    }
-    if (item.rewards.hasBoost) {
-      tasks.push(() => fulfillBoost(guild, member, item, purchaseId));
-    }
-    if (item.rewards.hasManual) {
-      tasks.push(() => fulfillManual(guild, member, item, purchaseId));
-    }
-
-    // Orden fijo del sistema; promesas en paralelo cuando hay varias.
-    const settled = await Promise.all(tasks.map((fn) => fn()));
-    for (const result of settled) {
-      results.push(result.meta);
-      if (result.pending) anyPending = true;
-    }
-  } catch (error) {
-    await refundShopPurchase(
-      guild.id,
-      member.id,
-      item.id,
-      item.price,
-      item.stock !== null,
-    );
-
-    await getDb()
-      .insert(economyPurchases)
-      .values({
-        id: purchaseId,
-        guildId: guild.id,
-        userId: member.id,
-        itemId: item.id,
-        itemName: item.name,
-        pricePaid: item.price,
-        status: "failed",
-        metadata: JSON.stringify({
-          error: error instanceof Error ? error.message : "unknown",
-          results,
-        }),
-        createdAt: new Date(),
-      });
-
-    throw error;
-  }
-
-  const status: EconomyPurchaseStatus = anyPending ? "pending" : "fulfilled";
-  const metadata = { rewards: results };
-
+  // ECO-01: fila `pending` ANTES de tocar Discord. Si el proceso muere en
+  // mitad del fulfillment, queda un registro durable de que se cobró y qué
+  // se estaba entregando — antes no había ninguna fila hasta el final.
   await getDb()
     .insert(economyPurchases)
     .values({
@@ -417,10 +440,114 @@ export async function purchaseShopItem(
       itemId: item.id,
       itemName: item.name,
       pricePaid: item.price,
-      status,
-      metadata: JSON.stringify(metadata),
+      status: "pending",
+      metadata: JSON.stringify({ rewards: [] }),
       createdAt: new Date(),
     });
+
+  const steps: Array<{ kind: RewardKind; run: () => Promise<RewardResult> }> =
+    [];
+  if (item.rewards.hasRole) {
+    steps.push({
+      kind: "role",
+      run: () => fulfillRole(guild, member, item, purchaseId),
+    });
+  }
+  if (item.rewards.hasChannel) {
+    steps.push({
+      kind: "channel",
+      run: () => fulfillChannel(guild, member, item, purchaseId),
+    });
+  }
+  if (item.rewards.hasBoost) {
+    steps.push({
+      kind: "boost",
+      run: () => fulfillBoost(guild, member, item, purchaseId),
+    });
+  }
+  if (item.rewards.hasManual) {
+    steps.push({
+      kind: "manual",
+      run: () => fulfillManual(guild, member, item, purchaseId),
+    });
+  }
+
+  const completed: CompletedStep[] = [];
+  let anyPending = false;
+  let failure: unknown = null;
+
+  // ECO-01: secuencial, no `Promise.all` — si el paso N falla, se sabe EXACTO
+  // qué pasos 1..N-1 ya se concedieron (Discord + fila propia) y hay que revertir.
+  for (const step of steps) {
+    try {
+      const result = await step.run();
+      completed.push({ kind: step.kind, meta: result.meta });
+      if (result.pending) anyPending = true;
+    } catch (error: unknown) {
+      failure = error;
+      break;
+    }
+  }
+
+  if (failure) {
+    let compensationOk = true;
+    for (const step of [...completed].reverse()) {
+      const ok = await compensateStep(guild, member, purchaseId, step);
+      if (!ok) compensationOk = false;
+    }
+
+    const errorMessage = failure instanceof Error ? failure.message : "unknown";
+
+    if (compensationOk) {
+      // Todas las recompensas ya concedidas se revirtieron de verdad —
+      // recién ahora es seguro reembolsar.
+      await refundShopPurchase(
+        guild.id,
+        member.id,
+        item.id,
+        item.price,
+        item.stock !== null,
+      );
+      await getDb()
+        .update(economyPurchases)
+        .set({
+          status: "refunded",
+          metadata: JSON.stringify({
+            error: errorMessage,
+            compensated: completed.map((c) => c.kind),
+          }),
+        })
+        .where(eq(economyPurchases.id, purchaseId));
+    } else {
+      // No se puede garantizar que la(s) recompensa(s) ya entregadas se
+      // revirtieron — reembolsar aquí regalaría la recompensa Y el dinero.
+      // Queda para soporte; el historial trae todo lo necesario para resolverlo.
+      logger.error(
+        { purchaseId, guildId: guild.id, userId: member.id },
+        "shop: purchase needs manual reconciliation — reward(s) couldn't be reverted, no automatic refund",
+      );
+      await getDb()
+        .update(economyPurchases)
+        .set({
+          status: "needs_reconciliation",
+          metadata: JSON.stringify({
+            error: errorMessage,
+            partialRewards: completed,
+          }),
+        })
+        .where(eq(economyPurchases.id, purchaseId));
+    }
+
+    throw failure;
+  }
+
+  const status: EconomyPurchaseStatus = anyPending ? "pending" : "fulfilled";
+  const metadata = { rewards: completed.map((c) => c.meta) };
+
+  await getDb()
+    .update(economyPurchases)
+    .set({ status, metadata: JSON.stringify(metadata) })
+    .where(eq(economyPurchases.id, purchaseId));
 
   return {
     purchaseId,
