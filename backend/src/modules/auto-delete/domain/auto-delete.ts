@@ -44,15 +44,6 @@ export function setAutoDeleteConfigChangeListener(
   onConfigChanged = listener;
 }
 
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function resolveGuildId(guildId?: string): string {
   const id = (guildId ?? "").trim();
   if (!id) {
@@ -122,7 +113,7 @@ function rowToConfig(
   return {
     guildId,
     enabled: Boolean(row.enabled),
-    rules: normalizeAutoDeleteRules(parseJson<AutoDeleteRule[]>(row.rules, [])),
+    rules: normalizeAutoDeleteRules(row.rules as AutoDeleteRule[]),
     timezone: normalizeScheduledTimezone(row.timezone),
     updatedAt: new Date(row.updatedAt).toISOString(),
   };
@@ -197,7 +188,7 @@ export async function updateAutoDeleteConfig(
     .values({
       guildId: id,
       enabled: next.enabled,
-      rules: JSON.stringify(next.rules),
+      rules: next.rules,
       timezone: next.timezone,
       updatedAt: new Date(),
     })
@@ -205,7 +196,7 @@ export async function updateAutoDeleteConfig(
       target: autoDeleteConfig.guildId,
       set: {
         enabled: next.enabled,
-        rules: JSON.stringify(next.rules),
+        rules: next.rules,
         timezone: next.timezone,
         updatedAt: new Date(),
       },

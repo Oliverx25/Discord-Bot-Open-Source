@@ -71,6 +71,13 @@
       "when": 1788579969750,
       "tag": "0009_brave_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788580100412,
+      "tag": "0010_yielding_ulik",
+      "breakpoints": true
     }
   ]
 }

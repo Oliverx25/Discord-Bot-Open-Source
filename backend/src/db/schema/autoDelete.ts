@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -16,8 +17,8 @@ export const autoDeleteConfig = pgTable("auto_delete_config", {
     .primaryKey()
     .references(() => guildSettings.guildId, { onDelete: "cascade" }),
   enabled: boolean().notNull().default(false),
-  /** JSON: AutoDeleteRule[] */
-  rules: text().notNull().default("[]"),
+  /** AutoDeleteRule[] — documento tipado. */
+  rules: jsonb().$type<unknown[]>().notNull().default([]),
   /** IANA timezone del cron SCHEDULED. */
   timezone: text().notNull().default("UTC"),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
