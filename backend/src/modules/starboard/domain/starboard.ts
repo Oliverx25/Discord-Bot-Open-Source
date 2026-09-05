@@ -57,15 +57,6 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseJsonArray(raw: string | null | undefined): unknown {
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return [];
-  }
-}
-
 function mapSettings(
   guildId: string,
   row: StarboardSettingsRow | undefined,
@@ -74,14 +65,12 @@ function mapSettings(
   return {
     guildId,
     channelId: row.channelId,
-    emojis: normalizeStarboardEmojis(parseJsonArray(row.emojis)),
+    emojis: normalizeStarboardEmojis(row.emojis),
     threshold: clampStarboardThreshold(row.threshold),
     enabled: row.enabled,
     allowSelfStar: row.allowSelfStar,
     allowBots: row.allowBots,
-    ignoreChannelIds: normalizeIgnoreChannelIds(
-      parseJsonArray(row.ignoreChannelIds),
-    ),
+    ignoreChannelIds: normalizeIgnoreChannelIds(row.ignoreChannelIds),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -167,24 +156,24 @@ export async function updateStarboardSettings(
     .values({
       guildId: id,
       channelId,
-      emojis: JSON.stringify(emojis),
+      emojis,
       threshold,
       enabled,
       allowSelfStar,
       allowBots,
-      ignoreChannelIds: JSON.stringify(ignoreChannelIds),
+      ignoreChannelIds,
       updatedAt: now,
     })
     .onConflictDoUpdate({
       target: starboardSettings.guildId,
       set: {
         channelId,
-        emojis: JSON.stringify(emojis),
+        emojis,
         threshold,
         enabled,
         allowSelfStar,
         allowBots,
-        ignoreChannelIds: JSON.stringify(ignoreChannelIds),
+        ignoreChannelIds,
         updatedAt: now,
       },
     });

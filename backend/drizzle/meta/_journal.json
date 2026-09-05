@@ -141,6 +141,13 @@
       "when": 1788581539251,
       "tag": "0019_last_shadowcat",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788581667161,
+      "tag": "0020_material_kingpin",
+      "breakpoints": true
     }
   ]
 }

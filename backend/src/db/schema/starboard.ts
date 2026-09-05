@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -10,21 +11,21 @@ import {
 import { guildSettings } from "./core.js";
 
 /**
- * Un tablón Starboard por guild. emojis / ignore_channel_ids son JSON texto.
+ * Un tablón Starboard por guild. emojis / ignore_channel_ids son documentos jsonb tipados.
  */
 export const starboardSettings = pgTable("starboard_settings", {
   guildId: text()
     .primaryKey()
     .references(() => guildSettings.guildId, { onDelete: "cascade" }),
   channelId: text(),
-  /** JSON: string[] de claves unicode:/custom: */
-  emojis: text().notNull().default('["unicode:⭐"]'),
+  /** string[] de claves unicode:/custom: */
+  emojis: jsonb().$type<string[]>().notNull().default(["unicode:⭐"]),
   threshold: integer().notNull().default(3),
   enabled: boolean().notNull().default(false),
   allowSelfStar: boolean().notNull().default(false),
   allowBots: boolean().notNull().default(false),
-  /** JSON: snowflake[] */
-  ignoreChannelIds: text().notNull().default("[]"),
+  /** snowflake[] — documento tipado. */
+  ignoreChannelIds: jsonb().$type<string[]>().notNull().default([]),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),
