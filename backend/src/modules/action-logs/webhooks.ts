@@ -12,16 +12,6 @@ const LEGACY_WEBHOOK_NAMES = new Set([
   "Adobos Audit Log",
 ]);
 
-function parseMapping(
-  raw: string | undefined | null,
-): ActionLogWebhooksMapping {
-  try {
-    return JSON.parse(raw ?? "{}") as ActionLogWebhooksMapping;
-  } catch {
-    return {};
-  }
-}
-
 async function readWebhooksMapping(
   guildId: string,
 ): Promise<ActionLogWebhooksMapping> {
@@ -32,7 +22,7 @@ async function readWebhooksMapping(
       .where(eq(actionLogsConfig.guildId, guildId))
       .limit(1),
   );
-  return parseMapping(row?.webhooksMapping);
+  return (row?.webhooksMapping as ActionLogWebhooksMapping) ?? {};
 }
 
 async function writeWebhooksMapping(
@@ -42,7 +32,7 @@ async function writeWebhooksMapping(
   await getDb()
     .update(actionLogsConfig)
     .set({
-      webhooksMapping: JSON.stringify(mapping),
+      webhooksMapping: mapping as Record<string, unknown>,
       updatedAt: new Date(),
     })
     .where(eq(actionLogsConfig.guildId, guildId));

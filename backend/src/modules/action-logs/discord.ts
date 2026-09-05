@@ -347,14 +347,6 @@ export function getEventMeta(eventKey: ActionLogEventKey) {
   return EVENT_META[eventKey];
 }
 
-function parseJson<T>(raw: string, fallback: T): T {
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 async function ensureGuildRow(guildId: string): Promise<void> {
   const db = getDb();
   const existing = await one(
@@ -418,10 +410,10 @@ function rowToConfig(
   }
 
   const mapping = mergeChannelsMapping(
-    parseJson<Partial<ActionLogChannelsMapping>>(row.channelsMapping, {}),
+    row.channelsMapping as Partial<ActionLogChannelsMapping>,
   );
   const enabledEvents = mergeEnabledEvents(
-    parseJson<Partial<ActionLogEnabledEvents>>(row.enabledEvents, {}),
+    row.enabledEvents as Partial<ActionLogEnabledEvents>,
   );
 
   return {
@@ -430,8 +422,8 @@ function rowToConfig(
     routingMode: normalizeRoutingMode(row.routingMode),
     globalChannelId: row.globalChannelId,
     channelsMapping: mapping,
-    ignoredChannels: parseJson<string[]>(row.ignoredChannels, []),
-    ignoredRoles: parseJson<string[]>(row.ignoredRoles, []),
+    ignoredChannels: row.ignoredChannels,
+    ignoredRoles: row.ignoredRoles,
     ignoreBots: Boolean(row.ignoreBots),
     enabledEvents,
     dataRetentionDays: normalizeRetentionDays(row.dataRetentionDays),
@@ -523,11 +515,14 @@ export async function updateActionLogsConfig(
       enabled: next.enabled,
       routingMode: next.routingMode,
       globalChannelId: next.globalChannelId,
-      channelsMapping: JSON.stringify(next.channelsMapping),
-      ignoredChannels: JSON.stringify(next.ignoredChannels),
-      ignoredRoles: JSON.stringify(next.ignoredRoles),
+      channelsMapping: next.channelsMapping as unknown as Record<
+        string,
+        unknown
+      >,
+      ignoredChannels: next.ignoredChannels,
+      ignoredRoles: next.ignoredRoles,
       ignoreBots: next.ignoreBots,
-      enabledEvents: JSON.stringify(next.enabledEvents),
+      enabledEvents: next.enabledEvents as unknown as Record<string, unknown>,
       dataRetentionDays: next.dataRetentionDays,
       updatedAt: now,
     })
@@ -537,11 +532,14 @@ export async function updateActionLogsConfig(
         enabled: next.enabled,
         routingMode: next.routingMode,
         globalChannelId: next.globalChannelId,
-        channelsMapping: JSON.stringify(next.channelsMapping),
-        ignoredChannels: JSON.stringify(next.ignoredChannels),
-        ignoredRoles: JSON.stringify(next.ignoredRoles),
+        channelsMapping: next.channelsMapping as unknown as Record<
+          string,
+          unknown
+        >,
+        ignoredChannels: next.ignoredChannels,
+        ignoredRoles: next.ignoredRoles,
         ignoreBots: next.ignoreBots,
-        enabledEvents: JSON.stringify(next.enabledEvents),
+        enabledEvents: next.enabledEvents as unknown as Record<string, unknown>,
         dataRetentionDays: next.dataRetentionDays,
         updatedAt: now,
       },
@@ -697,7 +695,7 @@ export async function recordActionLog(
       targetTag: input.targetTag ?? null,
       channelId: input.channelId ?? null,
       summary: input.summary,
-      details: JSON.stringify(details),
+      details: details as Record<string, unknown>,
       createdAt,
     });
 
@@ -942,7 +940,7 @@ export async function listActionLogsHistory(
     targetTag: row.targetTag,
     channelId: row.channelId,
     summary: row.summary,
-    details: parseJson<Record<string, unknown>>(row.details, {}),
+    details: row.details,
     createdAt: row.createdAt.toISOString(),
   }));
 

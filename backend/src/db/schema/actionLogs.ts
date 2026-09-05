@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -19,19 +20,23 @@ export const actionLogsConfig = pgTable("action_logs_config", {
   /** GLOBAL | CATEGORY */
   routingMode: text().notNull().default("GLOBAL"),
   globalChannelId: text(),
-  /** JSON: { messages, members, server, assets } */
-  channelsMapping: text().notNull().default("{}"),
-  /** JSON: string[] */
-  ignoredChannels: text().notNull().default("[]"),
-  /** JSON: string[] */
-  ignoredRoles: text().notNull().default("[]"),
+  /** { messages, members, server, assets } — documento tipado. */
+  channelsMapping: jsonb()
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  ignoredChannels: jsonb().$type<string[]>().notNull().default([]),
+  ignoredRoles: jsonb().$type<string[]>().notNull().default([]),
   ignoreBots: boolean().notNull().default(true),
-  /** JSON: Record<eventKey, boolean> */
-  enabledEvents: text().notNull().default("{}"),
+  /** Record<eventKey, boolean> — documento tipado. */
+  enabledEvents: jsonb().$type<Record<string, unknown>>().notNull().default({}),
   /** Días de retención del historial; 0 = sin límite. */
   dataRetentionDays: integer().notNull().default(14),
-  /** JSON: { [channelId]: webhookId } */
-  webhooksMapping: text().notNull().default("{}"),
+  /** { [channelId]: webhookId } — documento tipado. */
+  webhooksMapping: jsonb()
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -55,8 +60,8 @@ export const actionLogs = pgTable(
     targetTag: text(),
     channelId: text(),
     summary: text().notNull().default(""),
-    /** JSON con detalles / diff */
-    details: text().notNull().default("{}"),
+    /** Detalles/diff — documento tipado. */
+    details: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),

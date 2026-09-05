@@ -57,6 +57,13 @@
       "when": 1788579602258,
       "tag": "0007_fair_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788579828891,
+      "tag": "0008_violet_brood",
+      "breakpoints": true
     }
   ]
 }
