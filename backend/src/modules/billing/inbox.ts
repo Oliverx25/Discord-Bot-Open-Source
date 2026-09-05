@@ -2,6 +2,7 @@ import { and, eq, lt, or } from "drizzle-orm";
 import type Stripe from "stripe";
 import { registerJob } from "#core/lifecycle.js";
 import { logger } from "#core/log.js";
+import { isWorkerLeader } from "#core/runtime/index.js";
 import { getDb, one } from "#db/client.js";
 import { webhookEvents } from "#db/schema.js";
 import {
@@ -230,14 +231,15 @@ export async function reconcileStaleWebhookEvents(): Promise<{
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
- * El caller (`billing/module.ts`, `registerJobs`) ya filtra por
- * `isWorkerLeader()` antes de llamar esto — mismo patrón que
- * `economy/shopExpiration.ts` — para no reprocesar duplicado con N réplicas.
+ * OPS-01: arranca en las N réplicas de worker — cada tick re-chequea
+ * `isWorkerLeader()` (el lease puede cambiar de dueño después del boot),
+ * así nunca hay dos réplicas reconciliando el mismo evento a la vez.
  */
 export function startWebhookReconciliationSweeper(): void {
   if (sweepTimer) return;
-  void reconcileStaleWebhookEvents();
+  if (isWorkerLeader()) void reconcileStaleWebhookEvents();
   sweepTimer = setInterval(() => {
+    if (!isWorkerLeader()) return;
     void reconcileStaleWebhookEvents();
   }, SWEEP_MS);
   registerJob("billing:webhook-reconciliation", sweepTimer);

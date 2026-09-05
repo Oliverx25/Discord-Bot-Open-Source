@@ -2,6 +2,7 @@ import { and, eq, isNotNull, lte } from "drizzle-orm";
 import type { BotGateway } from "#core/discord/botGateway.js";
 import { registerJob } from "#core/lifecycle.js";
 import { logger } from "#core/log.js";
+import { isWorkerLeader } from "#core/runtime/index.js";
 import { getDb } from "#db/client.js";
 import {
   economyOwnedChannels,
@@ -110,6 +111,9 @@ export async function startShopExpirationSweeper(
   if (sweepTimer) return;
   void sweepExpiredShopGrants(gateway);
   sweepTimer = setInterval(() => {
+    // OPS-01: re-chequea en cada tick — el lease de liderazgo puede cambiar
+    // de dueño después de que este sweeper arrancó.
+    if (!isWorkerLeader()) return;
     void sweepExpiredShopGrants(gateway);
   }, SWEEP_MS);
   registerJob("economy:shop-expiration", sweepTimer);

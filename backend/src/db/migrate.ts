@@ -1,8 +1,8 @@
 import { logger } from "#core/log.js";
-import { initDatabase } from "./client.js";
+import { migrateDatabase } from "./client.js";
 
 async function run(): Promise<void> {
-  await initDatabase();
+  await migrateDatabase();
   logger.info("Migraciones Drizzle aplicadas (Postgres)");
   process.exit(0);
 }

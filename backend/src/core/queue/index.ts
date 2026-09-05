@@ -23,6 +23,13 @@ export interface QueueHandle<T> {
   process(handler: (data: T) => Promise<void>): void;
 }
 
+/** OPS-02: nombres de cola con un `Worker` BullMQ vivo — lo consulta el readiness del rol `worker`. */
+const activeWorkers = new Set<string>();
+
+export function activeQueueWorkerNames(): string[] {
+  return [...activeWorkers];
+}
+
 const WORKER_CONCURRENCY = 4;
 const DEFAULT_JOB_OPTS = {
   attempts: 5,
@@ -88,7 +95,11 @@ export function defineQueue<T>(name: string): QueueHandle<T> {
           "queue: job falló",
         );
       });
-      onShutdown(`worker:${name}`, () => worker?.close());
+      activeWorkers.add(name);
+      onShutdown(`worker:${name}`, () => {
+        activeWorkers.delete(name);
+        return worker?.close();
+      });
       logger.info({ queue: name }, "queue: worker BullMQ activo");
     },
   };

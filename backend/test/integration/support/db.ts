@@ -9,8 +9,11 @@ process.env.DATABASE_URL ??=
 process.env.ADOBO_ROLE ??= "api";
 
 export async function connectTestDb() {
-  const { initDatabase } = await import("#db/client.js");
-  return initDatabase();
+  const { connectDatabase, migrateDatabase } = await import("#db/client.js");
+  // A diferencia de un proceso de aplicación, el runner de tests no tiene un
+  // `migrate` one-shot delante — aplica migraciones pendientes él mismo.
+  await migrateDatabase();
+  return connectDatabase();
 }
 
 export async function closeTestDb(): Promise<void> {

@@ -1,5 +1,4 @@
 import type { AdobosModule } from "#core/modules/types.js";
-import { isWorkerLeader } from "#core/runtime/index.js";
 import { billingRoutes } from "./http/routes.js";
 import { startWebhookReconciliationSweeper } from "./inbox.js";
 import { stripeWebhookHandler } from "./webhook.js";
@@ -13,9 +12,8 @@ export const billingModule: AdobosModule = {
     ctx.route("/api/billing", billingRoutes());
   },
   registerJobs() {
-    // BILL-01: reconciliación de eventos `pending`/`failed` (crash o error
-    // transitorio). Solo el líder — evita reprocesos duplicados con N réplicas.
-    if (!isWorkerLeader()) return;
+    // BILL-01/OPS-01: reconciliación de eventos `pending`/`failed`. El
+    // sweeper re-chequea `isWorkerLeader()` en cada tick (ver inbox.ts).
     startWebhookReconciliationSweeper();
   },
 };

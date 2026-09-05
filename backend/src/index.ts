@@ -25,13 +25,13 @@ import {
   roleRunsHttp,
   roleRunsWorker,
   setRuntimeRole,
-  setWorkerLeader,
 } from "#core/runtime/index.js";
 import {
-  acquireWorkerLock,
-  releaseWorkerLock,
-} from "#core/runtime/workerLock.js";
-import { closeDatabase, initDatabase } from "#db/client.js";
+  startWorkerLeadershipLease,
+  stopWorkerLeadershipLease,
+} from "#core/runtime/workerLease.js";
+import { closeDatabase, connectDatabase } from "#db/client.js";
+import { startOrphanedUploadsSweeper } from "#lib/uploadedAssets.js";
 import { wireCustomCommandsBuiltinSync } from "#modules/custom-commands/module.js";
 import { ENABLED_MODULES } from "#modules/index.js";
 
@@ -50,13 +50,17 @@ async function main(): Promise<void> {
     logger.info("cache: RedisStore (L1 + L2 + pub/sub) activo");
   }
 
-  await initDatabase();
+  // OPS-01: nunca migra acá — el one-shot `migrate` de Compose ya corrió
+  // antes de que este proceso arranque (ver docker-compose*.yml).
+  await connectDatabase();
   onShutdown("db", () => closeDatabase());
 
   if (roleRunsWorker(cfg.ADOBO_ROLE)) {
-    const leader = await acquireWorkerLock(cfg.DATABASE_URL);
-    setWorkerLeader(leader);
-    onShutdown("worker-lock", () => releaseWorkerLock());
+    await startWorkerLeadershipLease();
+    onShutdown("worker-lease", () => stopWorkerLeadershipLease());
+    // TEN-01: huérfanos son inequívocos por diseño (archivo sin fila en DB
+    // tras la gracia) — no hace falta liderazgo para borrarlos.
+    startOrphanedUploadsSweeper();
   }
 
   if (roleRunsHttp(cfg.ADOBO_ROLE)) {

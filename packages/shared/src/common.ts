@@ -5,11 +5,23 @@ export interface HealthResponse {
   timestamp: string;
 }
 
-/** Readiness: Postgres + Discord (Discord se omite si el proceso no es gateway). */
+/**
+ * Readiness por rol (OPS-02): las dependencias que importan cambian según
+ * qué corre el proceso — Postgres y Redis son obligatorios en los tres,
+ * Discord (Client vivo) solo aplica a `gateway`, y consumidores de cola /
+ * liderazgo solo aplican a `worker`. `"skipped"` = ese campo no aplica al
+ * rol de este proceso, no es un fallo.
+ */
 export interface ReadyResponse {
   status: "ok" | "degraded";
+  role: "api" | "gateway" | "worker";
   postgres: boolean;
+  redis: boolean;
   discord: boolean | "skipped";
+  /** Al menos un `Worker` BullMQ vivo — solo aplica a `worker`. */
+  queueConsumers: boolean | "skipped";
+  /** Informativo, nunca hace fallar el readiness: ser standby es normal con N réplicas. */
+  leader: boolean | "skipped";
   timestamp: string;
 }
 

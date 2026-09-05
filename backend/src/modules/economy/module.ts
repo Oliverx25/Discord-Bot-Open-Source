@@ -39,13 +39,16 @@ export const economyModule: AdobosModule = {
     });
   },
   registerJobs(ctx) {
+    // OPS-01: el sweeper arranca en las N réplicas de worker — cada tick
+    // re-chequea `isWorkerLeader()` (el lease puede cambiar de dueño después
+    // del boot). El refund de stakes abandonados es un cleanup de una sola
+    // vez al boot; sigue gateado al líder inicial para no duplicarlo si
+    // varias réplicas arrancan a la vez.
+    void startShopExpirationSweeper(ctx.botGateway);
     if (!isWorkerLeader()) return;
-    const gateway = ctx.botGateway;
-    void (async () => {
-      await startShopExpirationSweeper(gateway);
-      const refunded = await refundAbandonedBlackjackStakes();
+    void refundAbandonedBlackjackStakes().then((refunded) => {
       logger.info({ refunded }, "economy: temporary grants sweeper active");
-    })();
+    });
   },
   registerGateway(ctx) {
     ctx.button(BUY_BUTTON_PREFIX, (interaction) =>

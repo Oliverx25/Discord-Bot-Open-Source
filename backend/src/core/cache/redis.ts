@@ -1,9 +1,8 @@
 /**
  * Conexión Redis compartida (caché L2 + pub/sub + store de rate-limit).
  * BullMQ (P2.17) abre su propia conexión desde la misma `REDIS_URL`.
- *
- * Sin `REDIS_URL` no se llama a `initRedis` y todo sigue con `MemoryStore` /
- * rate-limit en memoria — el rol `all` y dev no necesitan Redis.
+ * Obligatoria en los tres roles desde la Fase 1 del plan de consolidación
+ * (topología split) — `loadEnv()` ya rechaza el boot sin `REDIS_URL`.
  */
 
 import { Redis } from "ioredis";
@@ -45,6 +44,16 @@ export function initRedis(url: string): { client: Redis; subscriber: Redis } {
 
 export function redisClient(): Redis | null {
   return client;
+}
+
+/** OPS-02: readiness — Redis es obligatorio en los tres roles. */
+export async function pingRedis(): Promise<boolean> {
+  if (!client) return false;
+  try {
+    return (await client.ping()) === "PONG";
+  } catch {
+    return false;
+  }
 }
 
 export function redisSubscriber(): Redis | null {
