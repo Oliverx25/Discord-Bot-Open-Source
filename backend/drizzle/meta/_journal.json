@@ -148,6 +148,13 @@
       "when": 1788581667161,
       "tag": "0020_material_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788581882887,
+      "tag": "0021_handy_galactus",
+      "breakpoints": true
     }
   ]
 }

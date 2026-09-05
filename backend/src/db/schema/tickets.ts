@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -18,7 +19,8 @@ export const ticketSettings = pgTable("ticket_settings", {
     .primaryKey()
     .references(() => guildSettings.guildId, { onDelete: "cascade" }),
   categoryId: text(),
-  staffRoleIds: text().notNull().default("[]"),
+  /** string[] role IDs — documento tipado. */
+  staffRoleIds: jsonb().$type<string[]>().notNull().default([]),
   nameTemplate: text().notNull().default("ticket-{n}-{user}"),
   maxOpenPerUser: integer().notNull().default(1),
   logChannelId: text(),
@@ -46,7 +48,8 @@ export const ticketPanels = pgTable(
       .notNull()
       .default("Press a button to open a ticket."),
     embedColor: text().notNull().default("#5865F2"),
-    buttons: text().notNull().default("[]"),
+    /** TicketPanelButton[] — documento tipado. */
+    buttons: jsonb().$type<unknown[]>().notNull().default([]),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -105,7 +108,8 @@ export const ticketEvents = pgTable(
       .references(() => guildSettings.guildId, { onDelete: "cascade" }),
     type: text().notNull(),
     actorId: text(),
-    payload: text().notNull().default("{}"),
+    /** Contexto libre del evento — documento tipado. */
+    payload: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),

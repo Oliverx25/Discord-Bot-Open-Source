@@ -86,22 +86,11 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function mapSettings(row: TicketSettingsRow): TicketSettings {
   return {
     guildId: row.guildId,
     categoryId: row.categoryId,
-    staffRoleIds: normalizeTicketSnowflakeList(
-      parseJson<unknown>(row.staffRoleIds, []),
-    ),
+    staffRoleIds: normalizeTicketSnowflakeList(row.staffRoleIds),
     nameTemplate: normalizeTicketNameTemplate(row.nameTemplate),
     maxOpenPerUser: clampTicketOpenPerUser(row.maxOpenPerUser),
     logChannelId: row.logChannelId,
@@ -120,7 +109,7 @@ function mapPanel(row: TicketPanelRow): TicketPanel {
     embedTitle: row.embedTitle,
     embedDescription: row.embedDescription,
     embedColor: normalizeTicketEmbedColor(row.embedColor),
-    buttons: normalizeTicketPanelButtons(parseJson<unknown>(row.buttons, [])),
+    buttons: normalizeTicketPanelButtons(row.buttons),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -151,7 +140,7 @@ function mapEvent(row: TicketEventRow): TicketEvent {
     guildId: row.guildId,
     type: isTicketEventType(row.type) ? row.type : "opened",
     actorId: row.actorId,
-    payload: parseJson<Record<string, unknown>>(row.payload, {}),
+    payload: row.payload,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -182,7 +171,7 @@ async function loadSettingsRow(guildId: string): Promise<TicketSettingsRow> {
     .insert(ticketSettings)
     .values({
       guildId,
-      staffRoleIds: "[]",
+      staffRoleIds: [],
       nameTemplate: "ticket-{n}-{user}",
       maxOpenPerUser: 1,
       nextNumber: 1,
@@ -230,9 +219,7 @@ export async function updateTicketSettings(
       : null;
   }
   if (input.staffRoleIds !== undefined) {
-    patch.staffRoleIds = JSON.stringify(
-      normalizeTicketSnowflakeList(input.staffRoleIds),
-    );
+    patch.staffRoleIds = normalizeTicketSnowflakeList(input.staffRoleIds);
   }
   if (input.nameTemplate !== undefined) {
     patch.nameTemplate = normalizeTicketNameTemplate(input.nameTemplate);
@@ -319,7 +306,7 @@ export async function createTicketPanel(
           .trim()
           .slice(0, 4096) || "Press a button to open a ticket.",
       embedColor: normalizeTicketEmbedColor(input.embedColor),
-      buttons: JSON.stringify(normalizeTicketPanelButtons(input.buttons)),
+      buttons: normalizeTicketPanelButtons(input.buttons),
       createdAt: now,
       updatedAt: now,
     })
@@ -360,7 +347,7 @@ export async function updateTicketPanel(
     patch.embedColor = normalizeTicketEmbedColor(input.embedColor);
   }
   if (input.buttons !== undefined) {
-    patch.buttons = JSON.stringify(normalizeTicketPanelButtons(input.buttons));
+    patch.buttons = normalizeTicketPanelButtons(input.buttons);
   }
   await getDb()
     .update(ticketPanels)
@@ -508,11 +495,11 @@ export async function insertOpenedTicket(input: {
       guildId: input.guildId,
       type: "opened",
       actorId: input.openerId,
-      payload: JSON.stringify({
+      payload: {
         number,
         typeKey: input.typeKey,
         reason: input.reason,
-      }),
+      },
       createdAt: now,
     });
     await tx.insert(ticketParticipants).values({
@@ -641,7 +628,7 @@ async function appendEvent(input: {
       guildId: input.guildId,
       type: input.type,
       actorId: input.actorId,
-      payload: JSON.stringify(input.payload ?? {}),
+      payload: input.payload ?? {},
       createdAt: input.createdAt ?? new Date(),
     });
 }
