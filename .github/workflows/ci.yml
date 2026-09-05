@@ -56,6 +56,59 @@ jobs:
         run: docker compose -f docker-compose.prod.yml build gateway
         env:
           POSTGRES_PASSWORD: ci-placeholder
+      - name: build frontend image
+        run: docker compose -f docker-compose.prod.yml build frontend
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+      # Fase 8 (PLAN_FINAL_2026.md): SBOM + escaneo de vulnerabilidades de las
+      # dos imágenes que sí se despliegan (prod backend + frontend). Misma
+      # política que el pnpm audit de arriba: bloquea solo CRITICAL, el resto
+      # queda visible (artifact SBOM + log del scan informativo) sin romper
+      # el build por algo fuera del control de esta fase (parches de
+      # terceros). Acciones de terceros fijadas por SHA, no por tag — el
+      # mismo principio de supply chain que las imágenes Docker de arriba.
+      - name: SBOM (backend)
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
+        with:
+          image: adobos-backend:latest
+          artifact-name: sbom-backend.spdx.json
+          output-file: sbom-backend.spdx.json
+      - name: SBOM (frontend)
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
+        with:
+          image: adobos-frontend:latest
+          artifact-name: sbom-frontend.spdx.json
+          output-file: sbom-frontend.spdx.json
+      - name: scan backend image (bloqueante solo en critical)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: adobos-backend:latest
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: "true"
+      - name: scan frontend image (bloqueante solo en critical)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: adobos-frontend:latest
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: "true"
+      - name: scan backend image (informativo, no bloquea)
+        if: always()
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: adobos-backend:latest
+          severity: "MEDIUM,HIGH,CRITICAL"
+          exit-code: "0"
+      - name: scan frontend image (informativo, no bloquea)
+        if: always()
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: adobos-frontend:latest
+          severity: "MEDIUM,HIGH,CRITICAL"
+          exit-code: "0"
 
   # Smoke test completo con boot real de gateway/worker/backend (login a
   # Discord incluido). Requiere secretos reales -> solo en main, manual o
