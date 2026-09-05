@@ -1,5 +1,6 @@
 import {
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -35,10 +36,10 @@ export const autoRoles = pgTable("auto_roles", {
   guildId: text()
     .primaryKey()
     .references(() => guildSettings.guildId, { onDelete: "cascade" }),
-  /** JSON: string[] role IDs */
-  humanRoles: text().notNull().default("[]"),
-  /** JSON: string[] role IDs */
-  botRoles: text().notNull().default("[]"),
+  /** string[] role IDs — documento tipado. */
+  humanRoles: jsonb().$type<string[]>().notNull().default([]),
+  /** string[] role IDs — documento tipado. */
+  botRoles: jsonb().$type<string[]>().notNull().default([]),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -56,8 +57,8 @@ export const reactionRolesMenus = pgTable("reaction_roles_menus", {
   channelId: text().notNull(),
   messageId: text().notNull(),
   mode: text().notNull().default("reactions"),
-  /** JSON: mappings (emoji/button → role) */
-  rolesMapping: text().notNull().default("[]"),
+  /** Mappings (emoji/button → role) — documento tipado. */
+  rolesMapping: jsonb().$type<unknown>().notNull().default([]),
   createdAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -79,8 +80,8 @@ export const autorolesRegistry = pgTable("autoroles_registry", {
   title: text().notNull().default("Autoroles"),
   /** BUTTONS | SELECT | REACTIONS */
   type: text().notNull().default("BUTTONS"),
-  /** JSON: [{ id, roleId, label, emojiKey, style }] */
-  rolesMapping: text().notNull().default("[]"),
+  /** [{ id, roleId, label, emojiKey, style }] — documento tipado. */
+  rolesMapping: jsonb().$type<unknown[]>().notNull().default([]),
   createdAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),

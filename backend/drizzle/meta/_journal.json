@@ -85,6 +85,13 @@
       "when": 1788580216290,
       "tag": "0011_overrated_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788580457571,
+      "tag": "0012_moaning_night_thrasher",
+      "breakpoints": true
     }
   ]
 }

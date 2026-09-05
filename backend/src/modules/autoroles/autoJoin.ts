@@ -42,23 +42,18 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseRoleIds(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((id): id is string => typeof id === "string")
-      .map((id) => id.trim())
-      .filter((id) => /^\d{17,20}$/.test(id));
-  } catch {
-    return [];
-  }
+function parseRoleIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((id): id is string => typeof id === "string")
+    .map((id) => id.trim())
+    .filter((id) => /^\d{17,20}$/.test(id));
 }
 
 function toConfig(row: {
   guildId: string;
-  humanRoles: string;
-  botRoles: string;
+  humanRoles: unknown;
+  botRoles: unknown;
   updatedAt: Date | number;
 }): AutoJoinRolesConfig {
   return {
@@ -123,20 +118,18 @@ export async function saveAutoJoinRoles(
     await getDb()
       .update(autoRoles)
       .set({
-        humanRoles: JSON.stringify(humanRoles),
-        botRoles: JSON.stringify(botRoles),
+        humanRoles,
+        botRoles,
         updatedAt: now,
       })
       .where(eq(autoRoles.guildId, guildId));
   } else {
-    await getDb()
-      .insert(autoRoles)
-      .values({
-        guildId,
-        humanRoles: JSON.stringify(humanRoles),
-        botRoles: JSON.stringify(botRoles),
-        updatedAt: now,
-      });
+    await getDb().insert(autoRoles).values({
+      guildId,
+      humanRoles,
+      botRoles,
+      updatedAt: now,
+    });
   }
 
   return { ok: true, config: (await getAutoJoinRoles(guildId)).config };

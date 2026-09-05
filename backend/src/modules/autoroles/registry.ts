@@ -91,42 +91,37 @@ function isUnknownMessage(error: unknown): boolean {
   );
 }
 
-function parseMappings(raw: string): AutoroleMappingItem[] {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    const items: AutoroleMappingItem[] = [];
-    for (const [index, rawItem] of parsed.entries()) {
-      if (!rawItem || typeof rawItem !== "object") continue;
-      const item = rawItem as Record<string, unknown>;
-      const roleId = typeof item.roleId === "string" ? item.roleId : "";
-      if (!/^\d{17,20}$/.test(roleId)) continue;
-      let style: AutoroleMappingItem["style"] = "Primary";
-      if (
-        item.style === "Primary" ||
-        item.style === "Secondary" ||
-        item.style === "Success" ||
-        item.style === "Danger"
-      ) {
-        style = item.style;
-      }
-      items.push({
-        id: typeof item.id === "string" ? item.id : `map_${index}_${roleId}`,
-        roleId,
-        label: typeof item.label === "string" ? item.label : "Role",
-        emojiKey:
-          typeof item.emojiKey === "string"
-            ? item.emojiKey
-            : typeof item.emoji === "string"
-              ? item.emoji
-              : undefined,
-        style,
-      });
+function parseMappings(raw: unknown): AutoroleMappingItem[] {
+  if (!Array.isArray(raw)) return [];
+  const items: AutoroleMappingItem[] = [];
+  for (const [index, rawItem] of raw.entries()) {
+    if (!rawItem || typeof rawItem !== "object") continue;
+    const item = rawItem as Record<string, unknown>;
+    const roleId = typeof item.roleId === "string" ? item.roleId : "";
+    if (!/^\d{17,20}$/.test(roleId)) continue;
+    let style: AutoroleMappingItem["style"] = "Primary";
+    if (
+      item.style === "Primary" ||
+      item.style === "Secondary" ||
+      item.style === "Success" ||
+      item.style === "Danger"
+    ) {
+      style = item.style;
     }
-    return items;
-  } catch {
-    return [];
+    items.push({
+      id: typeof item.id === "string" ? item.id : `map_${index}_${roleId}`,
+      roleId,
+      label: typeof item.label === "string" ? item.label : "Role",
+      emojiKey:
+        typeof item.emojiKey === "string"
+          ? item.emojiKey
+          : typeof item.emoji === "string"
+            ? item.emoji
+            : undefined,
+      style,
+    });
   }
+  return items;
 }
 
 function normalizeMappings(
@@ -175,7 +170,7 @@ function toEntry(row: {
   messageId: string;
   title: string;
   type: string;
-  rolesMapping: string;
+  rolesMapping: unknown;
   createdAt: Date | number;
   channelName?: string | null;
   orphaned?: boolean;
@@ -213,7 +208,7 @@ async function upsertRegistry(input: {
   await ensureGuildRow(input.guildId);
   const db = getDb();
   const now = new Date();
-  const json = JSON.stringify(input.mappings);
+  const mappings = input.mappings as unknown[];
   const existing = await one(
     db
       .select()
@@ -229,7 +224,7 @@ async function upsertRegistry(input: {
         channelId: input.channelId,
         title: input.title,
         type: input.type,
-        rolesMapping: json,
+        rolesMapping: mappings,
         updatedAt: now,
       })
       .where(eq(autorolesRegistry.id, existing.id));
@@ -244,7 +239,7 @@ async function upsertRegistry(input: {
       messageId: input.messageId,
       title: input.title,
       type: input.type,
-      rolesMapping: json,
+      rolesMapping: mappings,
       createdAt: now,
       updatedAt: now,
     })
@@ -618,7 +613,7 @@ export async function updateAutoroleMapping(
   await getDb()
     .update(autorolesRegistry)
     .set({
-      rolesMapping: JSON.stringify(mappings),
+      rolesMapping: mappings as unknown[],
       updatedAt: now,
     })
     .where(eq(autorolesRegistry.id, id));

@@ -353,7 +353,7 @@ async function saveInteractiveMenu(input: {
   await ensureGuildRow(input.guildId);
   const db = getDb();
   const now = new Date();
-  const json = JSON.stringify(input.rolesMapping);
+  const mapping = input.rolesMapping;
   const existing = await one(
     db
       .select()
@@ -368,7 +368,7 @@ async function saveInteractiveMenu(input: {
       .set({
         channelId: input.channelId,
         mode: input.mode,
-        rolesMapping: json,
+        rolesMapping: mapping,
         updatedAt: now,
       })
       .where(eq(reactionRolesMenus.id, existing.id));
@@ -380,7 +380,7 @@ async function saveInteractiveMenu(input: {
     channelId: input.channelId,
     messageId: input.messageId,
     mode: input.mode,
-    rolesMapping: json,
+    rolesMapping: mapping,
     createdAt: now,
     updatedAt: now,
   });
