@@ -29,13 +29,8 @@ function resolveGuildId(raw?: string): string {
   return guildId;
 }
 
-function parseEmbedData(raw: string): SentEmbedRecord["embedData"] {
-  try {
-    const parsed = JSON.parse(raw) as EmbedPayload;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+function parseEmbedData(raw: unknown): SentEmbedRecord["embedData"] {
+  return raw && typeof raw === "object" ? (raw as EmbedPayload) : {};
 }
 
 function toSentRecord(
@@ -45,7 +40,7 @@ function toSentRecord(
     channelId: string;
     messageId: string;
     title: string | null;
-    embedData: string;
+    embedData: unknown;
     createdAt: Date | number;
   },
   channelName?: string | null,
@@ -156,7 +151,7 @@ export async function editSentEmbed(
     .set({
       title:
         payload.title?.trim() || payload.content?.slice(0, 80) || row.title,
-      embedData: JSON.stringify(snapshot ?? payload),
+      embedData: (snapshot ?? payload) as unknown as Record<string, unknown>,
       updatedAt: now,
     })
     .where(eq(sentEmbeds.id, id));

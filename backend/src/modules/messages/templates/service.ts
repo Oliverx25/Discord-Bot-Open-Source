@@ -53,20 +53,15 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseEmbedData(raw: string): EmbedPayload {
-  try {
-    const parsed = JSON.parse(raw) as EmbedPayload;
-    if (!parsed || typeof parsed !== "object") {
-      throw new Error("invalid");
-    }
-    return parsed;
-  } catch {
+function parseEmbedData(raw: unknown): EmbedPayload {
+  if (!raw || typeof raw !== "object") {
     throw new EmbedTemplateError(
       "Invalid embedData JSON.",
       400,
       "INVALID_EMBED_DATA",
     );
   }
+  return raw as EmbedPayload;
 }
 
 function isAllowedMediaRef(value: string): boolean {
@@ -133,7 +128,7 @@ function toDetail(row: {
   id: number;
   guildId: string;
   name: string;
-  embedData: string;
+  embedData: unknown;
   createdAt: Date | number;
   updatedAt: Date | number;
 }): EmbedTemplateDetail {
@@ -262,7 +257,7 @@ export async function saveEmbedTemplate(
   await ensureGuildRow(guildId);
   const db = getDb();
   const now = new Date();
-  const json = JSON.stringify(embedData);
+  const embedDataToStore = embedData as unknown as Record<string, unknown>;
 
   if (input.id != null) {
     const id = Number(input.id);
@@ -287,7 +282,7 @@ export async function saveEmbedTemplate(
     }
     await db
       .update(embedTemplates)
-      .set({ name, embedData: json, updatedAt: now })
+      .set({ name, embedData: embedDataToStore, updatedAt: now })
       .where(
         and(eq(embedTemplates.id, id), eq(embedTemplates.guildId, guildId)),
       );
@@ -299,7 +294,7 @@ export async function saveEmbedTemplate(
     .values({
       guildId,
       name,
-      embedData: json,
+      embedData: embedDataToStore,
       createdAt: now,
       updatedAt: now,
     })

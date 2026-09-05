@@ -1,4 +1,11 @@
-import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { guildSettings } from "./core.js";
 
 /**
@@ -30,8 +37,8 @@ export const embedTemplates = pgTable("embed_templates", {
     .notNull()
     .references(() => guildSettings.guildId, { onDelete: "cascade" }),
   name: text().notNull(),
-  /** JSON: EmbedPayload */
-  embedData: text().notNull(),
+  /** EmbedPayload — documento tipado. */
+  embedData: jsonb().$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -53,8 +60,8 @@ export const sentEmbeds = pgTable(
     channelId: text().notNull(),
     messageId: text().notNull(),
     title: text(),
-    /** JSON: EmbedPayload + components */
-    embedData: text().notNull(),
+    /** EmbedPayload + components — documento tipado. */
+    embedData: jsonb().$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),

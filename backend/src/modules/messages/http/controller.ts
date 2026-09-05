@@ -488,7 +488,7 @@ export async function sendEmbedMessage(
         channelId: sent.channelId,
         messageId: sent.messageId,
         title: prepared.title ?? prepared.content?.slice(0, 80) ?? null,
-        embedData: JSON.stringify(snapshot),
+        embedData: snapshot as unknown as Record<string, unknown>,
         createdAt: now,
         updatedAt: now,
       });
