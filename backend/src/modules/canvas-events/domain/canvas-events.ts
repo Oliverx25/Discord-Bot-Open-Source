@@ -16,7 +16,10 @@ import {
 import { and, eq } from "drizzle-orm";
 import { getDb, one } from "#db/client.js";
 import { canvasEventSettings, guildSettings } from "#db/schema.js";
-import { resolvePublicUploadPath } from "#lib/dataPaths.js";
+import {
+  resolvePublicUploadPath,
+  uploadBelongsToGuild,
+} from "#lib/dataPaths.js";
 import {
   normalizeTextLayers,
   parseTextLayersJson,
@@ -304,9 +307,14 @@ export async function saveCanvasEventSettings(
     textLayers.length > 0 ? textLayers : defaultLayers(eventType);
 
   const bgFilepath = input.bgFilepath?.trim() || null;
-  if (bgFilepath && !resolvePublicUploadPath(bgFilepath)) {
+  if (
+    bgFilepath &&
+    (!resolvePublicUploadPath(bgFilepath) ||
+      !uploadBelongsToGuild(bgFilepath, guildId))
+  ) {
+    // TEN-01: el path por sí solo no prueba que el upload sea de ESTE guild.
     throw new CanvasEventSettingsError(
-      "Invalid bgFilepath. It must be /uploads/backgrounds/...",
+      "Invalid bgFilepath. It must be /uploads/backgrounds/<this guild>/...",
       400,
       "INVALID_BG_FILEPATH",
     );

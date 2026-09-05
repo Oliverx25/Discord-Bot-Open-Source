@@ -7,7 +7,7 @@ import express, {
   type RequestHandler,
 } from "express";
 import helmet from "helmet";
-import { getUploadsRoot } from "#lib/dataPaths.js";
+import { resolvePublicUploadPath } from "#lib/dataPaths.js";
 import { authRouter, meRouter } from "../auth/oauth.js";
 import type { BotGateway } from "../discord/botGateway.js";
 import { entitlementsRoutes, requireFeature } from "../entitlements/index.js";
@@ -157,7 +157,27 @@ export function createApp(options: CreateAppOptions): Express {
     app.use(entry.basePath, ...guards, entry.router);
   }
 
-  app.use("/uploads", requireAuth(), express.static(getUploadsRoot()));
+  // TEN-01: antes era `express.static` detrás de solo `requireAuth()` — daba
+  // igual de qué guild fuera el upload, cualquier sesión válida lo leía. Los
+  // uploads viven en `uploads/<kind>/<guildId>/<archivo>` desde la Fase 6;
+  // `requireGuildAccess()` valida el `:guildId` de la propia URL.
+  app.use(
+    "/uploads/:kind/:guildId/:filename",
+    requireGuildAccess(),
+    (req, res) => {
+      const { kind, guildId, filename } = req.params;
+      const absolute = resolvePublicUploadPath(
+        `/uploads/${kind}/${guildId}/${filename}`,
+      );
+      if (!absolute) {
+        res.status(404).end();
+        return;
+      }
+      res.sendFile(absolute, (err) => {
+        if (err) res.status(404).end();
+      });
+    },
+  );
 
   const serveStatic = env().SERVE_STATIC;
   if (serveStatic) {

@@ -26,7 +26,10 @@ import { BotGatewayError } from "#core/discord/botGateway.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
 import { botPresenceSettings } from "#db/schema.js";
-import { resolvePublicUploadPath } from "#lib/dataPaths.js";
+import {
+  resolvePublicUploadPath,
+  uploadBelongsToGuild,
+} from "#lib/dataPaths.js";
 
 export class BotProfileError extends Error {
   constructor(
@@ -250,6 +253,7 @@ function mapDiscordError(error: unknown): never {
  * Resuelve avatar a Buffer / URL / null (limpiar) / undefined (sin cambio).
  */
 async function resolveServerAvatarInput(options: {
+  guildId: string;
   clear?: boolean;
   fileBuffer?: Buffer;
   urlOrPath?: string | null;
@@ -263,6 +267,16 @@ async function resolveServerAvatarInput(options: {
   if (!raw) return undefined;
 
   if (raw.startsWith("/uploads/")) {
+    // TEN-01: el path por sí solo no prueba que el upload sea de ESTE guild
+    // — sin este chequeo, el guild A podía poner como avatar de servidor un
+    // upload ya existente del guild B.
+    if (!uploadBelongsToGuild(raw, options.guildId)) {
+      throw new BotProfileError(
+        "The uploaded avatar image was not found.",
+        400,
+        "AVATAR_FILE_MISSING",
+      );
+    }
     const absolute = resolvePublicUploadPath(raw);
     if (!absolute || !fs.existsSync(absolute)) {
       throw new BotProfileError(
@@ -332,6 +346,7 @@ export async function updateGuildBotProfile(
     }
 
     const avatarInput = await resolveServerAvatarInput({
+      guildId: id,
       clear: fields.clearServerAvatar === true,
       fileBuffer: avatarBuffer,
       urlOrPath: fields.serverAvatarUrl,

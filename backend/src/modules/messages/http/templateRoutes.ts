@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import multer from "multer";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { idParams } from "#core/http/schemas.js";
 import { defineRoute } from "#core/http/validate.js";
-import { getTemplatesDir } from "#lib/dataPaths.js";
+import { getTenantUploadDir } from "#lib/dataPaths.js";
 import { sniffImageFile } from "#lib/imageMagic.js";
+import { assertUploadQuota, recordUploadedAsset } from "#lib/uploadedAssets.js";
 import {
   deleteEmbedTemplate,
   EmbedTemplateError,
@@ -34,9 +36,9 @@ function safeImageExt(originalname: string): string {
 
 const templateUpload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => {
+    destination: (req, _file, cb) => {
       try {
-        cb(null, getTemplatesDir());
+        cb(null, getTenantUploadDir("templates", guildIdOf(req)));
       } catch (error) {
         cb(error as Error, "");
       }
@@ -63,21 +65,38 @@ const templateUpload = multer({
   { name: "footerIcon", maxCount: 1 },
 ]);
 
-function publicTemplatePath(filename: string): string {
-  return `/uploads/templates/${filename}`;
+/** TEN-01: cuota antes de que multer escriba nada (ver core/http/uploads.ts). */
+function enforceTemplateUploadQuota(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  const guildId = guildIdOf(req);
+  const incoming = Number(req.headers["content-length"] ?? 0);
+  assertUploadQuota(guildId, incoming).then(
+    () => next(),
+    (error: unknown) => next(error),
+  );
 }
 
+function publicTemplatePath(guildId: string, filename: string): string {
+  return `/uploads/templates/${guildId}/${filename}`;
+}
+
+/** Sniffea cada archivo subido; devuelve su MIME real por campo. Borra y lanza si alguno no es imagen. */
 function assertSniffedTemplateFiles(
   files: Record<string, Express.Multer.File[]> | undefined,
-): void {
+): Map<Express.Multer.File, string> {
   const uploaded = [
     ...(files?.image ?? []),
     ...(files?.thumbnail ?? []),
     ...(files?.authorIcon ?? []),
     ...(files?.footerIcon ?? []),
   ];
+  const mimeByFile = new Map<Express.Multer.File, string>();
   for (const file of uploaded) {
-    if (!sniffImageFile(file.path)) {
+    const sniffed = sniffImageFile(file.path);
+    if (!sniffed) {
       fs.unlink(file.path, () => undefined);
       throw new EmbedTemplateError(
         "The file is not a valid PNG, JPG, WEBP or GIF image.",
@@ -85,7 +104,9 @@ function assertSniffedTemplateFiles(
         "INVALID_IMAGE_CONTENT",
       );
     }
+    mimeByFile.set(file, sniffed);
   }
+  return mimeByFile;
 }
 
 export function embedTemplateRoutes(): Router {
@@ -100,12 +121,15 @@ export function embedTemplateRoutes(): Router {
 
   router.post(
     "/",
+    enforceTemplateUploadQuota,
     templateUpload,
     defineRoute({ body: saveEmbedTemplateSchema }, async (req, res, valid) => {
+      const guildId = guildIdOf(req);
+      const ownerId = req.panelSession?.userId ?? "unknown";
       const files = req.files as
         | Record<string, Express.Multer.File[]>
         | undefined;
-      assertSniffedTemplateFiles(files);
+      const mimeByFile = assertSniffedTemplateFiles(files);
 
       const uploadedPaths: {
         imageUrl?: string;
@@ -117,22 +141,41 @@ export function embedTemplateRoutes(): Router {
       const thumbnail = files?.thumbnail?.[0];
       const authorIcon = files?.authorIcon?.[0];
       const footerIcon = files?.footerIcon?.[0];
-      if (image) uploadedPaths.imageUrl = publicTemplatePath(image.filename);
+      if (image)
+        uploadedPaths.imageUrl = publicTemplatePath(guildId, image.filename);
       if (thumbnail) {
-        uploadedPaths.thumbnailUrl = publicTemplatePath(thumbnail.filename);
+        uploadedPaths.thumbnailUrl = publicTemplatePath(
+          guildId,
+          thumbnail.filename,
+        );
       }
       if (authorIcon) {
-        uploadedPaths.authorIconUrl = publicTemplatePath(authorIcon.filename);
+        uploadedPaths.authorIconUrl = publicTemplatePath(
+          guildId,
+          authorIcon.filename,
+        );
       }
       if (footerIcon) {
-        uploadedPaths.footerIconUrl = publicTemplatePath(footerIcon.filename);
+        uploadedPaths.footerIconUrl = publicTemplatePath(
+          guildId,
+          footerIcon.filename,
+        );
+      }
+
+      for (const [file, mimeType] of mimeByFile) {
+        await recordUploadedAsset({
+          guildId,
+          ownerId,
+          kind: "templates",
+          filename: file.filename,
+          mimeType,
+          sizeBytes: file.size,
+          filePath: file.path,
+        });
       }
 
       res.json(
-        await saveEmbedTemplate(
-          { ...valid.body, guildId: guildIdOf(req) },
-          uploadedPaths,
-        ),
+        await saveEmbedTemplate({ ...valid.body, guildId }, uploadedPaths),
       );
     }),
   );

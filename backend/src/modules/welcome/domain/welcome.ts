@@ -18,7 +18,10 @@ import {
 import { eq } from "drizzle-orm";
 import { getDb, one } from "#db/client.js";
 import { guildSettings, welcomeSettings } from "#db/schema.js";
-import { resolvePublicUploadPath } from "#lib/dataPaths.js";
+import {
+  resolvePublicUploadPath,
+  uploadBelongsToGuild,
+} from "#lib/dataPaths.js";
 
 export class WelcomeSettingsError extends Error {
   constructor(
@@ -292,9 +295,16 @@ export async function saveWelcomeSettings(
     textLayers.length > 0 ? textLayers : defaultWelcomeTextLayers();
 
   const bgFilepath = input.bgFilepath?.trim() || null;
-  if (bgFilepath && !resolvePublicUploadPath(bgFilepath)) {
+  if (
+    bgFilepath &&
+    (!resolvePublicUploadPath(bgFilepath) ||
+      !uploadBelongsToGuild(bgFilepath, guildId))
+  ) {
+    // TEN-01: sin el chequeo de dueño, el guild A podía apuntar a un upload
+    // ya existente del guild B (adivinado/filtrado) y "tomar prestado" ese
+    // archivo — el path por sí solo no prueba que sea de ESTE guild.
     throw new WelcomeSettingsError(
-      "Invalid bgFilepath. It must be /uploads/backgrounds/...",
+      "Invalid bgFilepath. It must be /uploads/backgrounds/<this guild>/...",
       400,
       "INVALID_BG_FILEPATH",
     );
