@@ -40,15 +40,6 @@ const formCache = new BoundedTtlMap<number, InteractiveForm>(
   10 * 60_000,
 );
 
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function resolveGuildId(guildId?: string): string {
   const id = (guildId ?? "").trim();
   if (!id) {
@@ -119,16 +110,12 @@ function rowToForm(
     publishChannelId: row.publishChannelId ?? null,
     receptionChannelId: row.receptionChannelId ?? null,
     questions: normalizeFormQuestions(
-      parseJson(row.questions, [] as InteractiveForm["questions"]),
+      row.questions as InteractiveForm["questions"],
     ),
     submitMode: normalizeFormSubmitMode(row.submitMode),
     cooldownMinutes: clampFormCooldownMinutes(row.cooldownMinutes),
-    requiredRoleIds: normalizeSnowflakeIdList(
-      parseJson(row.requiredRoleIds, [] as string[]),
-    ),
-    blockedRoleIds: normalizeSnowflakeIdList(
-      parseJson(row.blockedRoleIds, [] as string[]),
-    ),
+    requiredRoleIds: normalizeSnowflakeIdList(row.requiredRoleIds),
+    blockedRoleIds: normalizeSnowflakeIdList(row.blockedRoleIds),
     pingRoleId: row.pingRoleId ?? null,
     thankYouMessage: thankYouOf(row.thankYouMessage),
     acceptRoleId: row.acceptRoleId ?? null,
@@ -149,7 +136,7 @@ function rowToResponse(row: typeof formResponses.$inferSelect): FormResponse {
     username: row.username,
     displayName: row.displayName,
     avatarUrl: row.avatarUrl,
-    answers: parseJson<FormAnswerEntry[]>(row.answers, []),
+    answers: row.answers as FormAnswerEntry[],
     status: normalizeFormResponseStatus(row.status),
     reviewedBy: row.reviewedBy ?? null,
     reviewedAt: row.reviewedAt ? new Date(row.reviewedAt).toISOString() : null,
@@ -359,11 +346,11 @@ function persistValues(next: FormMutable) {
     embedThumbnailUrl: next.embedThumbnailUrl,
     publishChannelId: next.publishChannelId,
     receptionChannelId: next.receptionChannelId,
-    questions: JSON.stringify(next.questions),
+    questions: next.questions as unknown[],
     submitMode: next.submitMode,
     cooldownMinutes: next.cooldownMinutes,
-    requiredRoleIds: JSON.stringify(next.requiredRoleIds),
-    blockedRoleIds: JSON.stringify(next.blockedRoleIds),
+    requiredRoleIds: next.requiredRoleIds,
+    blockedRoleIds: next.blockedRoleIds,
     pingRoleId: next.pingRoleId,
     thankYouMessage: next.thankYouMessage,
     acceptRoleId: next.acceptRoleId,
@@ -565,7 +552,7 @@ export async function insertFormResponse(input: {
         username: input.username.slice(0, 100),
         displayName: input.displayName.slice(0, 100),
         avatarUrl: input.avatarUrl,
-        answers: JSON.stringify(input.answers),
+        answers: input.answers as unknown[],
         status: "pending",
         createdAt: now,
       })

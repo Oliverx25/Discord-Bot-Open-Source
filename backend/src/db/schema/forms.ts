@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -27,16 +28,16 @@ export const guildForms = pgTable("guild_forms", {
   embedThumbnailUrl: text(),
   publishChannelId: text(),
   receptionChannelId: text(),
-  /** JSON: FormQuestion[] */
-  questions: text().notNull().default("[]"),
+  /** FormQuestion[] — documento tipado. */
+  questions: jsonb().$type<unknown[]>().notNull().default([]),
   cooldownMinutes: integer().notNull().default(0),
   enabled: boolean().notNull().default(true),
   /** cooldown | once */
   submitMode: text().notNull().default("cooldown"),
-  /** JSON: snowflake[] */
-  requiredRoleIds: text().notNull().default("[]"),
-  /** JSON: snowflake[] */
-  blockedRoleIds: text().notNull().default("[]"),
+  /** snowflake[] — documento tipado. */
+  requiredRoleIds: jsonb().$type<string[]>().notNull().default([]),
+  /** snowflake[] — documento tipado. */
+  blockedRoleIds: jsonb().$type<string[]>().notNull().default([]),
   pingRoleId: text(),
   thankYouMessage: text().notNull().default(""),
   acceptRoleId: text(),
@@ -70,8 +71,8 @@ export const formResponses = pgTable(
     username: text().notNull().default(""),
     displayName: text().notNull().default(""),
     avatarUrl: text(),
-    /** JSON: FormAnswerEntry[] */
-    answers: text().notNull().default("[]"),
+    /** FormAnswerEntry[] — documento tipado. */
+    answers: jsonb().$type<unknown[]>().notNull().default([]),
     /** pending | accepted | rejected */
     status: text().notNull().default("pending"),
     reviewedBy: text(),
