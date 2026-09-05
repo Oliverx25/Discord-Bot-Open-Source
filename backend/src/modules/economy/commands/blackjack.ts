@@ -651,6 +651,148 @@ export async function handleBlackjackCommand(
   }
 }
 
+type BlackjackActionHandler = (
+  session: BlackjackSession,
+  interaction: ButtonInteraction,
+) => Promise<void>;
+
+async function handleHit(
+  session: BlackjackSession,
+  interaction: ButtonInteraction,
+): Promise<void> {
+  const hand = currentHand(session);
+  hand.cards = [...hand.cards, drawCard(session.deck)];
+  const evalP = evaluateHand(hand.cards);
+  if (evalP.isBust || evalP.total === 21) {
+    await advanceOrReveal(session, interaction);
+    return;
+  }
+  const wallet = (await getUserEconomyBalance(session.guildId, session.userId))
+    .wallet;
+  await interaction.update({
+    embeds: [
+      buildBlackjackEmbed({
+        title: "🃏 Blackjack",
+        color: INFO,
+        hands: session.hands,
+        current: session.current,
+        dealer: session.dealer,
+        hideDealerHole: true,
+        currency: session.currency,
+        wallet,
+        highlightCurrent: true,
+      }),
+    ],
+    components: blackjackButtons(session, wallet),
+  });
+  armHandTimeout(session);
+}
+
+async function handleStand(
+  session: BlackjackSession,
+  interaction: ButtonInteraction,
+): Promise<void> {
+  await advanceOrReveal(session, interaction);
+}
+
+async function handleDouble(
+  session: BlackjackSession,
+  interaction: ButtonInteraction,
+): Promise<void> {
+  const wallet = (await getUserEconomyBalance(session.guildId, session.userId))
+    .wallet;
+  if (!canDouble(session, wallet)) {
+    await interaction.reply({
+      content: "❌ You can't double right now.",
+      ...EPHEMERAL,
+    });
+    return;
+  }
+  try {
+    const raised = await raiseBlackjackStake(
+      session.guildId,
+      session.userId,
+      session.ante,
+    );
+    session.bet = raised.bet;
+    currentHand(session).bet = raised.bet;
+  } catch (error) {
+    const msg =
+      error instanceof EconomyError
+        ? error.message
+        : "Not enough balance to double.";
+    await interaction.reply({ content: `❌ ${msg}`, ...EPHEMERAL });
+    return;
+  }
+  const hand = currentHand(session);
+  hand.cards = [...hand.cards, drawCard(session.deck)];
+  await revealAndIdle(session, interaction);
+}
+
+async function handleSplit(
+  session: BlackjackSession,
+  interaction: ButtonInteraction,
+): Promise<void> {
+  const wallet = (await getUserEconomyBalance(session.guildId, session.userId))
+    .wallet;
+  if (!canSplit(session, wallet)) {
+    await interaction.reply({
+      content: "❌ You can't split right now.",
+      ...EPHEMERAL,
+    });
+    return;
+  }
+  try {
+    await raiseBlackjackStake(session.guildId, session.userId, session.ante);
+  } catch (error) {
+    const msg =
+      error instanceof EconomyError
+        ? error.message
+        : "Not enough balance to split.";
+    await interaction.reply({ content: `❌ ${msg}`, ...EPHEMERAL });
+    return;
+  }
+  const original = session.hands[0]!.cards;
+  session.hands = [
+    { cards: [original[0]!, drawCard(session.deck)], bet: session.ante },
+    { cards: [original[1]!, drawCard(session.deck)], bet: session.ante },
+  ];
+  session.splitUsed = true;
+  session.current = 0;
+  if (original[0]!.rank === "A") {
+    await revealAndIdle(session, interaction);
+    return;
+  }
+  const nextWallet = (
+    await getUserEconomyBalance(session.guildId, session.userId)
+  ).wallet;
+  await interaction.update({
+    embeds: [
+      buildBlackjackEmbed({
+        title: "🃏 Blackjack — Split",
+        color: INFO,
+        hands: session.hands,
+        current: session.current,
+        dealer: session.dealer,
+        hideDealerHole: true,
+        currency: session.currency,
+        wallet: nextWallet,
+        highlightCurrent: true,
+      }),
+    ],
+    components: blackjackButtons(session, nextWallet),
+  });
+  armHandTimeout(session);
+}
+
+/** Un handler por acción de tablero — `bj_again` se resuelve antes, fuera del dispatch. */
+const BLACKJACK_ACTION_HANDLERS: Record<string, BlackjackActionHandler> = {
+  [BJ_HIT]: handleHit,
+  [BJ_STAND]: handleStand,
+  [BJ_DOUBLE]: handleDouble,
+  [BJ_SPLIT]: handleSplit,
+};
+
 export async function handleBlackjackButton(
   interaction: ButtonInteraction,
 ): Promise<void> {
@@ -722,138 +864,15 @@ export async function handleBlackjackButton(
 
   session.busy = true;
   try {
-    if (action === BJ_HIT) {
-      const hand = currentHand(session);
-      hand.cards = [...hand.cards, drawCard(session.deck)];
-      const evalP = evaluateHand(hand.cards);
-      if (evalP.isBust || evalP.total === 21) {
-        await advanceOrReveal(session, interaction);
-        return;
-      }
-      const wallet = (
-        await getUserEconomyBalance(session.guildId, session.userId)
-      ).wallet;
-      await interaction.update({
-        embeds: [
-          buildBlackjackEmbed({
-            title: "🃏 Blackjack",
-            color: INFO,
-            hands: session.hands,
-            current: session.current,
-            dealer: session.dealer,
-            hideDealerHole: true,
-            currency: session.currency,
-            wallet,
-            highlightCurrent: true,
-          }),
-        ],
-        components: blackjackButtons(session, wallet),
+    const handler = BLACKJACK_ACTION_HANDLERS[action];
+    if (handler) {
+      await handler(session, interaction);
+    } else {
+      await interaction.reply({
+        content: "❌ Unknown blackjack action.",
+        ...EPHEMERAL,
       });
-      armHandTimeout(session);
-      return;
     }
-
-    if (action === BJ_STAND) {
-      await advanceOrReveal(session, interaction);
-      return;
-    }
-
-    if (action === BJ_DOUBLE) {
-      const wallet = (
-        await getUserEconomyBalance(session.guildId, session.userId)
-      ).wallet;
-      if (!canDouble(session, wallet)) {
-        await interaction.reply({
-          content: "❌ You can't double right now.",
-          ...EPHEMERAL,
-        });
-        return;
-      }
-      try {
-        const raised = await raiseBlackjackStake(
-          session.guildId,
-          session.userId,
-          session.ante,
-        );
-        session.bet = raised.bet;
-        currentHand(session).bet = raised.bet;
-      } catch (error) {
-        const msg =
-          error instanceof EconomyError
-            ? error.message
-            : "Not enough balance to double.";
-        await interaction.reply({ content: `❌ ${msg}`, ...EPHEMERAL });
-        return;
-      }
-      const hand = currentHand(session);
-      hand.cards = [...hand.cards, drawCard(session.deck)];
-      await revealAndIdle(session, interaction);
-      return;
-    }
-
-    if (action === BJ_SPLIT) {
-      const wallet = (
-        await getUserEconomyBalance(session.guildId, session.userId)
-      ).wallet;
-      if (!canSplit(session, wallet)) {
-        await interaction.reply({
-          content: "❌ You can't split right now.",
-          ...EPHEMERAL,
-        });
-        return;
-      }
-      try {
-        await raiseBlackjackStake(
-          session.guildId,
-          session.userId,
-          session.ante,
-        );
-      } catch (error) {
-        const msg =
-          error instanceof EconomyError
-            ? error.message
-            : "Not enough balance to split.";
-        await interaction.reply({ content: `❌ ${msg}`, ...EPHEMERAL });
-        return;
-      }
-      const original = session.hands[0]!.cards;
-      session.hands = [
-        { cards: [original[0]!, drawCard(session.deck)], bet: session.ante },
-        { cards: [original[1]!, drawCard(session.deck)], bet: session.ante },
-      ];
-      session.splitUsed = true;
-      session.current = 0;
-      if (original[0]!.rank === "A") {
-        await revealAndIdle(session, interaction);
-        return;
-      }
-      const nextWallet = (
-        await getUserEconomyBalance(session.guildId, session.userId)
-      ).wallet;
-      await interaction.update({
-        embeds: [
-          buildBlackjackEmbed({
-            title: "🃏 Blackjack — Split",
-            color: INFO,
-            hands: session.hands,
-            current: session.current,
-            dealer: session.dealer,
-            hideDealerHole: true,
-            currency: session.currency,
-            wallet: nextWallet,
-            highlightCurrent: true,
-          }),
-        ],
-        components: blackjackButtons(session, nextWallet),
-      });
-      armHandTimeout(session);
-      return;
-    }
-
-    await interaction.reply({
-      content: "❌ Unknown blackjack action.",
-      ...EPHEMERAL,
-    });
   } catch (error) {
     logger.error({ err: error }, "blackjack button:");
     if (!interaction.replied && !interaction.deferred) {
