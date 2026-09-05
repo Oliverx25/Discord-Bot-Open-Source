@@ -48,18 +48,16 @@ function newId(): string {
 
 function legacySingleToRewards(
   rewardType: string | null | undefined,
-  rewardConfigRaw: string | null | undefined,
+  rewardConfigRaw: unknown,
 ): EconomyShopRewards {
   const rewards = defaultShopRewards();
   if (!rewardType) return rewards;
-  let cfg: Record<string, unknown> = {};
-  try {
-    cfg = rewardConfigRaw
-      ? (JSON.parse(rewardConfigRaw) as Record<string, unknown>)
+  const cfg: Record<string, unknown> =
+    rewardConfigRaw &&
+    typeof rewardConfigRaw === "object" &&
+    !Array.isArray(rewardConfigRaw)
+      ? (rewardConfigRaw as Record<string, unknown>)
       : {};
-  } catch {
-    cfg = {};
-  }
 
   switch (rewardType) {
     case "ROLE_ASSIGN":
@@ -207,28 +205,19 @@ function validateRewards(rewards: EconomyShopRewards): void {
 function parseRewards(
   row: typeof economyShopItems.$inferSelect,
 ): EconomyShopRewards {
-  try {
-    const parsed = JSON.parse(row.rewards || "{}") as unknown;
-    const rewards = sanitizeShopRewards(parsed);
-    if (
-      rewards.hasRole ||
-      rewards.hasChannel ||
-      rewards.hasBoost ||
-      rewards.hasManual
-    ) {
-      return rewards;
-    }
-  } catch {
-    /* fallthrough */
+  const rewards = sanitizeShopRewards(row.rewards);
+  if (
+    rewards.hasRole ||
+    rewards.hasChannel ||
+    rewards.hasBoost ||
+    rewards.hasManual
+  ) {
+    return rewards;
   }
 
-  try {
-    const seq = JSON.parse(row.actionSequence || "[]") as unknown;
-    if (Array.isArray(seq) && seq.length > 0) {
-      return sanitizeShopRewards(rewardsFromActionSequence(seq));
-    }
-  } catch {
-    /* fallthrough */
+  const seq = row.actionSequence;
+  if (Array.isArray(seq) && seq.length > 0) {
+    return sanitizeShopRewards(rewardsFromActionSequence(seq));
   }
 
   return legacySingleToRewards(row.rewardType, row.rewardConfig);
@@ -347,10 +336,10 @@ export async function createShopItem(
       price: clampShopPrice(Number(input.price)),
       icon: (input.icon ?? "🛒").trim().slice(0, 512) || "🛒",
       stock,
-      rewards: JSON.stringify(rewards),
-      actionSequence: "[]",
+      rewards: rewards as unknown as Record<string, unknown>,
+      actionSequence: [],
       rewardType: null,
-      rewardConfig: "{}",
+      rewardConfig: {},
       enabled,
       sortOrder: clampNonNegInt(Number(input.sortOrder ?? 0)),
       createdAt: now,
@@ -417,10 +406,10 @@ export async function updateShopItem(
           ? input.icon.trim().slice(0, 512) || "🛒"
           : current.icon,
       stock,
-      rewards: JSON.stringify(rewards),
-      actionSequence: "[]",
+      rewards: rewards as unknown as Record<string, unknown>,
+      actionSequence: [],
       rewardType: null,
-      rewardConfig: "{}",
+      rewardConfig: {},
       enabled,
       sortOrder:
         typeof input.sortOrder === "number"

@@ -48,20 +48,6 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseJsonObject(
-  raw: string | null | undefined,
-): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 function sanitizeCoinflip(raw: unknown): EconomyCasinoCoinflipConfig {
   const base = defaultCasinoCoinflip();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return base;
@@ -160,10 +146,10 @@ function rowToConfig(
     isActive: row.isActive,
     minBet: row.minBet,
     maxBet: row.maxBet,
-    coinflip: sanitizeCoinflip(parseJsonObject(row.coinflip)),
-    roulette: sanitizeRoulette(parseJsonObject(row.roulette)),
-    blackjack: sanitizeBlackjack(parseJsonObject(row.blackjack)),
-    slots: sanitizeSlots(parseJsonObject(row.slots)),
+    coinflip: sanitizeCoinflip(row.coinflip),
+    roulette: sanitizeRoulette(row.roulette),
+    blackjack: sanitizeBlackjack(row.blackjack),
+    slots: sanitizeSlots(row.slots),
   };
 }
 
@@ -234,10 +220,10 @@ export async function updateEconomyCasinoConfig(
       isActive: next.isActive,
       minBet: next.minBet,
       maxBet: next.maxBet,
-      coinflip: JSON.stringify(next.coinflip),
-      roulette: JSON.stringify(next.roulette),
-      blackjack: JSON.stringify(next.blackjack),
-      slots: JSON.stringify(next.slots),
+      coinflip: next.coinflip as unknown as Record<string, unknown>,
+      roulette: next.roulette as unknown as Record<string, unknown>,
+      blackjack: next.blackjack as unknown as Record<string, unknown>,
+      slots: next.slots as unknown as Record<string, unknown>,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -246,10 +232,10 @@ export async function updateEconomyCasinoConfig(
         isActive: next.isActive,
         minBet: next.minBet,
         maxBet: next.maxBet,
-        coinflip: JSON.stringify(next.coinflip),
-        roulette: JSON.stringify(next.roulette),
-        blackjack: JSON.stringify(next.blackjack),
-        slots: JSON.stringify(next.slots),
+        coinflip: next.coinflip as unknown as Record<string, unknown>,
+        roulette: next.roulette as unknown as Record<string, unknown>,
+        blackjack: next.blackjack as unknown as Record<string, unknown>,
+        slots: next.slots as unknown as Record<string, unknown>,
         updatedAt: now,
       },
     });

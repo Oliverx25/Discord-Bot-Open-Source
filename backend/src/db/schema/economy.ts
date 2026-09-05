@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -128,14 +129,14 @@ export const economyIncome = pgTable("economy_income", {
   monthlyPay: integer().notNull().default(2000),
   streakEnabled: boolean().notNull().default(false),
   streakBonusPercent: integer().notNull().default(5),
-  /** EconomyRoleSalary[] */
-  roleSalaries: text().notNull().default("[]"),
-  /** EconomyJob[] */
-  jobs: text().notNull().default("[]"),
-  /** EconomyCrime[] */
-  crimes: text().notNull().default("[]"),
-  /** EconomyRobConfig JSON. */
-  rob: text().notNull().default("{}"),
+  /** EconomyRoleSalary[] — documento tipado. */
+  roleSalaries: jsonb().$type<unknown[]>().notNull().default([]),
+  /** EconomyJob[] — documento tipado. */
+  jobs: jsonb().$type<unknown[]>().notNull().default([]),
+  /** EconomyCrime[] — documento tipado. */
+  crimes: jsonb().$type<unknown[]>().notNull().default([]),
+  /** EconomyRobConfig — documento tipado. */
+  rob: jsonb().$type<Record<string, unknown>>().notNull().default({}),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -160,14 +161,14 @@ export const economyShopItems = pgTable(
     icon: text().notNull().default("🛒"),
     /** null = infinito (almacenado como NULL). */
     stock: integer(),
-    /** EconomyShopRewards JSON (Smart Toggles). */
-    rewards: text().notNull().default("{}"),
-    /** @deprecated Secuencia Shortcuts; se migra al leer. */
-    actionSequence: text().default("[]"),
+    /** EconomyShopRewards (Smart Toggles) — documento tipado. */
+    rewards: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    /** @deprecated Secuencia Shortcuts; se migra al leer. Documento tipado. */
+    actionSequence: jsonb().$type<unknown[]>().default([]),
     /** @deprecated Legacy single-reward; se migra al leer. */
     rewardType: text(),
-    /** @deprecated */
-    rewardConfig: text().default("{}"),
+    /** @deprecated Documento tipado. */
+    rewardConfig: jsonb().$type<Record<string, unknown>>().default({}),
     enabled: boolean().notNull().default(true),
     sortOrder: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
@@ -198,7 +199,8 @@ export const economyPurchases = pgTable(
     itemName: text().notNull(),
     pricePaid: integer().notNull(),
     status: text().notNull().default("fulfilled"),
-    metadata: text().notNull().default("{}"),
+    /** Contexto libre de la compra — documento tipado. */
+    metadata: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -311,14 +313,14 @@ export const economyCasino = pgTable("economy_casino", {
   isActive: boolean().notNull().default(false),
   minBet: integer().notNull().default(10),
   maxBet: integer().notNull().default(10_000),
-  /** EconomyCasinoCoinflipConfig JSON. */
-  coinflip: text().notNull().default("{}"),
-  /** EconomyCasinoRouletteConfig JSON. */
-  roulette: text().notNull().default("{}"),
-  /** EconomyCasinoBlackjackConfig JSON. */
-  blackjack: text().notNull().default("{}"),
-  /** EconomyCasinoSlotsConfig JSON. */
-  slots: text().notNull().default("{}"),
+  /** EconomyCasinoCoinflipConfig — documento tipado. */
+  coinflip: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+  /** EconomyCasinoRouletteConfig — documento tipado. */
+  roulette: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+  /** EconomyCasinoBlackjackConfig — documento tipado. */
+  blackjack: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+  /** EconomyCasinoSlotsConfig — documento tipado. */
+  slots: jsonb().$type<Record<string, unknown>>().notNull().default({}),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),

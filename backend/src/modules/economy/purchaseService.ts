@@ -441,7 +441,7 @@ export async function purchaseShopItem(
       itemName: item.name,
       pricePaid: item.price,
       status: "pending",
-      metadata: JSON.stringify({ rewards: [] }),
+      metadata: { rewards: [] },
       createdAt: new Date(),
     });
 
@@ -512,10 +512,10 @@ export async function purchaseShopItem(
         .update(economyPurchases)
         .set({
           status: "refunded",
-          metadata: JSON.stringify({
+          metadata: {
             error: errorMessage,
             compensated: completed.map((c) => c.kind),
-          }),
+          },
         })
         .where(eq(economyPurchases.id, purchaseId));
     } else {
@@ -530,10 +530,10 @@ export async function purchaseShopItem(
         .update(economyPurchases)
         .set({
           status: "needs_reconciliation",
-          metadata: JSON.stringify({
+          metadata: {
             error: errorMessage,
             partialRewards: completed,
-          }),
+          },
         })
         .where(eq(economyPurchases.id, purchaseId));
     }
@@ -546,7 +546,7 @@ export async function purchaseShopItem(
 
   await getDb()
     .update(economyPurchases)
-    .set({ status, metadata: JSON.stringify(metadata) })
+    .set({ status, metadata })
     .where(eq(economyPurchases.id, purchaseId));
 
   return {

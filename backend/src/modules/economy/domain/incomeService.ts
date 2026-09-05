@@ -44,30 +44,6 @@ async function ensureGuildRow(guildId: string): Promise<void> {
   }
 }
 
-function parseJsonArray<T>(raw: string | null | undefined, fallback: T[]): T[] {
-  if (!raw) return fallback;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function parseJsonObject(
-  raw: string | null | undefined,
-): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 function newId(): string {
   return crypto.randomUUID();
 }
@@ -211,10 +187,10 @@ function rowToConfig(
     monthlyPay: row.monthlyPay,
     streakEnabled: row.streakEnabled,
     streakBonusPercent: row.streakBonusPercent,
-    roleSalaries: sanitizeRoleSalaries(parseJsonArray(row.roleSalaries, [])),
-    jobs: sanitizeJobs(parseJsonArray(row.jobs, [])),
-    crimes: sanitizeCrimes(parseJsonArray(row.crimes, [])),
-    rob: sanitizeRob(parseJsonObject(row.rob)),
+    roleSalaries: sanitizeRoleSalaries(row.roleSalaries),
+    jobs: sanitizeJobs(row.jobs),
+    crimes: sanitizeCrimes(row.crimes),
+    rob: sanitizeRob(row.rob),
   };
 }
 
@@ -283,10 +259,10 @@ export async function updateEconomyIncomeConfig(
       monthlyPay: next.monthlyPay,
       streakEnabled: next.streakEnabled,
       streakBonusPercent: next.streakBonusPercent,
-      roleSalaries: JSON.stringify(next.roleSalaries),
-      jobs: JSON.stringify(next.jobs),
-      crimes: JSON.stringify(next.crimes),
-      rob: JSON.stringify(next.rob),
+      roleSalaries: next.roleSalaries as unknown[],
+      jobs: next.jobs as unknown[],
+      crimes: next.crimes as unknown[],
+      rob: next.rob as unknown as Record<string, unknown>,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -297,10 +273,10 @@ export async function updateEconomyIncomeConfig(
         monthlyPay: next.monthlyPay,
         streakEnabled: next.streakEnabled,
         streakBonusPercent: next.streakBonusPercent,
-        roleSalaries: JSON.stringify(next.roleSalaries),
-        jobs: JSON.stringify(next.jobs),
-        crimes: JSON.stringify(next.crimes),
-        rob: JSON.stringify(next.rob),
+        roleSalaries: next.roleSalaries as unknown[],
+        jobs: next.jobs as unknown[],
+        crimes: next.crimes as unknown[],
+        rob: next.rob as unknown as Record<string, unknown>,
         updatedAt: now,
       },
     });
