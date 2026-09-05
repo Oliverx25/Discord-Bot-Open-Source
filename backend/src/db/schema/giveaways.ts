@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -16,7 +17,8 @@ export const giveawaySettings = pgTable("giveaway_settings", {
   guildId: text()
     .primaryKey()
     .references(() => guildSettings.guildId, { onDelete: "cascade" }),
-  managerRoleIds: text().notNull().default("[]"),
+  /** string[] role IDs — documento tipado. */
+  managerRoleIds: jsonb().$type<string[]>().notNull().default([]),
   dmWinners: boolean().notNull().default(true),
   pingRoleId: text(),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
@@ -54,12 +56,13 @@ export const giveaways = pgTable(
       mode: "date",
     }),
     createdBy: text().notNull(),
-    requiredRoleIds: text().notNull().default("[]"),
-    blockedRoleIds: text().notNull().default("[]"),
+    /** string[] role IDs — documento tipado. */
+    requiredRoleIds: jsonb().$type<string[]>().notNull().default([]),
+    blockedRoleIds: jsonb().$type<string[]>().notNull().default([]),
     minGuildAgeDays: integer().notNull().default(0),
     minAccountAgeDays: integer().notNull().default(0),
-    winnerIds: text().notNull().default("[]"),
-    pastWinnerIds: text().notNull().default("[]"),
+    winnerIds: jsonb().$type<string[]>().notNull().default([]),
+    pastWinnerIds: jsonb().$type<string[]>().notNull().default([]),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),

@@ -137,7 +137,7 @@ async function loadSettingsRow(guildId: string): Promise<GiveawaySettingsRow> {
     .insert(giveawaySettings)
     .values({
       guildId,
-      managerRoleIds: "[]",
+      managerRoleIds: [],
       dmWinners: true,
       updatedAt: now,
     })
@@ -171,9 +171,7 @@ export async function updateGiveawaySettings(
   await loadSettingsRow(id);
   const patch: Partial<GiveawaySettingsRow> = { updatedAt: new Date() };
   if (input.managerRoleIds !== undefined) {
-    patch.managerRoleIds = JSON.stringify(
-      normalizeGiveawaySnowflakeList(input.managerRoleIds),
-    );
+    patch.managerRoleIds = normalizeGiveawaySnowflakeList(input.managerRoleIds);
   }
   if (input.dmWinners !== undefined) patch.dmWinners = input.dmWinners;
   if (input.pingRoleId !== undefined) {
@@ -316,16 +314,14 @@ export async function insertGiveaway(input: {
       startsAt,
       endsAt,
       createdBy: input.createdBy,
-      requiredRoleIds: JSON.stringify(
-        normalizeGiveawaySnowflakeList(input.body.requiredRoleIds),
+      requiredRoleIds: normalizeGiveawaySnowflakeList(
+        input.body.requiredRoleIds,
       ),
-      blockedRoleIds: JSON.stringify(
-        normalizeGiveawaySnowflakeList(input.body.blockedRoleIds),
-      ),
+      blockedRoleIds: normalizeGiveawaySnowflakeList(input.body.blockedRoleIds),
       minGuildAgeDays: clampGiveawayAgeDays(input.body.minGuildAgeDays),
       minAccountAgeDays: clampGiveawayAgeDays(input.body.minAccountAgeDays),
-      winnerIds: "[]",
-      pastWinnerIds: "[]",
+      winnerIds: [],
+      pastWinnerIds: [],
       createdAt: now,
     })
     .returning();
@@ -431,8 +427,8 @@ export async function applyGiveawayAction(input: {
   if (input.action === "end") {
     const ids = await listEntryUserIds(current.id);
     const picked = pickGiveawayWinners(ids, current.winnerCount, []);
-    patch.winnerIds = JSON.stringify(picked);
-    patch.pastWinnerIds = JSON.stringify(picked);
+    patch.winnerIds = picked;
+    patch.pastWinnerIds = picked;
     patch.endedAt = now;
   } else if (input.action === "reroll") {
     const ids = await listEntryUserIds(current.id);
@@ -448,10 +444,8 @@ export async function applyGiveawayAction(input: {
         "NO_ENTRIES",
       );
     }
-    patch.winnerIds = JSON.stringify(picked);
-    patch.pastWinnerIds = JSON.stringify([
-      ...new Set([...current.pastWinnerIds, ...picked]),
-    ]);
+    patch.winnerIds = picked;
+    patch.pastWinnerIds = [...new Set([...current.pastWinnerIds, ...picked])];
   } else if (input.action === "cancel") {
     patch.endedAt = now;
   } else if (input.action === "start") {
