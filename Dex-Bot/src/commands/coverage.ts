@@ -8,7 +8,7 @@ import {
   StringSelectMenuOptionBuilder,
   type EmbedBuilder,
 } from "discord.js";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonApiError,
   formatTypeLabel,
@@ -16,22 +16,22 @@ import {
   getPokemonSpecies,
   getTypeColor,
   resolveDisplayName,
-} from "../../../services/pokemonApi.js";
+} from "../services/pokemonApi.js";
 import {
   type CoverageMoveOption,
   getCoverageMovepoolOptions,
-} from "../../../services/pokemonMoves.js";
+} from "../services/pokemonMoves.js";
 import {
   formatPokemonTypeWithEmoji,
   getPokemonTypeEmoji,
-} from "../../../utils/pokemonEmojis.js";
-import { createBasePokemonEmbed } from "../../../utils/pokemonEmbed.js";
-import { calculateCoverage } from "../../../utils/typeChart.js";
+} from "../utils/pokemonEmojis.js";
+import { createBasePokemonEmbed } from "../utils/pokemonEmbed.js";
+import { calculateCoverage } from "../utils/typeChart.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
 
 /** Prefijo select `/coverage`. */
 export const COVERAGE_SELECT_PREFIX = "cov_sel_";

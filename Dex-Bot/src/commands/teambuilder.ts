@@ -9,7 +9,7 @@ import {
   ButtonStyle,
   type EmbedBuilder,
 } from "discord.js";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonApiError,
   capitalizePokemonName,
@@ -22,14 +22,14 @@ import {
   resolvePokemonForGeneration,
   searchPokemonAutocomplete,
   warmPokemonAutocompleteCache,
-} from "../../../services/pokemonApi.js";
+} from "../services/pokemonApi.js";
 import {
   flattenLearnsetMoves,
   getPokemonLearnset,
   resolveMoveInfo,
   searchMovepoolAutocomplete,
   toMoveApiSlug,
-} from "../../../services/pokemonMoves.js";
+} from "../services/pokemonMoves.js";
 import {
   MAX_TEAM_SIZE,
   addPokemonToTeam,
@@ -43,22 +43,21 @@ import {
   setTeamMessageRef,
   type TeamData,
   type TeamSlotData,
-} from "../../../services/teambuilderState.js";
+} from "../services/teambuilderState.js";
 import {
-  formatPokemonTypeWithEmoji,
   getPokemonTypeEmoji,
-} from "../../../utils/pokemonEmojis.js";
+} from "../utils/pokemonEmojis.js";
 import {
   createBasePokemonEmbed,
   formatPokemonFooter,
-} from "../../../utils/pokemonEmbed.js";
-import { analyzeTeamSynergy } from "../../../utils/typeChart.js";
+} from "../utils/pokemonEmbed.js";
+import { analyzeTeamSynergy } from "../utils/typeChart.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
   getPokemonConfig,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
 
 export const TEAMBUILDER_SYN_PREFIX = "tb_syn_";
 
@@ -623,22 +622,38 @@ export async function handleTeambuilderSynergyButton(
 
     const weaknessLines =
       report.criticalWeaknesses.length === 0
-        ? ["✅ Excelente balance defensivo."]
+        ? [
+            "> ✅ **Cobertura Sólida:** Ningún tipo elemental representa una debilidad masiva.",
+          ]
         : report.criticalWeaknesses.map((hit) => {
             const typeLabel = formatTypeLabel(hit.type, language);
-            const withEmoji = formatPokemonTypeWithEmoji(hit.type, typeLabel);
-            return `${withEmoji} (Atraviesa a ${hit.weakCount} Pokémon)`;
+            const emoji = getPokemonTypeEmoji(hit.type);
+            const prefix = emoji ? `${emoji} ` : "";
+            return `> ${prefix}**${typeLabel}:** Riesgo Alto (Atraviesa a ${hit.weakCount} Pokémon)`;
           });
 
     const immunityLines =
       report.immunities.length === 0
-        ? ["— Ninguna inmunidad en el equipo."]
+        ? ["> — **Sin inmunidades** registradas en el equipo."]
         : report.immunities.map((imm) => {
             const typeLabel = formatTypeLabel(imm.type, language);
-            const withEmoji = formatPokemonTypeWithEmoji(imm.type, typeLabel);
+            const emoji = getPokemonTypeEmoji(imm.type);
+            const prefix = emoji ? `${emoji} ` : "";
             const names = imm.immuneMembers.join(", ");
-            return `${withEmoji} (Inmune: ${names})`;
+            return `> ${prefix}**${typeLabel}:** Bloqueado por ${names}`;
           });
+
+    const threatCount = report.criticalWeaknesses.length;
+    let verdictLine: string;
+    if (threatCount <= 0) {
+      verdictLine = "> 🏆 **Grado S:** Defensas impenetrables.";
+    } else if (threatCount === 1) {
+      verdictLine = "> 🟢 **Grado A:** Sinergia estable.";
+    } else if (threatCount === 2) {
+      verdictLine = "> 🟡 **Grado B:** Precaución requerida.";
+    } else {
+      verdictLine = "> 🔴 **Grado C:** Vulnerabilidad estructural crítica.";
+    }
 
     const firstType = members[0]?.types[0] ?? "normal";
     const color = getTypeColor(firstType);
@@ -648,7 +663,7 @@ export async function handleTeambuilderSynergyButton(
     )
       .setTitle("📊 Reporte de Sinergia")
       .setDescription(
-        "Análisis de coberturas cruzadas y vulnerabilidades del equipo.",
+        "*Evaluación táctica de coberturas, puntos ciegos y muros defensivos.*",
       )
       .setColor(color)
       .addFields(
@@ -665,6 +680,16 @@ export async function handleTeambuilderSynergyButton(
         {
           name: "🛡️ Muros e Inmunidades",
           value: immunityLines.join("\n").slice(0, 1024),
+          inline: false,
+        },
+        {
+          name: "\u200B",
+          value: "\u200B",
+          inline: false,
+        },
+        {
+          name: "📊 Veredicto del Sistema",
+          value: verdictLine.slice(0, 1024),
           inline: false,
         },
       )

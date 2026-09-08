@@ -11,7 +11,7 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonApiError,
   type PokemonEncounterByVersion,
@@ -20,15 +20,15 @@ import {
   getPokemonSpecies,
   getTypeColor,
   resolveDisplayName,
-} from "../../../services/pokemonApi.js";
+} from "../services/pokemonApi.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
 import {
   createBasePokemonEmbed,
-} from "../../../utils/pokemonEmbed.js";
+} from "../utils/pokemonEmbed.js";
 
 /** Prefijo de botones de paginación `/location` (registry). */
 export const LOCATION_PAGE_PREFIX = "loc_page_";

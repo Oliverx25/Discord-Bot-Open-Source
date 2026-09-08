@@ -76,7 +76,7 @@ export function defaultPokemonCommands(): PokemonCommandsEnabled {
 export function defaultPokemonConfig(guildId = ""): PokemonConfig {
   return {
     guildId,
-    isActive: false,
+    isActive: true,
     defaultGeneration: 9,
     language: "es",
     embedColor: "#EF4444",

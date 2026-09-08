@@ -1,0 +1,29 @@
+{
+  "name": "dex-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dex Competitivo — bot Discord open-source (PokéAPI + Smogon)",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "register": "tsx src/bot/syncCommands.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.38.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

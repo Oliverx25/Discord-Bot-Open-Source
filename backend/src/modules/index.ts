@@ -16,7 +16,6 @@ import { customCommandsModule } from "./custom-commands/index.js";
 import { systemCommandsModule } from "./system-commands/index.js";
 import { levelsModule } from "./levels/index.js";
 import { rolesBuilderModule } from "./roles-builder/index.js";
-import { pokemonModule } from "./pokemon/index.js";
 
 /**
  * Catálogo explícito de módulos habilitados.
@@ -40,7 +39,6 @@ export const ENABLED_MODULES: readonly AdobosModule[] = [
   systemCommandsModule,
   levelsModule,
   rolesBuilderModule,
-  pokemonModule,
 ];
 
 export {
@@ -61,5 +59,4 @@ export {
   systemCommandsModule,
   levelsModule,
   rolesBuilderModule,
-  pokemonModule,
 };

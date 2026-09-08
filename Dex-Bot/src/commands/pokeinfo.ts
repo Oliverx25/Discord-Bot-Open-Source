@@ -2,8 +2,8 @@ import type {
   AutocompleteInteraction,
   ChatInputCommandInteraction,
 } from "discord.js";
-import { resolvePokeinfoFormat } from "@adobos/shared";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { resolvePokeinfoFormat } from "../shared/pokemon.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonApiError,
   buildMegaBySpeciesMap,
@@ -24,20 +24,20 @@ import {
   resolvePokemonForGeneration,
   searchPokemonAutocomplete,
   warmPokemonAutocompleteCache,
-} from "../../../services/pokemonApi.js";
-import { formatCompetitiveBulletList } from "../../../services/smogonService.js";
+} from "../services/pokemonApi.js";
+import { formatCompetitiveBulletList } from "../services/smogonService.js";
 import {
   createBasePokemonEmbed,
-} from "../../../utils/pokemonEmbed.js";
+} from "../utils/pokemonEmbed.js";
 import {
   formatPokemonTypeWithEmoji,
   POKEMON_UI_EMOJIS,
-} from "../../../utils/pokemonEmojis.js";
+} from "../utils/pokemonEmojis.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
 
 /**
  * Autocomplete de la opción `pokemon` (índice en memoria).

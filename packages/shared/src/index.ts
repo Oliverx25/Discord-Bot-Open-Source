@@ -23,6 +23,5 @@ export * from "./levels.js";
 export * from "./economy.js";
 export * from "./economy-shop.js";
 export * from "./economy-casino.js";
-export * from "./pokemon.js";
 export * from "./roles-builder.js";
 

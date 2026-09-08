@@ -80,32 +80,6 @@ async function handleAutocomplete(
       return;
     }
 
-    if (interaction.commandName === "teambuilder") {
-      const { handleTeambuilderAutocomplete } = await import(
-        "../../modules/pokemon/commands/teambuilder.js"
-      );
-      await handleTeambuilderAutocomplete(interaction);
-      return;
-    }
-
-    if (
-      interaction.commandName === "pokeinfo" ||
-      interaction.commandName === "weakness" ||
-      interaction.commandName === "coverage" ||
-      interaction.commandName === "breeding" ||
-      interaction.commandName === "location" ||
-      interaction.commandName === "moveset" ||
-      interaction.commandName === "bestsets" ||
-      interaction.commandName === "counters" ||
-      interaction.commandName === "sandwich"
-    ) {
-      const { handlePokeinfoAutocomplete } = await import(
-        "../../modules/pokemon/commands/pokeinfo.js"
-      );
-      await handlePokeinfoAutocomplete(interaction);
-      return;
-    }
-
     await interaction.respond([]);
   } catch (error) {
     console.warn("[adobos] autocomplete falló:", error);

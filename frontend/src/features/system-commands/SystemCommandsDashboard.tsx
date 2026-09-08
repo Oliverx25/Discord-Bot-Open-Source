@@ -14,11 +14,6 @@ import {
   fetchSystemCommands,
   saveSystemCommands,
 } from "@/lib/api";
-import {
-  DEX_MODULE_LABEL,
-  getDexCommandDescription,
-  getDexCommandTitle,
-} from "@/features/pokemon/uiLabels";
 import { ChannelMultiSelect } from "@/components/shared/ChannelMultiSelect";
 import { RoleMultiSelect } from "@/components/shared/RoleMultiSelect";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +35,6 @@ import { cn } from "@/lib/utils";
 import {
   CircleDollarSign,
   ClipboardList,
-  Egg,
   Eye,
   Gavel,
   Loader2,
@@ -61,7 +55,6 @@ const CATEGORY_FILTERS: Array<{ id: CategoryFilter; label: string }> = [
   { id: "moderation", label: SYSTEM_COMMAND_CATEGORY_LABELS.moderation },
   { id: "levels", label: SYSTEM_COMMAND_CATEGORY_LABELS.levels },
   { id: "economy", label: SYSTEM_COMMAND_CATEGORY_LABELS.economy },
-  { id: "pokemon", label: DEX_MODULE_LABEL },
   { id: "utilities", label: SYSTEM_COMMAND_CATEGORY_LABELS.utilities },
 ];
 
@@ -87,11 +80,6 @@ const CATEGORY_STYLES: Record<
     badge:
       "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30",
     icon: ClipboardList,
-  },
-  pokemon: {
-    badge:
-      "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
-    icon: Egg,
   },
   utilities: {
     badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
@@ -191,28 +179,23 @@ export function SystemCommandsDashboard() {
     return commands.filter((cmd) => {
       if (category !== "all" && cmd.category !== category) return false;
       if (!q) return true;
-      const uiTitle = getDexCommandTitle(cmd.name)?.toLowerCase() ?? "";
-      const uiDesc = getDexCommandDescription(cmd.name)?.toLowerCase() ?? "";
       return (
         cmd.name.toLowerCase().includes(q) ||
-        cmd.description.toLowerCase().includes(q) ||
-        uiTitle.includes(q) ||
-        uiDesc.includes(q)
+        cmd.description.toLowerCase().includes(q)
       );
     });
   }, [commands, category, query]);
 
   function categoryLabel(cat: SystemCommandCategory): string {
-    if (cat === "pokemon") return DEX_MODULE_LABEL;
     return SYSTEM_COMMAND_CATEGORY_LABELS[cat];
   }
 
   function commandCardTitle(cmd: SystemCommandConfig): string {
-    return getDexCommandTitle(cmd.name) ?? `/${cmd.name}`;
+    return `/${cmd.name}`;
   }
 
   function commandCardDescription(cmd: SystemCommandConfig): string {
-    return getDexCommandDescription(cmd.name) ?? cmd.description;
+    return cmd.description;
   }
 
   function patchCommand(
@@ -436,21 +419,9 @@ export function SystemCommandsDashboard() {
                         <Icon className="size-3" />
                         {categoryLabel(cmd.category)}
                       </Badge>
-                      <CardTitle
-                        className={cn(
-                          "text-base",
-                          cmd.category === "pokemon"
-                            ? "font-sans"
-                            : "font-mono",
-                        )}
-                      >
+                      <CardTitle className="font-mono text-base">
                         {commandCardTitle(cmd)}
                       </CardTitle>
-                      {cmd.category === "pokemon" ? (
-                        <p className="font-mono text-xs text-muted-foreground">
-                          /{cmd.name}
-                        </p>
-                      ) : null}
                     </div>
                     <Switch
                       checked={cmd.enabled}
@@ -488,11 +459,7 @@ export function SystemCommandsDashboard() {
         }}
         title={
           configuring ? (
-            configuring.category === "pokemon" ? (
-              <span>{commandCardTitle(configuring)}</span>
-            ) : (
-              <span className="font-mono">/{configuring.name}</span>
-            )
+            <span className="font-mono">/{configuring.name}</span>
           ) : (
             "Comando"
           )

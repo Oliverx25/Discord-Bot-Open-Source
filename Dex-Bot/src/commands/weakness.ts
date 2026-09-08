@@ -1,5 +1,5 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonApiError,
   formatAbilityLabel,
@@ -9,23 +9,23 @@ import {
   getTypeColor,
   resolveDisplayName,
   resolvePokemonForGeneration,
-} from "../../../services/pokemonApi.js";
+} from "../services/pokemonApi.js";
 import {
   formatPokemonTypeWithEmoji,
   getPokemonTypeEmoji,
-} from "../../../utils/pokemonEmojis.js";
-import { createBasePokemonEmbed } from "../../../utils/pokemonEmbed.js";
+} from "../utils/pokemonEmojis.js";
+import { createBasePokemonEmbed } from "../utils/pokemonEmbed.js";
 import {
   DEFENSIVE_MATCHUP_ORDER,
   calculateDefensiveMatchup,
   isPokemonTypeName,
   type PokemonTypeName,
-} from "../../../utils/typeChart.js";
+} from "../utils/typeChart.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
 
 /**
  * Notas cortas de habilidades que alteran el matchup defensivo.

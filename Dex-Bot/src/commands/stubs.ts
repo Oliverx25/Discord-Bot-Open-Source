@@ -1,10 +1,10 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
 
 /**
  * Stub compartido de comandos Pokémon pendientes.

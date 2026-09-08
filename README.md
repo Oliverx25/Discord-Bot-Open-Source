@@ -195,7 +195,7 @@ Los alcances o funcionalidades (Requerimientos funcionales) que he pensado son:
 
 [ ] - Economia (metodos de ganar economia, casino tipo gambling, ruleta pocker etc, y que se pueda canjear esto por recompensas - roles?)
 
-[ ] - Pokemon: Formacion de equipos competitivos, objetos, formas, debilidades, coberturas, movesets, stats, donde conseguir cierto pokemon, etc.
+[ ] - Pokemon → migrado a proyecto independiente `Dex-Bot/` (hard fork open-source).
 
 [ ] - League of Legends: ...
 

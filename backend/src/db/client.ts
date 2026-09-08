@@ -814,45 +814,7 @@ function ensureCoreTables(database: Database.Database): void {
       FOREIGN KEY (guild_id) REFERENCES guild_settings(guild_id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS plugin_pokemon_config (
-      guild_id TEXT PRIMARY KEY NOT NULL,
-      is_active INTEGER NOT NULL DEFAULT 0,
-      default_generation INTEGER NOT NULL DEFAULT 9,
-      language TEXT NOT NULL DEFAULT 'es',
-      embed_color TEXT NOT NULL DEFAULT '#EF4444',
-      force_ephemeral INTEGER NOT NULL DEFAULT 1,
-      allowed_channels TEXT NOT NULL DEFAULT '[]',
-      allowed_roles TEXT NOT NULL DEFAULT '[]',
-      commands TEXT NOT NULL DEFAULT '{}',
-      updated_at INTEGER NOT NULL,
-      FOREIGN KEY (guild_id) REFERENCES guild_settings(guild_id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS user_teams (
-      user_id TEXT PRIMARY KEY NOT NULL,
-      team_data TEXT NOT NULL DEFAULT '[]',
-      updated_at INTEGER NOT NULL
-    );
   `);
-
-  try {
-    const pokeCols = database
-      .prepare(`PRAGMA table_info(plugin_pokemon_config)`)
-      .all() as Array<{ name: string }>;
-    if (
-      pokeCols.length > 0 &&
-      !pokeCols.some((c) => c.name === "allowed_roles")
-    ) {
-      database.exec(
-        `ALTER TABLE plugin_pokemon_config ADD COLUMN allowed_roles TEXT NOT NULL DEFAULT '[]'`,
-      );
-    }
-  } catch (error) {
-    console.warn(
-      "[adobos] migrate plugin_pokemon_config.allowed_roles:",
-      error,
-    );
-  }
 
   try {
     let shopCols = database

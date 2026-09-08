@@ -1,5 +1,5 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonApiError,
   capitalizePokemonName,
@@ -7,20 +7,20 @@ import {
   getPokemonSpecies,
   getTypeColor,
   resolveDisplayName,
-} from "../../../services/pokemonApi.js";
+} from "../services/pokemonApi.js";
 import {
   type CompetitiveCounterEntry,
   formatCounterThreatLabel,
   getPokemonCounters,
   isMegaSpeciesName,
   toSmogonSpeciesCandidates,
-} from "../../../services/smogonService.js";
+} from "../services/smogonService.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
-import { createBasePokemonEmbed } from "../../../utils/pokemonEmbed.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
+import { createBasePokemonEmbed } from "../utils/pokemonEmbed.js";
 
 const FALLBACK_DESCRIPTION =
   "⚠️ No hay datos estadísticos recientes de counters para este Pokémon en las tiers principales. Utiliza el comando `/weakness` para evaluar sus puntos ciegos elementales.";

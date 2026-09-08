@@ -7,14 +7,13 @@ import type {
 import { PermissionFlagsBits } from "discord.js";
 import type { PokemonAccessContext } from "./service.js";
 
-type PokemonGuildInteraction =
+type DexGuildInteraction =
   | ChatInputCommandInteraction
   | ButtonInteraction
   | StringSelectMenuInteraction;
 
-/** Extrae roles / admin del miembro para el guard del plugin. */
 export function pokemonAccessFromInteraction(
-  interaction: PokemonGuildInteraction,
+  interaction: DexGuildInteraction,
 ): PokemonAccessContext {
   const member = interaction.member;
   if (!member || typeof member === "string" || !("roles" in member)) {

@@ -11,32 +11,32 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
-import { resolvePokeinfoFormat } from "@adobos/shared";
-import { consumeInteractionEphemeral } from "../../system-commands/ephemeral.js";
+import { resolvePokeinfoFormat } from "../shared/pokemon.js";
+import { consumeInteractionEphemeral } from "../config/ephemeral.js";
 import {
   PokemonApiError,
   getPokemonData,
   getPokemonSpecies,
   getTypeColor,
   resolveDisplayName,
-} from "../../../services/pokemonApi.js";
+} from "../services/pokemonApi.js";
 import {
   type LearnsetMoveEntry,
   type MoveLearnMethod,
   type PokemonLearnset,
   getLearnsetCategoryMoves,
   getPokemonLearnset,
-} from "../../../services/pokemonMoves.js";
+} from "../services/pokemonMoves.js";
 import {
   getMoveDamageClassEmoji,
   getPokemonTypeEmoji,
-} from "../../../utils/pokemonEmojis.js";
-import { createBasePokemonEmbed } from "../../../utils/pokemonEmbed.js";
+} from "../utils/pokemonEmojis.js";
+import { createBasePokemonEmbed } from "../utils/pokemonEmbed.js";
 import {
   PokemonError,
   assertPokemonCommandAllowed,
-} from "../service.js";
-import { pokemonAccessFromInteraction } from "../access.js";
+} from "../config/service.js";
+import { pokemonAccessFromInteraction } from "../config/access.js";
 
 /** Prefijo botones paginación `/moveset`. */
 export const MOVESET_PAGE_PREFIX = "ms_page_";
