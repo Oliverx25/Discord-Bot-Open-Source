@@ -273,6 +273,72 @@
   }
 }
 
+/* Nav de marketing: transparente arriba, barra translúcida al scrollear. */
+.landing-nav-clear {
+  background: transparent;
+  border-bottom: 1px solid transparent;
+}
+
+.landing-nav-filled {
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(8 10 8 / 0.72);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+.landing-nav-chip {
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.06);
+}
+
+/* CTA de Discord: kit blurple + Clyde, radio y sombra del sistema tobot. */
+.landing-discord-btn {
+  border: 1px solid #5865f2;
+  background: #5865f2;
+  color: #fff;
+  box-shadow: 4px 4px 0 #3540b3;
+  transition:
+    transform var(--dur-fast) var(--ease-snap),
+    box-shadow var(--dur-fast) var(--ease-snap),
+    background-color var(--dur-fast) var(--ease-snap);
+}
+
+.landing-discord-btn:hover {
+  background: #4752c4;
+  border-color: #4752c4;
+  box-shadow: 2px 2px 0 #3540b3;
+  transform: translate(var(--press-offset), var(--press-offset));
+}
+
+.landing-discord-btn:active {
+  background: #3c45a5;
+  border-color: #3c45a5;
+  box-shadow: none;
+  transform: translate(var(--press-offset-full), var(--press-offset-full));
+}
+
+[data-theme="light"] .landing-nav-filled {
+  border-bottom-color: rgb(14 18 13 / 0.08);
+  background: rgb(248 251 243 / 0.78);
+}
+
+[data-theme="light"] .landing-nav-chip {
+  border-color: rgb(14 18 13 / 0.12);
+  background: rgb(14 18 13 / 0.05);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .landing-nav-filled {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(14 18 13 / 0.96);
+  }
+
+  [data-theme="light"] .landing-nav-filled {
+    background: rgb(248 251 243 / 0.98);
+  }
+}
+
 @keyframes tobot-spin {
   to {
     transform: rotate(360deg);

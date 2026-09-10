@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { LandingHeader, Wordmark } from "./LandingHeader";
 
 gsap.registerPlugin(useGSAP);
 
@@ -150,14 +151,6 @@ function CtaLink({
   );
 }
 
-function Wordmark({ className = "text-2xl" }: { className?: string }) {
-  return (
-    <span className={`font-display font-extrabold tracking-tight ${className}`}>
-      tobot<span className="text-primary">.</span>
-    </span>
-  );
-}
-
 export function LandingPage() {
   const root = useRef<HTMLDivElement>(null);
   const [servers, setServers] = useState(3);
@@ -196,8 +189,14 @@ export function LandingPage() {
   );
 
   return (
-    <div ref={root} className="bg-background text-foreground">
-      <div className="overflow-hidden border-b border-border bg-card">
+    <div ref={root} className="relative bg-background text-foreground">
+      <div
+        className="tobot-dither pointer-events-none absolute inset-x-0 top-0 z-0 h-64"
+        aria-hidden
+      />
+      <LandingHeader />
+
+      {/* <div className="overflow-hidden border-b border-border bg-card">
         <div className="flex w-max animate-[tobot-ticker_28s_linear_infinite] font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
           {[0, 1].map((copy) => (
             <div key={copy} className="flex shrink-0 items-center">
@@ -210,41 +209,7 @@ export function LandingPage() {
             </div>
           ))}
         </div>
-      </div>
-
-      <header className="sticky top-0 z-40 border-b border-border bg-[rgba(8,10,8,0.88)] backdrop-blur-md">
-        <div className="mx-auto flex h-[62px] max-w-[1200px] items-center gap-8 px-6">
-          <a href="/" className="shrink-0">
-            <Wordmark />
-          </a>
-          <nav className="hidden items-center gap-6 md:flex">
-            {[
-              ["Modules", "#modules"],
-              ["Pricing", "#pricing"],
-              ["FAQ", "#faq"],
-            ].map(([label, href]) => (
-              <a
-                key={label}
-                href={href}
-                className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground lg:inline">
-              18 modules · 15 free
-            </span>
-            <CtaLink href="/login" variant="ghost" size="sm" reload>
-              Log in
-            </CtaLink>
-            <CtaLink href="/auth/invite" size="sm" reload>
-              Add to Discord
-            </CtaLink>
-          </div>
-        </div>
-      </header>
+      </div> */}
 
       <section className="tobot-dither border-b border-border">
         <div className="mx-auto grid max-w-[1200px] gap-12 px-6 py-24 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:py-28">
@@ -308,7 +273,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="modules" className="border-b border-border py-20">
+      <section id="modules" className="scroll-mt-24 border-b border-border py-20">
         <div className="mx-auto max-w-[1200px] px-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -367,7 +332,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="pricing" className="border-b border-border py-20">
+      <section id="pricing" className="scroll-mt-24 border-b border-border py-20">
         <div className="mx-auto grid max-w-[1200px] gap-16 px-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
             <div className="flex items-baseline gap-3">
@@ -471,7 +436,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="faq" className="border-b border-border py-20">
+      <section id="faq" className="scroll-mt-24 border-b border-border py-20">
         <div className="mx-auto grid max-w-[1200px] gap-16 px-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <div className="flex items-baseline gap-3">
