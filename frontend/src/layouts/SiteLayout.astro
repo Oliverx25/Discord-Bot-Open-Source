@@ -1,0 +1,22 @@
+---
+import type { PanelMeUser } from "@adobos/shared";
+import { SiteHeader } from "../components/site/SiteHeader";
+import SiteFooter from "../components/site/SiteFooter.astro";
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  title: string;
+  description?: string;
+  user: PanelMeUser | null;
+}
+
+const { title, description, user } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="relative bg-background text-foreground">
+    <SiteHeader client:load user={user} />
+    <slot />
+    <SiteFooter signedIn={Boolean(user)} />
+  </div>
+</BaseLayout>

@@ -1,5 +1,4 @@
 ---
-import { ClientRouter } from "astro:transitions";
 import "../styles/globals.css";
 
 interface Props {
@@ -20,7 +19,7 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <ClientRouter />
+    <slot name="head" />
     <script is:inline>
       (function () {
         function applyThemeFromStorage() {

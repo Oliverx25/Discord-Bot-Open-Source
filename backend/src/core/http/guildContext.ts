@@ -25,7 +25,7 @@ export function extractGuildId(req: Request): unknown {
   return undefined;
 }
 
-/** Sesión obligatoria. 401 JSON en /api, redirect a /login en HTML. */
+/** Sesión obligatoria. 401 JSON en /api, redirect a / en HTML. */
 export function requireAuth(): RequestHandler {
   // Express 5 enruta la promesa rechazada de un middleware async al errorHandler.
   return async (req, res, next) => {

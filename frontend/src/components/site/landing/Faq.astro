@@ -1,0 +1,48 @@
+---
+import { FAQ } from "@/content/landing";
+import Overline from "./Overline.astro";
+---
+
+<section id="faq" class="scroll-mt-24 border-b border-border py-20">
+  <div class="mx-auto grid max-w-[1200px] gap-16 px-6 lg:grid-cols-[0.7fr_1.3fr]">
+    <div>
+      <div class="flex items-baseline gap-3">
+        <span class="font-mono text-[11px] tracking-[0.16em] text-primary">
+          04 /
+        </span>
+        <Overline>Questions</Overline>
+      </div>
+      <h2 class="mt-4 font-display text-3xl font-extrabold tracking-tight">
+        Answered before you ask
+      </h2>
+    </div>
+    <div class="space-y-3">
+      {
+        FAQ.map(({ title, content }) => (
+          <details class="group overflow-hidden rounded-lg border border-border bg-card">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 marker:content-none [&::-webkit-details-marker]:hidden">
+              {title}
+              <svg
+                class="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </summary>
+            <div class="border-t border-border px-4 py-4">
+              <p class="text-sm leading-relaxed text-muted-foreground">
+                {content}
+              </p>
+            </div>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+</section>

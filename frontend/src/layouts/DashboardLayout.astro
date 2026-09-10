@@ -1,9 +1,5 @@
 ---
-import BaseLayout from "./BaseLayout.astro";
-import {
-  AuthGateIsland,
-  SidebarIsland,
-} from "../components/providers/chromeIslands";
+import PanelLayout from "./PanelLayout.astro";
 
 interface Props {
   title: string;
@@ -11,83 +7,8 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
-const currentPath = Astro.url.pathname.replace(/\/$/, "") || "/";
 ---
 
-<BaseLayout title={`${title} — tobot.`} description={description}>
-  <div class="tobot-shell flex h-dvh overflow-hidden bg-background">
-    <div
-      id="dashboard-sidebar"
-      class="shrink-0"
-    >
-      <SidebarIsland client:load currentPath={currentPath} />
-    </div>
-
-    <div
-      class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
-      transition:animate="fade"
-    >
-      <AuthGateIsland client:load />
-      <header
-        class="hidden border-b border-border bg-card px-8 py-5 lg:block"
-      >
-        <div class="flex items-center justify-between gap-4">
-          <div class="min-w-0">
-            <p
-              class="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-primary"
-            >
-              tobot.
-            </p>
-            <h1
-              class="mt-1 font-display text-2xl font-semibold tracking-tight text-foreground"
-              transition:name="page-title"
-            >
-              {title}
-            </h1>
-            {
-              description && (
-                <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  {description}
-                </p>
-              )
-            }
-          </div>
-          <div
-            id="dashboard-header-actions"
-            class="flex shrink-0 items-center gap-3 self-center"
-          >
-          </div>
-        </div>
-      </header>
-
-      <div class="border-b border-border px-4 py-4 lg:hidden">
-        <div class="flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <h1
-              class="font-display text-xl font-semibold tracking-tight"
-              transition:name="page-title-mobile"
-            >
-              {title}
-            </h1>
-            {
-              description && (
-                <p class="mt-1 text-sm text-muted-foreground">
-                  {description}
-                </p>
-              )
-            }
-          </div>
-          <div
-            id="dashboard-header-actions-mobile"
-            class="flex shrink-0 items-center gap-2"
-          >
-          </div>
-        </div>
-      </div>
-
-      <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-        <slot />
-      </main>
-    </div>
-  </div>
-</BaseLayout>
+<PanelLayout title={title} description={description}>
+  <slot />
+</PanelLayout>

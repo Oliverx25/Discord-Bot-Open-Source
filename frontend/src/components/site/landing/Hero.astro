@@ -1,0 +1,52 @@
+---
+import CtaLink from "./CtaLink.astro";
+
+interface Props {
+  signedIn: boolean;
+}
+
+const { signedIn } = Astro.props;
+---
+
+<section class="tobot-dither relative flex min-h-[100dvh] flex-col">
+  <div
+    class="mx-auto flex w-full max-w-[1200px] flex-1 flex-col justify-center px-6 pb-16 pt-24 lg:pb-20"
+  >
+    <div class="max-w-[40rem]">
+      <h1
+        class="font-display text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl"
+      >
+        Six bots do the job.
+        <br />
+        One <span class="text-primary">should be enough.</span>
+      </h1>
+      <p
+        class="mt-6 max-w-[46ch] text-base leading-relaxed text-[var(--text-secondary)] sm:text-lg"
+      >
+        Fifteen modules stay free. One subscription covers every server on your
+        account, not a new bill per community.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center gap-3">
+        {
+          signedIn ? (
+            <CtaLink href="/dashboard" size="lg" reload>
+              Open dashboard
+            </CtaLink>
+          ) : (
+            <CtaLink href="/auth/discord" size="lg" reload>
+              Get started
+            </CtaLink>
+          )
+        }
+        <CtaLink
+          href="#modules"
+          size="lg"
+          variant="ghost"
+          class="text-[var(--text-secondary)] hover:text-foreground"
+        >
+          See the 18 modules
+        </CtaLink>
+      </div>
+    </div>
+  </div>
+</section>

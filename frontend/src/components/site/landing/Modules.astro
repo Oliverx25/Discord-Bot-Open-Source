@@ -1,0 +1,105 @@
+---
+import {
+  BarChart3,
+  CalendarClock,
+  ClipboardList,
+  Coins,
+  Dices,
+  Gavel,
+  Image,
+  MessageSquare,
+  MousePointerClick,
+  ScrollText,
+  ShieldAlert,
+  Swords,
+  Terminal,
+  Timer,
+  TrendingUp,
+  UserPlus,
+  UsersRound,
+  Webhook,
+  type LucideIcon,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { MODULES, TAGS, type ModuleIcon } from "@/content/landing";
+import Overline from "./Overline.astro";
+
+const ICONS: Record<ModuleIcon, LucideIcon> = {
+  MessageSquare,
+  Image,
+  UserPlus,
+  ScrollText,
+  ShieldAlert,
+  Timer,
+  ClipboardList,
+  CalendarClock,
+  Terminal,
+  TrendingUp,
+  Coins,
+  Dices,
+  Gavel,
+  UsersRound,
+  Swords,
+  MousePointerClick,
+  Webhook,
+  BarChart3,
+};
+---
+
+<section id="modules" class="scroll-mt-24 border-b border-border py-20">
+  <div class="mx-auto max-w-[1200px] px-6">
+    <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <div class="flex items-baseline gap-3">
+          <span class="font-mono text-[11px] tracking-[0.16em] text-primary">
+            02 /
+          </span>
+          <Overline>The wall</Overline>
+        </div>
+        <h2
+          class="mt-4 font-display text-3xl font-extrabold tracking-tight sm:text-4xl"
+        >
+          Eighteen modules that already know each other
+        </h2>
+      </div>
+      <p class="max-w-[34ch] text-sm text-muted-foreground">
+        Levels pay into economy. Auto-mod writes to your logs. Forms hand out
+        roles. Nothing to wire up.
+      </p>
+    </div>
+
+    <div
+      class="mt-10 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {
+        MODULES.map((mod) => {
+          const Icon = ICONS[mod.icon];
+          return (
+            <div class="flex gap-4 bg-card p-5">
+              <Icon
+                className={`mt-0.5 size-[18px] shrink-0 ${mod.pro ? "text-primary" : "text-muted-foreground"}`}
+                aria-hidden
+              />
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-display text-sm font-bold">{mod.name}</span>
+                  {mod.pro ? (
+                    <Badge className="border-primary text-primary">Pro</Badge>
+                  ) : null}
+                </div>
+                <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {mod.blurb}
+                </p>
+              </div>
+            </div>
+          );
+        })
+      }
+    </div>
+
+    <div class="mt-6 flex flex-wrap items-center gap-2">
+      <Overline>Replaces</Overline>
+      {TAGS.map((tag) => <Badge>{tag}</Badge>)}
+    </div>
+  </div>
+</section>

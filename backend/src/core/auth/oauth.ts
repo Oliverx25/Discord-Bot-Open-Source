@@ -123,7 +123,7 @@ export function authRouter(): Router {
       res.redirect(`${DISCORD_AUTHORIZE}?${params.toString()}`);
     } catch (error: unknown) {
       logger.error({ err: error }, "OAuth authorize failed:");
-      res.redirect("/login?error=oauth_config");
+      res.redirect("/?error=oauth_config");
     }
   });
 
@@ -141,7 +141,7 @@ export function authRouter(): Router {
       res.redirect(buildBotInviteUrl({ clientId: clientId(), guildId }));
     } catch (error: unknown) {
       logger.error({ err: error }, "OAuth invite failed:");
-      res.redirect("/login?error=oauth_config");
+      res.redirect("/?error=oauth_config");
     }
   });
 
@@ -152,13 +152,13 @@ export function authRouter(): Router {
       typeof req.query.error === "string" ? req.query.error : "";
 
     if (oauthError || !code || !state) {
-      res.redirect("/login?error=oauth_denied");
+      res.redirect("/?error=oauth_denied");
       return;
     }
 
     const verifier = await consumeOauthState(state);
     if (!verifier) {
-      res.redirect("/login?error=oauth_state");
+      res.redirect("/?error=oauth_state");
       return;
     }
 
@@ -184,7 +184,7 @@ export function authRouter(): Router {
         const isClient =
           tokenRes.status === 401 || detail.includes("invalid_client");
         res.redirect(
-          `/login?error=${isClient ? "oauth_client" : "oauth_token"}`,
+          `/?error=${isClient ? "oauth_client" : "oauth_token"}`,
         );
         return;
       }
@@ -195,7 +195,7 @@ export function authRouter(): Router {
       };
       const accessToken = tokenJson.access_token;
       if (!accessToken) {
-        res.redirect("/login?error=oauth_token");
+        res.redirect("/?error=oauth_token");
         return;
       }
       const accessExpiresAt =
@@ -207,7 +207,7 @@ export function authRouter(): Router {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!meRes.ok) {
-        res.redirect("/login?error=oauth_user");
+        res.redirect("/?error=oauth_user");
         return;
       }
       const me = (await meRes.json()) as {
@@ -237,7 +237,7 @@ export function authRouter(): Router {
       res.redirect("/dashboard");
     } catch (error: unknown) {
       logger.error({ err: error }, "OAuth callback failed:");
-      res.redirect("/login?error=oauth_callback");
+      res.redirect("/?error=oauth_callback");
     }
   });
 
@@ -350,5 +350,5 @@ export function redirectToLogin(req: Request, res: Response): void {
     res.status(401).json({ error: "No autenticado.", code: "UNAUTHENTICATED" });
     return;
   }
-  res.redirect("/login");
+  res.redirect("/");
 }

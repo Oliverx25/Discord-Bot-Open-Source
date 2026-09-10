@@ -1,15 +1,20 @@
 /**
- * BFF en el edge: replica docker/nginx.conf.
- * HTML desde Static Assets; /api /auth /uploads se streamean al VPS.
+ * Worker: proxy BFF a Express + SSR de Astro (`@astrojs/cloudflare`).
  *
- * Env lo genera `wrangler types` (worker-configuration.d.ts). Aquí se declara
- * a mano para que `astro check` no mezcle los runtime types de workerd con DOM.
+ * Env se declara a mano para que `astro check` no mezcle workerd con DOM.
  */
+
+import { handle } from "@astrojs/cloudflare/handler";
 
 interface WorkerEnv {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
   ORIGIN_URL: string;
 }
+
+type WorkerContext = {
+  waitUntil: (promise: Promise<unknown>) => void;
+  passThroughOnException: () => void;
+};
 
 const PROXY_PREFIXES = ["/api", "/auth", "/uploads"] as const;
 
@@ -19,8 +24,15 @@ function shouldProxy(pathname: string): boolean {
   );
 }
 
+function proxyOrigin(env: WorkerEnv): string {
+  // Docker/dev: Vite inyecta INTERNAL_API_URL (`http://backend:3000`).
+  const fromAstro = import.meta.env.INTERNAL_API_URL?.trim();
+  if (fromAstro) return fromAstro.replace(/\/$/, "");
+  return (env.ORIGIN_URL ?? "").replace(/\/$/, "");
+}
+
 function proxyToOrigin(request: Request, env: WorkerEnv): Promise<Response> {
-  const origin = env.ORIGIN_URL.replace(/\/$/, "");
+  const origin = proxyOrigin(env);
   if (!origin) {
     return Promise.resolve(
       new Response("ORIGIN_URL is not configured.", { status: 500 }),
@@ -52,11 +64,19 @@ function proxyToOrigin(request: Request, env: WorkerEnv): Promise<Response> {
 }
 
 export default {
-  fetch(request: Request, env: WorkerEnv): Promise<Response> {
+  fetch(
+    request: Request,
+    env: WorkerEnv,
+    ctx: WorkerContext,
+  ): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (shouldProxy(pathname)) {
       return proxyToOrigin(request, env);
     }
-    return env.ASSETS.fetch(request);
+    return handle(
+      request,
+      env as Parameters<typeof handle>[1],
+      ctx as Parameters<typeof handle>[2],
+    );
   },
 };

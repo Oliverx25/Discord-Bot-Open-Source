@@ -60,8 +60,8 @@ export async function apiFetch(
 
   if (response.status === 401 && typeof window !== "undefined") {
     const here = window.location.pathname;
-    if (here !== "/login" && !here.startsWith("/login")) {
-      window.location.assign("/login");
+    if (here !== "/" && !here.startsWith("/auth/")) {
+      window.location.assign("/");
     }
   }
 

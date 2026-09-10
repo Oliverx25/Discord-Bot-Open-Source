@@ -1,11 +1,39 @@
 ---
-import BaseLayout from "../layouts/BaseLayout.astro";
-import { LandingPage } from "../features/marketing/LandingPage";
+export const prerender = false;
+
+import Closing from "../components/site/landing/Closing.astro";
+import Faq from "../components/site/landing/Faq.astro";
+import Hero from "../components/site/landing/Hero.astro";
+import Modules from "../components/site/landing/Modules.astro";
+import Pricing from "../components/site/landing/Pricing.astro";
+import { AUTH_ERRORS } from "../content/landing";
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+const user = Astro.locals.user;
+const signedIn = Boolean(user);
+const errorCode = new URL(Astro.request.url).searchParams.get("error");
+const authError = errorCode
+  ? (AUTH_ERRORS[errorCode] ?? "Couldn't sign in.")
+  : null;
 ---
 
-<BaseLayout
+<SiteLayout
   title="tobot. — one bot, one bill"
   description="Moderation, logs, welcomes, levels and economy from one bot — one subscription for every server you run."
+  user={user}
 >
-  <LandingPage client:load />
-</BaseLayout>
+  {
+    authError && (
+      <p class="mx-auto mt-20 max-w-[1200px] px-6">
+        <span class="inline-block rounded-md border border-destructive bg-[var(--danger-bg)] px-3 py-2 text-sm text-destructive">
+          {authError}
+        </span>
+      </p>
+    )
+  }
+  <Hero signedIn={signedIn} />
+  <Modules />
+  <Pricing />
+  <Faq />
+  <Closing signedIn={signedIn} />
+</SiteLayout>

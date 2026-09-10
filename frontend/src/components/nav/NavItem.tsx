@@ -25,33 +25,36 @@ export function NavItem({
         href={href}
         onClick={onNavigate}
         className={cn(
-          "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          "group relative flex h-[34px] items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium",
+          "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-standard)]",
+          "focus-visible:outline-none",
           active
-            ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.25)]"
-            : "text-muted-foreground hover:bg-accent/80 hover:text-foreground",
+            ? "bg-[var(--bg-tint-accent)] text-primary shadow-[inset_0_0_0_1px_rgba(198,255,61,0.30)]"
+            : "text-muted-foreground hover:bg-[var(--bg-hover)] hover:text-foreground",
         )}
         aria-current={active ? "page" : undefined}
       >
-        {active && (
+        {active ? (
           <span
-            className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary"
+            className="absolute inset-y-1 left-0 w-0.5 bg-primary"
             aria-hidden
           />
-        )}
+        ) : null}
         <Icon
           className={cn(
-            "size-4 shrink-0 transition-colors",
-            active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+            "size-4 shrink-0",
+            active
+              ? "text-primary"
+              : "text-muted-foreground group-hover:text-foreground",
           )}
           aria-hidden
         />
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {soon && (
-          <Badge className="border-primary/20 bg-primary/10 text-primary opacity-80 group-hover:opacity-100">
+        {soon ? (
+          <Badge className="border-primary/30 bg-[var(--bg-tint-accent)] text-primary">
             Soon
           </Badge>
-        )}
+        ) : null}
       </a>
     </li>
   );

@@ -1,0 +1,23 @@
+---
+import type { VariantProps } from "class-variance-authority";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+interface Props {
+  href: string;
+  variant?: VariantProps<typeof buttonVariants>["variant"];
+  size?: VariantProps<typeof buttonVariants>["size"];
+  class?: string;
+  reload?: boolean;
+}
+
+const { href, variant, size, class: className, reload } = Astro.props;
+---
+
+<a
+  href={href}
+  class={cn(buttonVariants({ variant, size }), className)}
+  data-astro-reload={reload ? true : undefined}
+>
+  <slot />
+</a>

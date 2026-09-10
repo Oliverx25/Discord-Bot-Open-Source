@@ -1,2 +1,2 @@
-/** Re-export: el sidebar vive en `components/nav/NavSidebar`. */
-export { NavSidebar as Sidebar, NavSidebar } from "@/components/nav/NavSidebar";
+/** Re-export: el sidebar vive en `components/panel/PanelSidebar`. */
+export { PanelSidebar as Sidebar, PanelSidebar as NavSidebar } from "@/components/panel/PanelSidebar";

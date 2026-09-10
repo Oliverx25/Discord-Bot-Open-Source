@@ -1,0 +1,33 @@
+---
+import CtaLink from "./CtaLink.astro";
+
+interface Props {
+  signedIn: boolean;
+}
+
+const { signedIn } = Astro.props;
+---
+
+<section class="px-6 py-20 text-center">
+  <h2
+    class="mx-auto max-w-[20ch] font-display text-3xl font-extrabold tracking-tight sm:text-4xl"
+  >
+    Turn on one module. Then you decide.
+  </h2>
+  <div class="mt-6 flex flex-wrap justify-center gap-3">
+    <CtaLink href="/auth/invite" size="lg" reload>
+      Add to Discord
+    </CtaLink>
+    {
+      signedIn ? (
+        <CtaLink href="/dashboard" size="lg" variant="ghost" reload>
+          Open dashboard
+        </CtaLink>
+      ) : (
+        <CtaLink href="/auth/discord" size="lg" variant="ghost" reload>
+          Sign in
+        </CtaLink>
+      )
+    }
+  </div>
+</section>

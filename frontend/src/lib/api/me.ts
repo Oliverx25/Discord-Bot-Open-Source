@@ -18,7 +18,7 @@ export async function fetchMe(): Promise<MeResponse> {
 }
 
 /**
- * Probe silencioso para el landing: 401 no redirige a /login.
+ * Probe silencioso para el landing: 401 no redirige al inicio.
  * No usa `apiFetch` a propósito.
  */
 export async function fetchSessionUser(): Promise<PanelMeUser | null> {

@@ -17,11 +17,15 @@ interface PopoverProps {
   children: ReactNode;
   align?: "start" | "end";
   className?: string;
+  /** Clases del wrapper del trigger (p. ej. `w-full`). */
+  rootClassName?: string;
   /**
    * Renderiza el contenido en `document.body` con position:fixed
    * para no deformar el layout del padre.
    */
   portalled?: boolean;
+  /** Ancho del panel portalled, para alinear `end` (default w-72). */
+  contentWidth?: number;
 }
 
 export function Popover({
@@ -31,7 +35,9 @@ export function Popover({
   children,
   align = "start",
   className,
+  rootClassName,
   portalled = false,
+  contentWidth = 288,
 }: PopoverProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -47,7 +53,7 @@ export function Popover({
     function place(): void {
       const rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const width = 288; // w-72
+      const width = contentWidth;
       let left = align === "end" ? rect.right - width : rect.left;
       left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
       let top = rect.bottom + 8;
@@ -64,7 +70,7 @@ export function Popover({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [open, portalled, align]);
+  }, [open, portalled, align, contentWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -109,7 +115,7 @@ export function Popover({
   ) : null;
 
   return (
-    <div ref={rootRef} className="relative inline-flex">
+    <div ref={rootRef} className={cn("relative inline-flex", rootClassName)}>
       {trigger}
       {portalled && typeof document !== "undefined"
         ? panel

@@ -1,0 +1,56 @@
+---
+import { ClientRouter } from "astro:transitions";
+import BaseLayout from "./BaseLayout.astro";
+import { PanelShellIsland } from "../components/providers/chromeIslands";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+const currentPath = Astro.url.pathname.replace(/\/$/, "") || "/";
+---
+
+<BaseLayout title={`${title} — tobot.`} description={description}>
+  <ClientRouter slot="head" />
+  <div class="tobot-shell flex h-dvh overflow-hidden bg-background">
+    <div class="flex h-dvh shrink-0 max-lg:w-0 max-lg:overflow-visible">
+      <PanelShellIsland client:load currentPath={currentPath} />
+    </div>
+
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header
+        class="relative z-50 flex h-[var(--topbar-h)] shrink-0 items-center gap-3 bg-background px-[var(--dash-pad)]"
+      >
+        <div id="panel-menu-host" class="shrink-0 lg:hidden"></div>
+        <h1 class="sr-only">{title}</h1>
+        <div id="panel-guild-host" class="min-w-0 flex-1"></div>
+        <div
+          id="dashboard-header-actions"
+          class="hidden shrink-0 items-center gap-3 lg:flex"
+        >
+        </div>
+        <div
+          id="dashboard-header-actions-mobile"
+          class="flex shrink-0 items-center gap-2 lg:hidden"
+        >
+        </div>
+        <div id="panel-user-host" class="shrink-0"></div>
+      </header>
+      <div id="panel-banner-host" class="shrink-0"></div>
+      <div class="relative min-h-0 flex-1">
+        <div
+          id="panel-empty-host"
+          class="pointer-events-none absolute inset-0 z-10"
+        >
+        </div>
+        <main
+          class="h-full overflow-y-auto px-[var(--dash-pad)] py-[var(--dash-pad)]"
+        >
+          <slot />
+        </main>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

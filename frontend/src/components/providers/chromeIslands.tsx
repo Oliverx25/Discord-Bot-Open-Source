@@ -1,19 +1,10 @@
-import { Sidebar } from "@/components/custom/Sidebar";
-import { AuthGate } from "@/features/auth/AuthGate";
 import { DashboardProviders } from "./DashboardProviders";
+import { PanelChrome } from "@/components/panel/PanelShell";
 
-export function AuthGateIsland() {
+export function PanelShellIsland({ currentPath }: { currentPath: string }) {
   return (
     <DashboardProviders>
-      <AuthGate />
-    </DashboardProviders>
-  );
-}
-
-export function SidebarIsland({ currentPath }: { currentPath: string }) {
-  return (
-    <DashboardProviders>
-      <Sidebar currentPath={currentPath} />
+      <PanelChrome currentPath={currentPath} />
     </DashboardProviders>
   );
 }

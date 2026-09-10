@@ -1,0 +1,74 @@
+---
+import { Badge } from "@/components/ui/badge";
+import { PRICING_ROWS } from "@/content/landing";
+import CtaLink from "./CtaLink.astro";
+import Overline from "./Overline.astro";
+import { PricingCalculator } from "./PricingCalculator";
+---
+
+<section id="pricing" class="scroll-mt-24 border-b border-border py-20">
+  <div class="mx-auto grid max-w-[1200px] gap-16 px-6 lg:grid-cols-[0.9fr_1.1fr]">
+    <div>
+      <div class="flex items-baseline gap-3">
+        <span class="font-mono text-[11px] tracking-[0.16em] text-primary">
+          03 /
+        </span>
+        <Overline>Pricing</Overline>
+      </div>
+      <h2
+        class="mt-4 font-display text-3xl font-extrabold tracking-tight sm:text-4xl"
+      >
+        Per account.
+        <br />
+        Not per server.
+      </h2>
+      <p class="mt-5 max-w-[42ch] text-base text-muted-foreground">
+        Everyone else charges you again for the same bot. Move the slider and
+        watch what that stack actually costs.
+      </p>
+      <PricingCalculator client:visible />
+    </div>
+
+    <div class="overflow-hidden rounded-lg border border-border bg-card">
+      <div class="grid grid-cols-[1.4fr_1fr_1fr]">
+        <div class="border-b border-border p-5">
+          <Overline>What you get</Overline>
+        </div>
+        <div class="border-b border-l border-border p-5">
+          <Badge>Free</Badge>
+          <p class="mt-2 font-mono text-2xl">$0</p>
+        </div>
+        <div
+          class="border-b border-l border-primary bg-[var(--bg-tint-accent)] p-5"
+        >
+          <Badge className="border-primary text-primary">Pro</Badge>
+          <p class="mt-2 font-mono text-2xl">
+            $6
+            <span class="text-xs text-muted-foreground">/mo</span>
+          </p>
+        </div>
+        {
+          PRICING_ROWS.map(({ label, free, pro }) => (
+            <div class="contents">
+              <div class="border-b border-border px-5 py-3 text-sm">{label}</div>
+              <div class="border-b border-l border-border px-5 py-3 font-mono text-xs text-muted-foreground">
+                {free}
+              </div>
+              <div class="border-b border-l border-border bg-[rgba(198,255,61,0.05)] px-5 py-3 font-mono text-xs">
+                {pro}
+              </div>
+            </div>
+          ))
+        }
+      </div>
+      <div class="flex flex-col gap-3 p-5 sm:flex-row">
+        <CtaLink href="/auth/invite" variant="secondary" class="w-full flex-1" reload>
+          Start free
+        </CtaLink>
+        <CtaLink href="/auth/discord" class="w-full flex-1" reload>
+          Go Pro
+        </CtaLink>
+      </div>
+    </div>
+  </div>
+</section>
