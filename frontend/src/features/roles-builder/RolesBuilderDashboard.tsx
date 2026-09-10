@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useStore } from "@nanostores/react";
 import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  type DropResult,
-} from "@hello-pangea/dnd";
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type {
   RolePermissionGroup,
   RolesBuilderListResponse,
@@ -43,6 +53,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToastBanner } from "@/components/ui/toast";
+import { queryKeys } from "@/lib/query/keys";
+import { $guildId } from "@/stores/guild";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -214,16 +226,18 @@ function RolesHierarchyPanel({
     return ids;
   }, [roles, botHighestPosition, botHighestRoleId]);
 
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination || !canManage) return;
-    const next = reorderKeepingLocks(
-      roles,
-      lockedIds,
-      result.source.index,
-      result.destination.index,
-    );
-    onReorder(next);
-  };
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
+  function onDragEnd(event: DragEndEvent): void {
+    const { active, over } = event;
+    if (!over || !canManage || active.id === over.id) return;
+    const from = roles.findIndex((role) => role.id === String(active.id));
+    const to = roles.findIndex((role) => role.id === String(over.id));
+    if (from < 0 || to < 0) return;
+    onReorder(reorderKeepingLocks(roles, lockedIds, from, to));
+  }
 
   return (
     <div className="space-y-3">
@@ -248,117 +262,137 @@ function RolesHierarchyPanel({
         managed, or the bot itself) don't move.
       </p>
 
-      <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId="guild-roles">
-          {(dropProvided, dropSnapshot) => (
-            <div
-              ref={dropProvided.innerRef}
-              {...dropProvided.droppableProps}
-              className={cn(
-                "max-h-[32rem] space-y-1.5 overflow-y-auto rounded-md pr-1",
-                dropSnapshot.isDraggingOver && "bg-muted/20",
-              )}
-            >
-              {roles.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No roles in this server.
-                </p>
-              ) : (
-                roles.map((role, index) => {
-                  const locked = lockedIds.has(role.id);
-                  const editing = editingRoleId === role.id;
-                  return (
-                    <Draggable
-                      key={role.id}
-                      draggableId={role.id}
-                      index={index}
-                      isDragDisabled={locked || !canManage}
-                    >
-                      {(dragProvided, dragSnapshot) => (
-                        <div
-                          ref={dragProvided.innerRef}
-                          {...dragProvided.draggableProps}
-                          className={cn(
-                            "flex items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-sm",
-                            editing
-                              ? "border-primary/60 ring-1 ring-primary/30"
-                              : "border-border/60",
-                            dragSnapshot.isDragging &&
-                              "opacity-80 shadow-lg ring-1 ring-primary/40",
-                          )}
-                          style={dragProvided.draggableProps.style}
-                        >
-                          <span
-                            className={cn(
-                              "shrink-0",
-                              locked || !canManage
-                                ? "cursor-not-allowed text-muted-foreground"
-                                : "cursor-grab active:cursor-grabbing text-muted-foreground",
-                            )}
-                            {...(locked || !canManage
-                              ? {}
-                              : dragProvided.dragHandleProps)}
-                          >
-                            {locked ? (
-                              <Lock className="size-3.5" />
-                            ) : (
-                              <GripVertical className="size-3.5" />
-                            )}
-                          </span>
-                          <RoleColorDot hex={role.hexColor} />
-                          <span className="min-w-0 flex-1 truncate font-medium">
-                            {role.name}
-                          </span>
-                          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                            pos {role.position}
-                          </span>
-                          {locked ? (
-                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                              {role.managed ? "managed" : "Not manageable"}
-                            </span>
-                          ) : (
-                            <span className="flex shrink-0 gap-0.5">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-7"
-                                disabled={!canManage}
-                                aria-label={`Edit ${role.name}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  onEdit(role);
-                                }}
-                              >
-                                <Pencil className="size-3.5" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-7 text-destructive hover:text-destructive"
-                                disabled={!canManage}
-                                aria-label={`Delete ${role.name}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  onDelete(role);
-                                }}
-                              >
-                                <Trash2 className="size-3.5" />
-                              </Button>
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </Draggable>
-                  );
-                })
-              )}
-              {dropProvided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onDragEnd}
+      >
+        <SortableContext
+          items={roles.map((role) => role.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="max-h-[32rem] space-y-1.5 overflow-y-auto rounded-md pr-1">
+            {roles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No roles in this server.
+              </p>
+            ) : (
+              roles.map((role) => (
+                <SortableRoleRow
+                  key={role.id}
+                  role={role}
+                  locked={lockedIds.has(role.id)}
+                  canManage={canManage}
+                  editing={editingRoleId === role.id}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              ))
+            )}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+function SortableRoleRow({
+  role,
+  locked,
+  canManage,
+  editing,
+  onEdit,
+  onDelete,
+}: {
+  role: RolesBuilderRole;
+  locked: boolean;
+  canManage: boolean;
+  editing: boolean;
+  onEdit: (role: RolesBuilderRole) => void;
+  onDelete: (role: RolesBuilderRole) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: role.id,
+    disabled: locked || !canManage,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-sm",
+        editing ? "border-primary/60 ring-1 ring-primary/30" : "border-border",
+        isDragging && "opacity-80 shadow-[var(--shadow-2)] ring-1 ring-primary/40",
+      )}
+    >
+      <span
+        className={cn(
+          "shrink-0",
+          locked || !canManage
+            ? "cursor-not-allowed text-muted-foreground"
+            : "cursor-grab text-muted-foreground active:cursor-grabbing",
+        )}
+        {...(locked || !canManage ? {} : { ...attributes, ...listeners })}
+      >
+        {locked ? (
+          <Lock className="size-3.5" />
+        ) : (
+          <GripVertical className="size-3.5" />
+        )}
+      </span>
+      <RoleColorDot hex={role.hexColor} />
+      <span className="min-w-0 flex-1 truncate font-medium">{role.name}</span>
+      <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+        pos {role.position}
+      </span>
+      {locked ? (
+        <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          {role.managed ? "managed" : "Not manageable"}
+        </span>
+      ) : (
+        <span className="flex shrink-0 gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            disabled={!canManage}
+            aria-label={`Edit ${role.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit(role);
+            }}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 text-destructive hover:text-destructive"
+            disabled={!canManage}
+            aria-label={`Delete ${role.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(role);
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </span>
+      )}
     </div>
   );
 }
@@ -400,32 +434,34 @@ export function RolesBuilderDashboard() {
     [orderedRoles, savedFingerprint],
   );
 
+  const guildId = useStore($guildId);
+  const rolesQuery = useQuery({
+    queryKey: queryKeys.roles(guildId),
+    queryFn: fetchRolesBuilderList,
+    enabled: Boolean(guildId),
+  });
+
   const applyList = useCallback((res: RolesBuilderListResponse) => {
     setData(res);
     setOrderedRoles(res.roles);
     setSavedFingerprint(rolesOrderFingerprint(res.roles));
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchRolesBuilderList();
-      applyList(res);
-    } catch (err) {
+  useEffect(() => {
+    if (rolesQuery.data) {
+      applyList(rolesQuery.data);
+      setLoading(false);
+      setError(null);
+    }
+    if (rolesQuery.isError) {
       setError(
-        err instanceof Error
-          ? err.message
+        rolesQuery.error instanceof Error
+          ? rolesQuery.error.message
           : "Couldn't load Roles Builder.",
       );
-    } finally {
       setLoading(false);
     }
-  }, [applyList]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }, [rolesQuery.data, rolesQuery.isError, rolesQuery.error, applyList]);
 
   const togglePerm = (key: string, enabled: boolean) => {
     setSelectedPerms((prev) => {
@@ -636,7 +672,7 @@ export function RolesBuilderDashboard() {
           variant="outline"
           size="sm"
           disabled={loading || busy}
-          onClick={() => void load()}
+          onClick={() => void rolesQuery.refetch()}
         >
           {loading ? (
             <Loader2 className="size-4 animate-spin" />

@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { SystemCommandsDashboard } from "../../../features/system-commands";
+import { SystemCommandsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="System Commands"
   description="Control which built-in commands are active and which roles are allowed to use them."
 >
-  <SystemCommandsDashboard client:load />
+  <SystemCommandsIsland client:load/>
 </DashboardLayout>

@@ -1,3 +1,11 @@
 ---
-return Astro.redirect("/login");
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { LandingPage } from "../features/marketing/LandingPage";
 ---
+
+<BaseLayout
+  title="tobot. — one bot, one bill"
+  description="Moderation, logs, welcomes, levels and economy from one bot — one subscription for every server you run."
+>
+  <LandingPage client:load />
+</BaseLayout>

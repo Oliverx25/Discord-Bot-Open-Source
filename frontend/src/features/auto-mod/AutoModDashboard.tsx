@@ -31,7 +31,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToastBanner } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { Info, Loader2, Save, ShieldAlert } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useStore } from "@nanostores/react";
+import { useEffect, useMemo, useState } from "react";
+import { queryKeys } from "@/lib/query/keys";
+import { $guildId } from "@/stores/guild";
 import { AutoModExclusionsTab } from "./AutoModExclusionsTab";
 import { AutoModFiltersTab } from "./AutoModFiltersTab";
 import { AutoModSanctionsTab } from "./AutoModSanctionsTab";
@@ -113,32 +117,54 @@ export function AutoModDashboard() {
     [config.filters],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
+  const guildId = useStore($guildId);
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: queryKeys.autoMod(guildId),
+    queryFn: async () => {
       const [cfgRes, assets, levelsRes] = await Promise.all([
         fetchAutoModConfig(),
         fetchGuildAssets(),
         fetchLevelsConfig().catch(() => null),
       ]);
-      setConfig(cfgRes.config);
-      setSavedFingerprint(configFingerprint(cfgRes.config));
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-      setLevelsEnabled(Boolean(levelsRes?.config.enabled));
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Couldn't load Auto-Mod",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return { cfgRes, assets, levelsRes };
+    },
+    enabled: Boolean(guildId),
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setConfig(query.data.cfgRes.config);
+    setSavedFingerprint(configFingerprint(query.data.cfgRes.config));
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setLevelsEnabled(Boolean(query.data.levelsRes?.config.enabled));
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Auto-Mod",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
+
+  const saveMutation = useMutation({
+    mutationFn: saveAutoModConfig,
+    onSuccess: (res) => {
+      setConfig(res.config);
+      setSavedFingerprint(configFingerprint(res.config));
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.autoMod(guildId),
+      });
+    },
+  });
 
   function patch(partial: Partial<AutoModConfig>): void {
     setConfig((prev) => ({ ...prev, ...partial }));
@@ -156,7 +182,7 @@ export function AutoModDashboard() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await saveAutoModConfig({
+      const res = await saveMutation.mutateAsync({
         enabled: config.enabled,
         filters: config.filters,
         ignoredRoles: config.ignoredRoles,
@@ -168,8 +194,6 @@ export function AutoModDashboard() {
         skipStaff: config.skipStaff,
         punishments: config.punishments,
       });
-      setConfig(res.config);
-      setSavedFingerprint(configFingerprint(res.config));
       if (res.nativeSync && !res.nativeSync.ok) {
         setSuccess("Auto-Mod configuration saved.");
         setError(res.nativeSync.message);
@@ -382,7 +406,7 @@ export function AutoModDashboard() {
                 aria-hidden
               />
               <p className={cn("leading-relaxed")}>
-                On save, Adobos writes native AutoMod rules (words, invites,
+                On save, tobot writes native AutoMod rules (words, invites,
                 mentions) so Discord blocks before the message is seen. Warns
                 and escalation stay in the bot.
               </p>

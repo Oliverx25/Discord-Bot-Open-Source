@@ -49,8 +49,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ToastBanner } from "@/components/ui/toast";
 import { useEntitlements } from "@/features/entitlements/useEntitlements";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { Loader2, Save, ShieldBan } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const NONE = "__none__";
 
@@ -94,29 +96,33 @@ export function AntiRaidDashboard() {
     [channels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [config, assets] = await Promise.all([
-        fetchAntiRaid(),
-        fetchGuildAssets(),
-      ]);
-      applySettings(config.settings, setSettings);
-      setNukeAvailable(config.nukeAvailable);
-      setNukeUserRaw(config.settings.nukeWhitelistUserIds.join(", "));
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.antiRaid, async () => {
+    const [config, assets] = await Promise.all([
+      fetchAntiRaid(),
+      fetchGuildAssets(),
+    ]);
+    return { config, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    applySettings(query.data.config.settings, setSettings);
+    setNukeAvailable(query.data.config.nukeAvailable);
+    setNukeUserRaw(query.data.config.settings.nukeWhitelistUserIds.join(", "));
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error ? query.error.message : "Couldn't load.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   function patch(partial: Partial<AntiRaidSettings>): void {
     setSettings((prev) => (prev ? { ...prev, ...partial } : prev));

@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EmbedBuilder } from "../../../features/messages";
+import { EmbedBuilderIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Messages"
   description="Create embeds, save them as templates, and manage messages you've already sent."
 >
-  <EmbedBuilder client:load />
+  <EmbedBuilderIsland client:load/>
 </DashboardLayout>

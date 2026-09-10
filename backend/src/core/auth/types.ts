@@ -42,7 +42,21 @@ export interface StoredSession {
   expiresAt: Date;
 }
 
-export const SESSION_COOKIE = "adobos_session";
+/** Cookie vigente. `__Host-` solo si el origen público es HTTPS (mismo host). */
+export function sessionCookieName(): string {
+  const publicUrl = process.env.PUBLIC_APP_URL?.trim() ?? "";
+  if (publicUrl.startsWith("https://")) return "__Host-tobot_session";
+  return "tobot_session";
+}
+
+export const SESSION_COOKIE = sessionCookieName();
+
+/** Nombres aceptados al leer (migración desde adobos_session). */
+export const SESSION_COOKIE_ALIASES = [
+  "__Host-tobot_session",
+  "tobot_session",
+  "adobos_session",
+] as const;
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 export const GUILD_CACHE_TTL_MS = 60 * 1000;

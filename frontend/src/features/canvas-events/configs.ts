@@ -5,6 +5,7 @@ import {
 import type { CanvasEventBuilderConfig } from "./CanvasEventBuilder";
 
 export const leaveBuilderConfig: CanvasEventBuilderConfig = {
+  kind: "leave",
   cardTitle: "Leave card design",
   cardDescription:
     "1920×1080 PNG card when someone leaves the server.",
@@ -20,6 +21,7 @@ export const leaveBuilderConfig: CanvasEventBuilderConfig = {
 };
 
 export const banBuilderConfig: CanvasEventBuilderConfig = {
+  kind: "ban",
   cardTitle: "Ban card design",
   cardDescription:
     "1920×1080 PNG card when someone is banned from the server.",
@@ -35,6 +37,7 @@ export const banBuilderConfig: CanvasEventBuilderConfig = {
 };
 
 export const boostBuilderConfig: CanvasEventBuilderConfig = {
+  kind: "boost",
   cardTitle: "Boost card design",
   cardDescription:
     "1920×1080 PNG card when someone boosts the server.",

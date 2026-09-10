@@ -1,22 +1,10 @@
-/** Cliente HTTP base del panel (same-origin / proxy). */
+/** Cliente HTTP base del panel (same-origin / proxy BFF). */
 import type { ApiErrorBody } from "@adobos/shared";
+import { getSelectedGuildId } from "@/stores/guild";
+
+export { getSelectedGuildId, setSelectedGuildId, clearSelectedGuildId } from "@/stores/guild";
 
 export const API_BASE = import.meta.env.PUBLIC_API_BASE ?? "";
-
-const GUILD_STORAGE_KEY = "adobos-guild-id";
-
-export function getSelectedGuildId(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(GUILD_STORAGE_KEY);
-}
-
-export function setSelectedGuildId(id: string): void {
-  window.localStorage.setItem(GUILD_STORAGE_KEY, id);
-}
-
-export function clearSelectedGuildId(): void {
-  window.localStorage.removeItem(GUILD_STORAGE_KEY);
-}
 
 export async function readApiError(
   response: Response,
@@ -53,13 +41,16 @@ export async function apiFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   const url = resolveUrl(path);
+  const guildId = getSelectedGuildId();
   if (shouldAttachGuild(url.pathname) && !url.searchParams.has("guildId")) {
-    const guildId = getSelectedGuildId();
     if (guildId) url.searchParams.set("guildId", guildId);
   }
 
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
+  if (guildId && shouldAttachGuild(url.pathname) && !headers.has("X-Guild-Id")) {
+    headers.set("X-Guild-Id", guildId);
+  }
 
   const response = await fetch(url.toString(), {
     ...init,

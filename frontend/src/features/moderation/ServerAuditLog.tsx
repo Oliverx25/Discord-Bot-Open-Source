@@ -47,6 +47,8 @@ import { Sheet } from "@/components/ui/sheet";
 import { ToastBanner } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { AuditEventDetails } from "@/features/moderation/AuditEventDetails";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { cn } from "@/lib/utils";
 
 const TONE_OPTIONS: Array<{ value: DiscordAuditToneFilter; label: string }> = [
@@ -147,7 +149,6 @@ function endOfDay(isoDate: string): number {
 
 export function ServerAuditLog() {
   const [entries, setEntries] = useState<DiscordAuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
 
@@ -173,30 +174,33 @@ export function ServerAuditLog() {
     }));
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchDiscordAuditLog({
+  const query = useGuildQuery(
+    (gid) => [...queryKeys.auditLog(gid), executor?.id ?? ""] as const,
+    () =>
+      fetchDiscordAuditLog({
         limit: 100,
         userId: executor?.id,
-      });
-      setEntries(data.entries);
-      setFetchedAt(data.fetchedAt);
-    } catch (error: unknown) {
+      }),
+  );
+
+  useEffect(() => {
+    if (!query.data) return;
+    setEntries(query.data.entries);
+    setFetchedAt(query.data.fetchedAt);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
       const message =
-        error instanceof Error
-          ? error.message
+        query.error instanceof Error
+          ? query.error.message
           : "Couldn't load the audit log.";
       setToast(message);
       setEntries([]);
-    } finally {
-      setLoading(false);
     }
-  }, [executor?.id]);
+  }, [query.isError, query.error]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const loading = query.isPending || query.isFetching;
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
@@ -353,7 +357,7 @@ export function ServerAuditLog() {
               size="sm"
               disabled={loading}
               onClick={() => {
-                void load();
+                void query.refetch();
               }}
             >
               {loading ? (

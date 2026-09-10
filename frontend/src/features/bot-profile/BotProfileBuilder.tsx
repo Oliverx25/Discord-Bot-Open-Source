@@ -15,6 +15,8 @@ import {
   fetchBotGuildProfile,
   saveBotGuildProfile,
 } from "@/lib/api";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { resolvePublicAssetUrl } from "@/lib/api/client";
 import {
   HybridImageInput,
@@ -58,35 +60,29 @@ export function BotProfileBuilder() {
   const [avatarValue, setAvatarValue] = useState<HybridImageValue>(null);
   const [objectPreview, setObjectPreview] = useState<string | null>(null);
 
+  const query = useGuildQuery(queryKeys.botProfile, fetchBotGuildProfile);
+
   useEffect(() => {
-    let cancelled = false;
-    async function load(): Promise<void> {
-      setLoading(true);
-      setFeedback({ kind: "idle" });
-      try {
-        const data = await fetchBotGuildProfile();
-        if (cancelled) return;
-        setProfile(data);
-        setNickname(data.nickname);
-        setAvatarValue(data.serverAvatarURL);
-      } catch (error: unknown) {
-        if (cancelled) return;
-        setFeedback({
-          kind: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Couldn't load the server profile",
-        });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    if (!query.data) return;
+    setProfile(query.data);
+    setNickname(query.data.nickname);
+    setAvatarValue(query.data.serverAvatarURL);
+    setLoading(false);
+    setFeedback({ kind: "idle" });
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setFeedback({
+        kind: "error",
+        message:
+          query.error instanceof Error
+            ? query.error.message
+            : "Couldn't load the server profile",
+      });
+      setLoading(false);
     }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [query.isError, query.error]);
 
   useEffect(() => {
     if (!(avatarValue instanceof File)) {

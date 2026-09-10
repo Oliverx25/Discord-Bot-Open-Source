@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { MeResponse, PanelMeGuild, PlanTier } from "@adobos/shared";
+import { useQuery } from "@tanstack/react-query";
+import type { PanelMeGuild, PlanTier } from "@adobos/shared";
 import { PLAN_TIER_LABEL } from "@adobos/shared";
 import { fetchEntitlements } from "@/lib/api/entitlements";
 import { fetchMe, logout } from "@/lib/api/me";
@@ -7,64 +7,54 @@ import {
   clearSelectedGuildId,
   getSelectedGuildId,
   setSelectedGuildId,
-} from "@/lib/api/client";
+} from "@/stores/guild";
+import { queryKeys } from "@/lib/query/keys";
+import { Button } from "@/components/ui/button";
 
 export function AuthGate() {
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [empty, setEmpty] = useState(false);
-  const [tier, setTier] = useState<PlanTier>("free");
+  const meQuery = useQuery({
+    queryKey: queryKeys.me,
+    queryFn: fetchMe,
+    retry: false,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const data = await fetchMe();
-        if (cancelled) return;
-        if (data.guilds.length === 0) {
-          setEmpty(true);
-          setMe(data);
-          return;
-        }
-        const current = getSelectedGuildId();
-        const withBot = data.guilds.filter((g) => g.botPresent);
-        const match =
-          data.guilds.find((g) => g.id === current && g.botPresent) ??
-          withBot[0] ??
-          data.guilds.find((g) => g.id === current) ??
-          data.guilds[0];
-        if (match) setSelectedGuildId(match.id);
-        setMe(data);
-        void fetchEntitlements()
-          .then((ent) => {
-            if (!cancelled) setTier(ent.tier);
-          })
-          .catch(() => undefined);
-      } catch {
-        if (!cancelled) window.location.assign("/login");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const me = meQuery.data ?? null;
+  const selected = me
+    ? (getSelectedGuildId() ?? me.guilds[0]?.id ?? "")
+    : "";
 
-  if (empty && me) {
+  const entitlementsQuery = useQuery({
+    queryKey: queryKeys.entitlements(selected || null),
+    queryFn: fetchEntitlements,
+    enabled: Boolean(me && selected),
+    retry: false,
+  });
+
+  const tier: PlanTier = entitlementsQuery.data?.tier ?? "free";
+
+  if (meQuery.isError) {
+    if (typeof window !== "undefined") window.location.assign("/login");
+    return null;
+  }
+
+  if (me && me.guilds.length === 0) {
     return (
       <div className="flex min-h-[30vh] flex-col items-center justify-center gap-3 px-6 py-10 text-center">
         <h2 className="font-display text-lg font-semibold">No servers</h2>
         <p className="max-w-md text-sm text-muted-foreground">
-          Add Adobos to a server where you can Manage Server. Discord will ask
+          Add tobot to a server where you can Manage Server. Discord will ask
           for the permissions; then come back and sign in with your account.
         </p>
         <a
           href="/auth/invite"
-          className="inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+          data-astro-reload
+          className="inline-flex h-[38px] items-center justify-center rounded-md border border-primary bg-primary px-4 font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary-foreground shadow-[var(--shadow-hard)]"
         >
           Add to a server
         </a>
-        <button
+        <Button
           type="button"
-          className="text-sm text-primary underline"
+          variant="ghost"
           onClick={() => {
             void logout().finally(() => {
               clearSelectedGuildId();
@@ -73,24 +63,26 @@ export function AuthGate() {
           }}
         >
           Sign out
-        </button>
+        </Button>
       </div>
     );
   }
 
   if (!me) {
     return (
-      <div className="border-b border-border/70 px-4 py-2 text-sm text-muted-foreground lg:px-8">
+      <div className="border-b border-border px-4 py-2 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground lg:px-8">
         Checking session…
       </div>
     );
   }
 
-  const selected = getSelectedGuildId() ?? me.guilds[0]!.id;
-
   const selectedGuild =
     me.guilds.find((g) => g.id === selected) ?? me.guilds[0]!;
   const selectedMissingBot = !selectedGuild.botPresent;
+
+  if (selected && getSelectedGuildId() !== selected) {
+    setSelectedGuildId(selected);
+  }
 
   function onChange(guild: PanelMeGuild): void {
     setSelectedGuildId(guild.id);
@@ -98,12 +90,14 @@ export function AuthGate() {
   }
 
   return (
-    <div className="border-b border-border/70 bg-card/40">
+    <div className="border-b border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-sm lg:px-8">
         <label className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 text-muted-foreground">Server</span>
+          <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            Server
+          </span>
           <select
-            className="max-w-[16rem] truncate rounded-md border border-border bg-background px-2 py-1"
+            className="max-w-[16rem] truncate rounded-md border border-border bg-background px-2 py-1 font-mono text-xs"
             value={selected}
             onChange={(event) => {
               const guild = me.guilds.find((g) => g.id === event.target.value);
@@ -120,16 +114,16 @@ export function AuthGate() {
         <div className="flex items-center gap-3">
           <a
             href="/dashboard/general/billing"
-            className="rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            className="rounded-full border border-border bg-background px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground hover:border-primary hover:text-foreground"
           >
             {PLAN_TIER_LABEL[tier]}
           </a>
-          <span className="truncate text-muted-foreground">
+          <span className="truncate font-mono text-xs text-muted-foreground">
             {me.user.username}
           </span>
           <button
             type="button"
-            className="text-primary hover:underline"
+            className="font-mono text-xs uppercase tracking-[0.1em] text-primary hover:underline"
             onClick={() => {
               void logout().finally(() => {
                 clearSelectedGuildId();
@@ -142,13 +136,14 @@ export function AuthGate() {
         </div>
       </div>
       {selectedMissingBot ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-2 text-sm lg:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2 text-sm lg:px-8">
           <p className="text-muted-foreground">
-            Adobos isn't in this server. Add it to use the dashboard.
+            tobot isn't in this server. Add it to use the dashboard.
           </p>
           <a
             href={`/auth/invite?guildId=${encodeURIComponent(selectedGuild.id)}`}
-            className="font-semibold text-primary hover:underline"
+            data-astro-reload
+            className="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary hover:underline"
           >
             Add to the server
           </a>

@@ -40,8 +40,10 @@ import {
 import { ToastBanner } from "@/components/ui/toast";
 import { TimezoneCombobox } from "@/features/scheduled-messages/TimezoneCombobox";
 import { cn } from "@/lib/utils";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { AlertTriangle, Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5, 15]);
 
@@ -157,31 +159,33 @@ export function AutoDeleteDashboard() {
     [config.rules],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [cfgRes, assets] = await Promise.all([
-        fetchAutoDeleteConfig(),
-        fetchGuildAssets(),
-      ]);
-      setConfig(cfgRes.config);
-      setSavedFingerprint(configFingerprint(cfgRes.config));
-      setChannels(assets.channels);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Couldn't load Auto-Delete.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.autoDelete, async () => {
+    const [cfgRes, assets] = await Promise.all([
+      fetchAutoDeleteConfig(),
+      fetchGuildAssets(),
+    ]);
+    return { cfgRes, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setConfig(query.data.cfgRes.config);
+    setSavedFingerprint(configFingerprint(query.data.cfgRes.config));
+    setChannels(query.data.assets.channels);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Auto-Delete.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   const patch = (partial: Partial<AutoDeleteConfig>) => {
     setConfig((prev) => ({ ...prev, ...partial }));

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   ChevronLeft,
@@ -57,7 +59,6 @@ export function ActionLogsHistoryTab() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [qDebounced, setQDebounced] = useState("");
@@ -72,31 +73,44 @@ export function ActionLogsHistoryTab() {
     return () => window.clearTimeout(t);
   }, [q]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchActionLogsHistory({
+  const historyFilters = useMemo(
+    () => ({ q: qDebounced, category, from, to, page }),
+    [qDebounced, category, from, to, page],
+  );
+
+  const query = useGuildQuery(
+    (guildId) => queryKeys.actionLogsHistory(guildId, historyFilters),
+    () =>
+      fetchActionLogsHistory({
         q: qDebounced || undefined,
         category,
         from: from || undefined,
         to: to || undefined,
         page,
         limit: 50,
-      });
-      setEntries(result.entries);
-      setTotal(result.total);
-      setTotalPages(result.totalPages);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't load history");
-    } finally {
-      setLoading(false);
-    }
-  }, [qDebounced, category, from, to, page]);
+      }),
+    { refetchInterval: 15_000 },
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setEntries(query.data.entries);
+    setTotal(query.data.total);
+    setTotalPages(query.data.totalPages);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load history",
+      );
+    }
+  }, [query.isError, query.error]);
+
+  const loading = query.isPending;
 
   useEffect(() => {
     setPage(1);
@@ -230,10 +244,10 @@ export function ActionLogsHistoryTab() {
                 type="button"
                 variant="outline"
                 className="gap-1.5"
-                onClick={() => void load()}
-                disabled={loading}
+                onClick={() => void query.refetch()}
+                disabled={query.isFetching}
               >
-                {loading ? (
+                {query.isFetching ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   <RefreshCw className="size-4" />

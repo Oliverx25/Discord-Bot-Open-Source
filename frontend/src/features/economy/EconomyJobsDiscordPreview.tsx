@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 const MOCK_USER = "@SampleUser";
 const MOCK_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
-const BOT_NAME = "Adobos Bot";
+const BOT_NAME = "tobot.";
 const SUCCESS_COLOR = "#57F287";
 const FAIL_COLOR = "#ED4245";
 const INFO_COLOR = "#5865F2";

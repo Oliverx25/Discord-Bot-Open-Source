@@ -44,6 +44,11 @@ docker-compose.override.yml
 .claude/settings.local.json
 .cursor/*.log
 
+# Wrangler (Worker BFF)
+.wrangler/
+frontend/.dev.vars
+frontend/worker-configuration.d.ts
+
 # Caches de tooling
 .vite/
 .cache/

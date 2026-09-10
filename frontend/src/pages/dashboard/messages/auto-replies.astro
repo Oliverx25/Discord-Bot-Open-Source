@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { AutoRepliesDashboard } from "../../../features/auto-replies";
+import { AutoRepliesIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Auto-Replies"
   description="The bot replies when a message matches a trigger."
 >
-  <AutoRepliesDashboard client:load />
+  <AutoRepliesIsland client:load/>
 </DashboardLayout>

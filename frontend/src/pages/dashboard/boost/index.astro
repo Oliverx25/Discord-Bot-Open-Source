@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { BoostBuilder } from "../../../features/canvas-events";
+import { BoostIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Boosts"
   description="Design the PNG card to celebrate when someone boosts the server."
 >
-  <BoostBuilder client:load />
+  <BoostIsland client:load/>
 </DashboardLayout>

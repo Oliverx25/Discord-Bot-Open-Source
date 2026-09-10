@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { FormsDashboard } from "../../../features/forms";
+import { FormsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Forms"
   description="Applications and interactive forms in Discord."
 >
-  <FormsDashboard client:load />
+  <FormsIsland client:load/>
 </DashboardLayout>

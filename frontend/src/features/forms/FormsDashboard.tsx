@@ -68,6 +68,8 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 type MainTab = "list" | "builder";
@@ -285,31 +287,35 @@ export function FormsDashboard() {
     return raw ? resolvePublicAssetUrl(raw) : null;
   }, [thumbValue, draft.embedThumbnailUrl]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [listRes, assets, templatesRes] = await Promise.all([
-        fetchForms(),
-        fetchGuildAssets(),
-        listEmbedTemplates().catch(() => ({ templates: [] })),
-      ]);
-      setForms(listRes.forms);
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-      setTemplates(templatesRes.templates);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Couldn't load Forms.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.forms, async () => {
+    const [listRes, assets, templatesRes] = await Promise.all([
+      fetchForms(),
+      fetchGuildAssets(),
+      listEmbedTemplates().catch(() => ({ templates: [] })),
+    ]);
+    return { listRes, assets, templatesRes };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setForms(query.data.listRes.forms);
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setTemplates(query.data.templatesRes.templates);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Forms.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   const applyFormToDraft = (form: InteractiveForm) => {
     setDraft(form);
@@ -328,7 +334,7 @@ export function FormsDashboard() {
       setEditingId(res.form.id);
       setBuilderTab("message");
       setMainTab("builder");
-      await load();
+      await query.refetch();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Couldn't create the form.",
@@ -445,7 +451,7 @@ export function FormsDashboard() {
       const res = await saveForm(editingId, payload());
       applyFormToDraft(res.form);
       setSuccess("Form saved.");
-      await load();
+      await query.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save.");
     } finally {
@@ -465,7 +471,7 @@ export function FormsDashboard() {
       const res = await publishForm(editingId, payload());
       applyFormToDraft(res.form);
       setSuccess("Form published to Discord.");
-      await load();
+      await query.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't publish.");
     } finally {
@@ -490,7 +496,7 @@ export function FormsDashboard() {
         setMainTab("list");
       }
       setSuccess("Form deleted.");
-      await load();
+      await query.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't delete.");
     }

@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { BotProfileBuilder } from "../../../features/bot-profile";
+import { BotProfileIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Bot Profile"
   description="The bot's local nickname and avatar as a member of this server."
 >
-  <BotProfileBuilder client:load />
+  <BotProfileIsland client:load/>
 </DashboardLayout>

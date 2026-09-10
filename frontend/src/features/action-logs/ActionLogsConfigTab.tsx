@@ -120,7 +120,7 @@ export function ActionLogsConfigTab({
   dirty,
   saving,
   testing,
-  webhookDisplayName = "Adobos Audit",
+  webhookDisplayName = "tobot Audit",
   webhookAvatarUrl = null,
   onChange,
   onSave,

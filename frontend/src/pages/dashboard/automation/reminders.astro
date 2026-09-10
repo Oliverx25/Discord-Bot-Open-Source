@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { RemindersDashboard } from "../../../features/reminders";
+import { RemindersIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Reminders"
   description="Personal reminders via DM. Not channel announcements."
 >
-  <RemindersDashboard client:load />
+  <RemindersIsland client:load/>
 </DashboardLayout>

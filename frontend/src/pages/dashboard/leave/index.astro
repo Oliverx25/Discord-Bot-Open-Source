@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { LeaveBuilder } from "../../../features/canvas-events";
+import { LeaveIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Leave"
   description="Design the PNG card for when someone leaves the server."
 >
-  <LeaveBuilder client:load />
+  <LeaveIsland client:load/>
 </DashboardLayout>

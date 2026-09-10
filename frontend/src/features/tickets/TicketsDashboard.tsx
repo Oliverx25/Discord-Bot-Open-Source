@@ -61,7 +61,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ToastBanner } from "@/components/ui/toast";
 import { Loader2, Plus, Save, Send, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 
 export type TicketsTab = "inbox" | "panels" | "settings";
 
@@ -165,46 +167,67 @@ export function TicketsDashboard({
     [channels],
   );
 
-  const loadInbox = useCallback(async () => {
-    const list = await fetchTickets({
-      status: statusFilter,
-      typeKey: typeFilter,
-      openerId: openerFilter,
-      claimedBy: staffFilter,
-    });
-    setTickets(list.tickets);
-  }, [statusFilter, typeFilter, openerFilter, staffFilter]);
+  const inboxFilters = useMemo(
+    () => ({ statusFilter, typeFilter, openerFilter, staffFilter }),
+    [statusFilter, typeFilter, openerFilter, staffFilter],
+  );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const query = useGuildQuery(queryKeys.tickets, async () => {
+    const [assets, cfg, panelList] = await Promise.all([
+      fetchGuildAssets(),
+      fetchTicketSettings(),
+      fetchTicketPanels(),
+    ]);
+    return { assets, cfg, panelList };
+  });
+
+  const inboxQuery = useGuildQuery(
+    (guildId) => queryKeys.ticketsInbox(guildId, inboxFilters),
+    () =>
+      fetchTickets({
+        status: statusFilter,
+        typeKey: typeFilter,
+        openerId: openerFilter,
+        claimedBy: staffFilter,
+      }),
+    { refetchInterval: 15_000, enabled: Boolean(query.data) },
+  );
+
+  useEffect(() => {
+    if (!query.data) return;
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setSettings(query.data.cfg.settings);
+    setPanels(query.data.panelList.panels);
+    setLoading(false);
     setError(null);
-    try {
-      const [assets, cfg, panelList] = await Promise.all([
-        fetchGuildAssets(),
-        fetchTicketSettings(),
-        fetchTicketPanels(),
-      ]);
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-      setSettings(cfg.settings);
-      setPanels(panelList.panels);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't load Tickets.");
-    } finally {
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Tickets.",
+      );
       setLoading(false);
     }
-  }, []);
+  }, [query.isError, query.error]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!inboxQuery.data) return;
+    setTickets(inboxQuery.data.tickets);
+  }, [inboxQuery.data]);
 
   useEffect(() => {
-    if (loading || !settings) return;
-    void loadInbox().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "Couldn't load the inbox.");
-    });
-  }, [loadInbox, loading, settings]);
+    if (inboxQuery.isError) {
+      setError(
+        inboxQuery.error instanceof Error
+          ? inboxQuery.error.message
+          : "Couldn't load the inbox.",
+      );
+    }
+  }, [inboxQuery.isError, inboxQuery.error]);
 
   async function withBusy(fn: () => Promise<void>, ok?: string): Promise<void> {
     setSaving(true);
@@ -236,7 +259,7 @@ export function TicketsDashboard({
   async function refreshDetail(id: number): Promise<void> {
     const res = await fetchTicketDetail(id);
     setDetail(res.ticket);
-    await loadInbox();
+    await inboxQuery.refetch();
   }
 
   if (loading || !settings) {

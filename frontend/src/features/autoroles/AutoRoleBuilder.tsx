@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { discordMarkdownRehype } from "@/lib/discordMarkdown";
@@ -83,6 +83,8 @@ import {
 import { ToastBanner } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { cn } from "@/lib/utils";
 
 type TopTab = "registry" | "create" | "autojoin";
@@ -370,48 +372,42 @@ export function AutoRoleBuilder() {
     return () => controller.abort();
   }, [createSource, channelId, debouncedExistingMessageId]);
 
-  const refreshRegistry = useCallback(async () => {
-    setListLoading(true);
-    try {
-      const data = await fetchActiveAutoroles();
-      setEntries(data.entries);
-    } catch (error: unknown) {
+  const query = useGuildQuery(queryKeys.autoroles, async () => {
+    const [assets, templatesRes, autoJoin, registry] = await Promise.all([
+      fetchGuildAssets().catch(() => null),
+      listEmbedTemplates().catch(() => ({ templates: [] as EmbedTemplateSummary[] })),
+      fetchAutoJoinRoles().catch(() => null),
+      fetchActiveAutoroles(),
+    ]);
+    return { assets, templates: templatesRes.templates, autoJoin, registry };
+  });
+
+  useEffect(() => {
+    if (!query.data) return;
+    if (query.data.assets) setAssets(query.data.assets);
+    setTemplates(query.data.templates);
+    if (query.data.autoJoin) {
+      setHumanRoles(query.data.autoJoin.config.humanRoles);
+      setBotRoles(query.data.autoJoin.config.botRoles);
+    }
+    setEntries(query.data.registry.entries);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
       setFeedback({
         kind: "error",
         message:
-          error instanceof Error
-            ? error.message
+          query.error instanceof Error
+            ? query.error.message
             : "Couldn't load the registry",
       });
-    } finally {
-      setListLoading(false);
     }
-  }, []);
+  }, [query.isError, query.error]);
 
   useEffect(() => {
-    let cancelled = false;
-    fetchGuildAssets()
-      .then((data) => {
-        if (!cancelled) setAssets(data);
-      })
-      .catch(() => undefined);
-    void listEmbedTemplates()
-      .then((data) => {
-        if (!cancelled) setTemplates(data.templates);
-      })
-      .catch(() => undefined);
-    void fetchAutoJoinRoles()
-      .then((data) => {
-        if (cancelled) return;
-        setHumanRoles(data.config.humanRoles);
-        setBotRoles(data.config.botRoles);
-      })
-      .catch(() => undefined);
-    void refreshRegistry();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshRegistry]);
+    setListLoading(query.isPending || query.isFetching);
+  }, [query.isPending, query.isFetching]);
 
   const alreadyConfigured = Boolean(fetchedMessage?.alreadyConfigured);
   const messageReactions = fetchedMessage?.reactions ?? [];
@@ -464,7 +460,7 @@ export function AutoRoleBuilder() {
         message: `Autorol publicado · mensaje ${result.messageId}`,
       });
       setCreateRows([emptyRow()]);
-      await refreshRegistry();
+      await query.refetch();
       setTopTab("registry");
     } catch (error: unknown) {
       setFeedback({
@@ -523,7 +519,7 @@ export function AutoRoleBuilder() {
         setFeedback({ kind: "ok", message: "Message roles updated." });
       }
       setManageEntry(null);
-      await refreshRegistry();
+      await query.refetch();
     } catch (error: unknown) {
       setFeedback({
         kind: "error",
@@ -572,7 +568,7 @@ export function AutoRoleBuilder() {
         setSuccessToast("Message updated in Discord");
       }
       setEditEntry(null);
-      await refreshRegistry();
+      await query.refetch();
     } catch (error: unknown) {
       setFeedback({
         kind: "error",
@@ -601,7 +597,7 @@ export function AutoRoleBuilder() {
           : "Autorole removed from the message and the registry.",
       });
       setDeleteId(null);
-      await refreshRegistry();
+      await query.refetch();
     } catch (error: unknown) {
       setFeedback({
         kind: "error",

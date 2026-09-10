@@ -30,7 +30,9 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
+import { useEffect, useMemo, useState } from "react";
 import { ChannelMultiSelect } from "@/components/shared/ChannelMultiSelect";
 import { RoleMultiSelect } from "@/components/shared/RoleMultiSelect";
 import {
@@ -262,31 +264,33 @@ export function CustomCommandsDashboard() {
     [channels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [listRes, assets] = await Promise.all([
-        fetchCustomCommands(),
-        fetchGuildAssets(),
-      ]);
-      setCommands(listRes.commands);
-      setRoles(assets.roles);
-      setChannels(assets.channels);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Couldn't load the commands.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.customCommands, async () => {
+    const [listRes, assets] = await Promise.all([
+      fetchCustomCommands(),
+      fetchGuildAssets(),
+    ]);
+    return { listRes, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setCommands(query.data.listRes.commands);
+    setRoles(query.data.assets.roles);
+    setChannels(query.data.assets.channels);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load the commands.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   const openCreate = () => {
     if (atCustomLimit) {
@@ -402,7 +406,7 @@ export function CustomCommandsDashboard() {
           );
         }
       }
-      await load();
+      await query.refetch();
       setMainTab("list");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save.");
@@ -464,7 +468,7 @@ export function CustomCommandsDashboard() {
         setMainTab("list");
       }
       setSuccess(`Command /${command.name} deleted.`);
-      await load();
+      await query.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't delete.");
     }

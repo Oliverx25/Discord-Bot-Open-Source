@@ -40,8 +40,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToastBanner } from "@/components/ui/toast";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 type Draft = {
   trigger: string;
@@ -108,29 +110,35 @@ export function AutoRepliesDashboard() {
     [channels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [config, assets] = await Promise.all([
-        fetchAutoReplies(),
-        fetchGuildAssets(),
-      ]);
-      setReplies(config.replies);
-      setDrafts(
-        Object.fromEntries(config.replies.map((row) => [row.id, toDraft(row)])),
-      );
-      setChannels(assets.channels);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.autoReplies, async () => {
+    const [config, assets] = await Promise.all([
+      fetchAutoReplies(),
+      fetchGuildAssets(),
+    ]);
+    return { config, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setReplies(query.data.config.replies);
+    setDrafts(
+      Object.fromEntries(
+        query.data.config.replies.map((row) => [row.id, toDraft(row)]),
+      ),
+    );
+    setChannels(query.data.assets.channels);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error ? query.error.message : "Couldn't load.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   function payload(draft: Draft) {
     return {
@@ -160,7 +168,7 @@ export function AutoRepliesDashboard() {
       await createAutoReply(payload(creating));
       setCreating(null);
       setSuccess("Auto-reply created.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't create.");
     } finally {
@@ -180,7 +188,7 @@ export function AutoRepliesDashboard() {
     try {
       await updateAutoReply(id, payload(draft));
       setSuccess("Auto-reply saved.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't save.");
     } finally {
@@ -195,7 +203,7 @@ export function AutoRepliesDashboard() {
     try {
       await deleteAutoReply(id);
       setSuccess("Auto-reply deleted.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't delete.");
     } finally {

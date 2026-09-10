@@ -1,7 +1,9 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
-import { Sidebar } from "../components/custom/Sidebar";
-import { AuthGate } from "../features/auth/AuthGate";
+import {
+  AuthGateIsland,
+  SidebarIsland,
+} from "../components/providers/chromeIslands";
 
 interface Props {
   title: string;
@@ -12,30 +14,29 @@ const { title, description } = Astro.props;
 const currentPath = Astro.url.pathname.replace(/\/$/, "") || "/";
 ---
 
-<BaseLayout title={`${title} — Adobos Bot`} description={description}>
-  <div class="ado-shell flex h-dvh overflow-hidden bg-background">
+<BaseLayout title={`${title} — tobot.`} description={description}>
+  <div class="tobot-shell flex h-dvh overflow-hidden bg-background">
     <div
       id="dashboard-sidebar"
       class="shrink-0"
-      transition:persist="dashboard-sidebar"
     >
-      <Sidebar client:load currentPath={currentPath} />
+      <SidebarIsland client:load currentPath={currentPath} />
     </div>
 
     <div
       class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
       transition:animate="fade"
     >
-      <AuthGate client:load />
+      <AuthGateIsland client:load />
       <header
-        class="hidden border-b border-border/70 bg-card/40 px-8 py-5 backdrop-blur-md lg:block"
+        class="hidden border-b border-border bg-card px-8 py-5 lg:block"
       >
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <p
-              class="font-display text-xs font-semibold uppercase tracking-[0.2em] text-primary"
+              class="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-primary"
             >
-              Adobos Bot
+              tobot.
             </p>
             <h1
               class="mt-1 font-display text-2xl font-semibold tracking-tight text-foreground"
@@ -59,7 +60,7 @@ const currentPath = Astro.url.pathname.replace(/\/$/, "") || "/";
         </div>
       </header>
 
-      <div class="border-b border-border/70 px-4 py-4 lg:hidden">
+      <div class="border-b border-border px-4 py-4 lg:hidden">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">
             <h1
@@ -70,7 +71,9 @@ const currentPath = Astro.url.pathname.replace(/\/$/, "") || "/";
             </h1>
             {
               description && (
-                <p class="mt-1 text-sm text-muted-foreground">{description}</p>
+                <p class="mt-1 text-sm text-muted-foreground">
+                  {description}
+                </p>
               )
             }
           </div>

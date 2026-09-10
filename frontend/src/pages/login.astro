@@ -16,26 +16,29 @@ const messages: Record<string, string> = {
 const errorText = error ? (messages[error] ?? "Couldn't sign in.") : null;
 ---
 
-<BaseLayout title="Sign in — Adobos Bot" description="Access the dashboard with Discord.">
-  <main class="flex min-h-dvh items-center justify-center bg-background px-4">
+<BaseLayout
+  title="Sign in — tobot."
+  description="Access the dashboard with Discord."
+>
+  <main class="tobot-dither flex min-h-dvh items-center justify-center px-4">
     <section
-      class="w-full max-w-md rounded-2xl border border-border/70 bg-card/80 p-8 shadow-sm backdrop-blur-md"
+      class="w-full max-w-md rounded-lg border border-border bg-card p-8 shadow-[var(--shadow-hard-neutral)]"
     >
       <p
-        class="font-display text-xs font-semibold uppercase tracking-[0.2em] text-primary"
+        class="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-primary"
       >
-        Adobos Bot
+        00 / access
       </p>
-      <h1 class="mt-2 font-display text-2xl font-semibold tracking-tight">
-        Sign in to the dashboard
+      <h1 class="mt-3 font-display text-3xl font-extrabold tracking-tight">
+        tobot<span class="text-primary">.</span>
       </h1>
-      <p class="mt-2 text-sm text-muted-foreground">
-        First add the bot to your server (Discord asks for permissions). Then
-        sign in to the dashboard with your account to configure it.
+      <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Add the bot to a server (Discord asks for permissions). Then sign in
+        with your account to configure it.
       </p>
       {
         errorText && (
-          <p class="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p class="mt-4 rounded-md border border-destructive bg-[var(--danger-bg)] px-3 py-2 text-sm text-destructive">
             {errorText}
           </p>
         )
@@ -43,17 +46,20 @@ const errorText = error ? (messages[error] ?? "Couldn't sign in.") : null;
       <a
         href="/auth/invite"
         data-astro-reload
-        class="mt-6 inline-flex w-full items-center justify-center rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+        class="mt-6 inline-flex h-[46px] w-full items-center justify-center rounded-md border border-primary bg-primary px-4 font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary-foreground shadow-[var(--shadow-hard)] transition-[transform,box-shadow] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_var(--accent-shadow)]"
       >
         Add to a server
       </a>
       <a
         href="/auth/discord"
         data-astro-reload
-        class="mt-3 inline-flex w-full items-center justify-center rounded-full border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-accent"
+        class="mt-3 inline-flex h-[46px] w-full items-center justify-center rounded-md border border-[var(--border-strong)] bg-transparent px-4 font-mono text-xs font-bold uppercase tracking-[0.1em] text-foreground shadow-[var(--shadow-hard-neutral)] transition-[transform,box-shadow] hover:translate-x-[2px] hover:translate-y-[2px]"
       >
         Already in my server — sign in
       </a>
+      <p class="mt-6 text-center font-mono text-[11px] text-muted-foreground">
+        <a href="/" class="hover:text-primary">← back to tobot.</a>
+      </p>
     </section>
   </main>
 </BaseLayout>

@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { LevelsDashboard } from "../../../features/levels";
+import { LevelsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Levels"
   description="Levels from text, voice, and roles by rank."
 >
-  <LevelsDashboard client:load />
+  <LevelsIsland client:load/>
 </DashboardLayout>

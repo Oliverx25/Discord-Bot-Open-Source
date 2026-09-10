@@ -54,7 +54,9 @@ import {
   ShieldAlert,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
+import { useEffect, useMemo, useState } from "react";
 import {
   EconomyJobsDiscordPreview,
   type EconomyJobsSimulatorTab,
@@ -95,7 +97,7 @@ export function EconomyJobsDashboard() {
   const [savedFingerprint, setSavedFingerprint] = useState(() =>
     configFingerprint(defaultEconomyIncomeConfig()),
   );
-  const [currencyName, setCurrencyName] = useState("Adobos Coins");
+  const [currencyName, setCurrencyName] = useState("Tobot Coins");
   const [currencySymbol, setCurrencySymbol] = useState("🪙");
   const [roles, setRoles] = useState<GuildRoleAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,52 +144,55 @@ export function EconomyJobsDashboard() {
     return config.crimes[0] ?? null;
   }, [config.crimes, openCrimeId]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setToast(null);
-    try {
-      const [income, economy, assets] = await Promise.all([
-        fetchEconomyIncomeConfig(),
-        fetchEconomyConfig().catch(() => null),
-        fetchGuildAssets().catch(() => null),
-      ]);
-      setConfig({
-        ...income,
-        rob: income.rob ?? defaultEconomyRob(),
-      });
-      setSavedFingerprint(
-        configFingerprint({
-          ...income,
-          rob: income.rob ?? defaultEconomyRob(),
-        }),
-      );
-      if (economy) {
-        setCurrencyName(economy.currencyName);
-        setCurrencySymbol(economy.currencySymbol);
-      }
-      if (assets?.roles) setRoles(assets.roles);
+  const query = useGuildQuery(queryKeys.economyIncome, async () => {
+    const [income, economy, assets] = await Promise.all([
+      fetchEconomyIncomeConfig(),
+      fetchEconomyConfig().catch(() => null),
+      fetchGuildAssets().catch(() => null),
+    ]);
+    return { income, economy, assets };
+  });
 
-      // Colapsar por defecto si hay más de 3 ítems.
-      setOpenJobId(income.jobs.length > 3 ? null : (income.jobs[0]?.id ?? null));
-      setOpenCrimeId(
-        income.crimes.length > 3 ? null : (income.crimes[0]?.id ?? null),
-      );
-    } catch (error) {
+  useEffect(() => {
+    if (!query.data) return;
+    const merged = {
+      ...query.data.income,
+      rob: query.data.income.rob ?? defaultEconomyRob(),
+    };
+    setConfig(merged);
+    setSavedFingerprint(configFingerprint(merged));
+    if (query.data.economy) {
+      setCurrencyName(query.data.economy.currencyName);
+      setCurrencySymbol(query.data.economy.currencySymbol);
+    }
+    if (query.data.assets?.roles) setRoles(query.data.assets.roles);
+    // Colapsar por defecto si hay más de 3 ítems.
+    setOpenJobId(
+      query.data.income.jobs.length > 3
+        ? null
+        : (query.data.income.jobs[0]?.id ?? null),
+    );
+    setOpenCrimeId(
+      query.data.income.crimes.length > 3
+        ? null
+        : (query.data.income.crimes[0]?.id ?? null),
+    );
+    setLoading(false);
+    setToast(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
       setToast({
         variant: "error",
         message:
-          error instanceof Error
-            ? error.message
+          query.error instanceof Error
+            ? query.error.message
             : "Couldn't load income and jobs.",
       });
-    } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }, [query.isError, query.error]);
 
   async function handleSave(): Promise<void> {
     setSaving(true);

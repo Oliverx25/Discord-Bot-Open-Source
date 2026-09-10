@@ -1,3 +1,5 @@
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { useEffect, useMemo, useState } from "react";
 import {
   BILLING_PLAN_PRICES,
@@ -78,36 +80,37 @@ export function BillingDashboard() {
     return null;
   }, []);
 
+  const query = useGuildQuery(queryKeys.billing, fetchBilling);
+
+  useEffect(() => {
+    if (!query.data) return;
+    setData(query.data);
+    setLoading(false);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setFeedback({
+        kind: "error",
+        message:
+          query.error instanceof Error
+            ? query.error.message
+            : "Couldn't load billing",
+      });
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
+
   async function reload(): Promise<BillingStatusResponse> {
+    const result = await query.refetch();
+    if (result.data) {
+      setData(result.data);
+      return result.data;
+    }
     const next = await fetchBilling();
     setData(next);
     return next;
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const next = await fetchBilling();
-        if (!cancelled) setData(next);
-      } catch (error: unknown) {
-        if (!cancelled) {
-          setFeedback({
-            kind: "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Couldn't load billing",
-          });
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!checkoutBanner || typeof window === "undefined") return;

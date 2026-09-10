@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import type {
   ActionLogsConfig,
   GuildChannelAsset,
@@ -64,7 +66,7 @@ export function ActionLogsDashboard() {
   const [channels, setChannels] = useState<GuildChannelAsset[]>([]);
   const [roles, setRoles] = useState<GuildRoleAsset[]>([]);
   const [webhookDisplayName, setWebhookDisplayName] =
-    useState("Adobos Audit");
+    useState("tobot Audit");
   const [webhookAvatarUrl, setWebhookAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,39 +79,45 @@ export function ActionLogsDashboard() {
     [config, savedFingerprint],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [cfgRes, assets, profile] = await Promise.all([
-        fetchActionLogsConfig(),
-        fetchGuildAssets(),
-        fetchBotGuildProfile().catch(() => null),
-      ]);
-      setConfig(cfgRes.config);
-      setSavedFingerprint(configFingerprint(cfgRes.config));
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-      if (profile) {
-        const nick = profile.nickname?.trim();
-        const baseName = nick || profile.username || "Adobos";
-        setWebhookDisplayName(`${baseName} Audit`);
-        setWebhookAvatarUrl(
-          profile.serverAvatarURL || profile.globalAvatarURL || null,
-        );
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Couldn't load Action Logs",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.actionLogs, async () => {
+    const [cfgRes, assets, profile] = await Promise.all([
+      fetchActionLogsConfig(),
+      fetchGuildAssets(),
+      fetchBotGuildProfile().catch(() => null),
+    ]);
+    return { cfgRes, assets, profile };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setConfig(query.data.cfgRes.config);
+    setSavedFingerprint(configFingerprint(query.data.cfgRes.config));
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    if (query.data.profile) {
+      const nick = query.data.profile.nickname?.trim();
+      const baseName = nick || query.data.profile.username || "tobot";
+      setWebhookDisplayName(`${baseName} Audit`);
+      setWebhookAvatarUrl(
+        query.data.profile.serverAvatarURL ||
+          query.data.profile.globalAvatarURL ||
+          null,
+      );
+    }
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Action Logs",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   async function handleSave(): Promise<void> {
     setSaving(true);

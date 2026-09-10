@@ -1,0 +1,2 @@
+# Origen del backend Express (VPS). En producción: wrangler secret put ORIGIN_URL
+ORIGIN_URL=http://127.0.0.1:3000

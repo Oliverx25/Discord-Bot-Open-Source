@@ -18,6 +18,8 @@
 # `.env` (junto a este fichero) debe traer al menos:
 #   POSTGRES_PASSWORD, SESSION_SECRET, PUBLIC_APP_URL, CORS_ORIGIN,
 #   DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN
+# Con el Worker BFF, PUBLIC_APP_URL y CORS_ORIGIN son el origen público
+# (https://tobot.gg), no la IP del VPS.
 
 x-backend-env: &backend-env
   NODE_ENV: production

@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { ActionLogsDashboard } from "../../../features/action-logs";
+import { ActionLogsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Action Logs"
   description="Audit of messages, members, roles, and channels."
 >
-  <ActionLogsDashboard client:load />
+  <ActionLogsIsland client:load/>
 </DashboardLayout>

@@ -15,6 +15,9 @@ import { HttpError } from "./httpError.js";
 import { isSnowflake } from "./snowflake.js";
 
 export function extractGuildId(req: Request): unknown {
+  const header = req.headers["x-guild-id"];
+  if (typeof header === "string" && header.length > 0) return header;
+  if (Array.isArray(header) && typeof header[0] === "string") return header[0];
   if (typeof req.params.guildId === "string") return req.params.guildId;
   if (typeof req.query.guildId === "string") return req.query.guildId;
   const body = req.body as Record<string, unknown> | undefined;

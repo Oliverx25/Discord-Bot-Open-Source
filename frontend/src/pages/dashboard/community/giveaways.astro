@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { GiveawaysDashboard } from "../../../features/giveaways";
+import { GiveawaysIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Giveaways"
   description="Giveaways with requirements, an entry button, and reroll."
 >
-  <GiveawaysDashboard client:load />
+  <GiveawaysIsland client:load/>
 </DashboardLayout>

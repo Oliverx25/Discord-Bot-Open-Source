@@ -32,8 +32,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToastBanner } from "@/components/ui/toast";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { Loader2, Save, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const NONE = "__none__";
 
@@ -84,34 +86,38 @@ export function StarboardDashboard() {
     [channels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [config, assets] = await Promise.all([
-        fetchStarboard(),
-        fetchGuildAssets(),
-      ]);
-      setChannelId(config.settings.channelId);
-      setEmojis(config.settings.emojis);
-      setThreshold(config.settings.threshold);
-      setEnabled(config.settings.enabled);
-      setAllowSelfStar(config.settings.allowSelfStar);
-      setAllowBots(config.settings.allowBots);
-      setIgnoreChannelIds(config.settings.ignoreChannelIds);
-      setPostCount(config.postCount);
-      setChannels(assets.channels);
-      setServerEmojis(assets.emojis);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.starboard, async () => {
+    const [config, assets] = await Promise.all([
+      fetchStarboard(),
+      fetchGuildAssets(),
+    ]);
+    return { config, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setChannelId(query.data.config.settings.channelId);
+    setEmojis(query.data.config.settings.emojis);
+    setThreshold(query.data.config.settings.threshold);
+    setEnabled(query.data.config.settings.enabled);
+    setAllowSelfStar(query.data.config.settings.allowSelfStar);
+    setAllowBots(query.data.config.settings.allowBots);
+    setIgnoreChannelIds(query.data.config.settings.ignoreChannelIds);
+    setPostCount(query.data.config.postCount);
+    setChannels(query.data.assets.channels);
+    setServerEmojis(query.data.assets.emojis);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error ? query.error.message : "Couldn't load.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   async function onSave(): Promise<void> {
     setSaving(true);

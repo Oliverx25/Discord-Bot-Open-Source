@@ -1,24 +1,38 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "astro/config";
+import { defineConfig, envField } from "astro/config";
 import react from "@astrojs/react";
-import tailwind from "@astrojs/tailwind";
+import tailwindcss from "@tailwindcss/vite";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const backendUrl = process.env.INTERNAL_API_URL ?? "http://127.0.0.1:3000";
 
 /**
- * Salida estática (`dist/`). En Compose el servicio `frontend` hace de
- * puerta de entrada; el proxy same-origin apunta a INTERNAL_API_URL.
+ * HTML estático (`dist/`). En Cloudflare el Worker hace de BFF same-origin
+ * (proxy /api /auth /uploads). En dev, Vite replica ese proxy.
  */
 export default defineConfig({
+  site: process.env.PUBLIC_SITE_URL ?? "https://tobot.gg",
   output: "static",
-  integrations: [
-    react(),
-    tailwind({
-      applyBaseStyles: false,
-    }),
-  ],
+  integrations: [react()],
+  prefetch: {
+    prefetchAll: true,
+    defaultStrategy: "hover",
+  },
+  env: {
+    schema: {
+      PUBLIC_API_BASE: envField.string({
+        context: "client",
+        access: "public",
+        default: "",
+      }),
+      INTERNAL_API_URL: envField.string({
+        context: "server",
+        access: "secret",
+        optional: true,
+      }),
+    },
+  },
   server: {
     host: true,
     port: 4321,
@@ -27,6 +41,16 @@ export default defineConfig({
     enabled: false,
   },
   vite: {
+    plugins: [tailwindcss()],
+    optimizeDeps: {
+      include: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "@tanstack/react-query",
+        "@nanostores/react",
+      ],
+    },
     resolve: {
       alias: {
         "@": path.join(rootDir, "src"),
@@ -39,7 +63,6 @@ export default defineConfig({
         interval: 300,
       },
       hmr: {
-        // El navegador entra por localhost:4321 (mapeo Docker), no por la IP del contenedor
         clientPort: 4321,
         host: "localhost",
         protocol: "ws",

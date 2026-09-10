@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { BanBuilder } from "../../../features/canvas-events";
+import { BanIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Ban"
   description="Design the PNG card for when someone is banned from the server."
 >
-  <BanBuilder client:load />
+  <BanIsland client:load/>
 </DashboardLayout>

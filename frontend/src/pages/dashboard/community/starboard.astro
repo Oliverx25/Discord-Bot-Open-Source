@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { StarboardDashboard } from "../../../features/starboard";
+import { StarboardIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Starboard"
   description="Messages with enough reactions are copied to the board."
 >
-  <StarboardDashboard client:load />
+  <StarboardIsland client:load/>
 </DashboardLayout>

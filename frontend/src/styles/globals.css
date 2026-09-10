@@ -1,76 +1,218 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
 
-/* Misma Inter que usa @napi-rs/canvas en WelcomeCardBuilder */
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/Inter-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Tobot tokens · terminal ácido ─────────────────────────────────── */
+:root {
+  --acid-100: #eeffc9;
+  --acid-200: #e1ff9b;
+  --acid-300: #d6ff66;
+  --acid-400: #c6ff3d;
+  --acid-500: #aee82b;
+  --acid-600: #9bd12a;
+  --acid-700: #7ba320;
+  --acid-800: #5e7f19;
+  --acid-900: #3c520f;
+
+  --coal-1000: #050705;
+  --coal-950: #080a08;
+  --coal-900: #0e120d;
+  --coal-850: #141911;
+  --coal-800: #1a2016;
+  --coal-700: #1e2519;
+  --coal-600: #2c351f;
+  --coal-500: #465232;
+  --coal-400: #68765e;
+  --coal-300: #8b9a82;
+  --coal-200: #9eae92;
+  --coal-100: #c6d2bc;
+  --coal-50: #e9f2e2;
+  --chalk: #f2f5ec;
+
+  --jade-300: #6fe3b0;
+  --jade-500: #3ecf8e;
+  --jade-700: #1f7a52;
+  --amber-300: #ffcb63;
+  --amber-500: #ffb020;
+  --amber-700: #9a6708;
+  --chile-300: #ff8b7f;
+  --chile-500: #ff5c4d;
+  --chile-700: #a32c21;
+
+  --bg-base: var(--coal-950);
+  --bg-surface: var(--coal-900);
+  --bg-raised: var(--coal-850);
+  --bg-inset: var(--coal-1000);
+  --bg-hover: rgba(233, 242, 226, 0.045);
+  --bg-active: rgba(233, 242, 226, 0.08);
+  --bg-tint-accent: rgba(198, 255, 61, 0.1);
+  --bg-tint-jade: rgba(62, 207, 142, 0.12);
+
+  --border-subtle: var(--coal-700);
+  --border-default: var(--coal-600);
+  --border-strong: var(--coal-500);
+  --border-accent: var(--acid-400);
+
+  --text-primary: var(--coal-50);
+  --text-secondary: var(--coal-200);
+  --text-muted: var(--coal-400);
+  --text-inverse: #0b0f08;
+  --text-accent: var(--acid-400);
+  --text-link: var(--acid-400);
+  --text-link-hover: var(--acid-300);
+
+  --accent: var(--acid-400);
+  --accent-hover: var(--acid-300);
+  --accent-active: var(--acid-500);
+  --accent-shadow: var(--acid-800);
+  --on-accent: #0b0f08;
+
+  --success: var(--jade-300);
+  --success-bg: rgba(62, 207, 142, 0.14);
+  --success-border: var(--jade-500);
+  --warning: var(--amber-300);
+  --warning-bg: rgba(255, 176, 32, 0.14);
+  --warning-border: var(--amber-500);
+  --danger: var(--chile-300);
+  --danger-bg: rgba(255, 92, 77, 0.14);
+  --danger-border: var(--chile-500);
+  --danger-shadow: #7a2a22;
+  --info: var(--coal-100);
+  --info-bg: rgba(233, 242, 226, 0.06);
+  --info-border: var(--coal-500);
+
+  --focus-ring: var(--acid-400);
+  --tier-free: var(--coal-200);
+  --tier-pro: var(--acid-400);
+  --dither-alpha: 0.22;
+  --dither-angle: 105deg;
+  --dither-gradient: linear-gradient(
+    var(--dither-angle),
+    rgba(198, 255, 61, var(--dither-alpha)),
+    rgba(198, 255, 61, 0) 68%
+  );
+
+  --shadow-hard: 4px 4px 0 var(--accent-shadow);
+  --shadow-hard-sm: 3px 3px 0 var(--accent-shadow);
+  --shadow-hard-neutral: 4px 4px 0 var(--border-subtle);
+  --shadow-hard-danger: 4px 4px 0 var(--danger-shadow);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 20px 48px rgba(0, 0, 0, 0.62);
+  --ring-focus: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--focus-ring);
+
+  --dur-instant: 80ms;
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.1, 1);
+  --press-offset: 2px;
+  --press-offset-full: 4px;
 }
 
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/Inter-Bold.ttf") format("truetype");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
+[data-theme="light"] {
+  --bg-base: #eff2e9;
+  --bg-surface: #f8fbf3;
+  --bg-raised: #ffffff;
+  --bg-inset: #e6ebdd;
+  --bg-hover: rgba(14, 18, 13, 0.04);
+  --bg-active: rgba(14, 18, 13, 0.08);
+  --bg-tint-accent: rgba(155, 209, 42, 0.16);
+  --bg-tint-jade: rgba(62, 207, 142, 0.14);
+
+  --border-subtle: #dce3d0;
+  --border-default: #c6d0b6;
+  --border-strong: #9daa8b;
+
+  --text-primary: var(--coal-900);
+  --text-secondary: #4a5642;
+  --text-muted: #6c7a62;
+  --text-inverse: var(--coal-50);
+  --text-accent: var(--acid-900);
+  --text-link: var(--acid-900);
+  --text-link-hover: var(--acid-700);
+
+  --accent: var(--acid-400);
+  --accent-hover: var(--acid-300);
+  --accent-active: var(--acid-500);
+  --accent-shadow: var(--acid-700);
+  --on-accent: #0b0f08;
+
+  --success: var(--jade-700);
+  --success-bg: #dff5ea;
+  --success-border: var(--jade-500);
+  --warning: var(--amber-700);
+  --warning-bg: #fff1d6;
+  --warning-border: var(--amber-500);
+  --danger: var(--chile-700);
+  --danger-bg: #ffe6e2;
+  --danger-border: var(--chile-500);
+  --danger-shadow: #c9857c;
+  --info: #4a5642;
+  --info-bg: #e9eee0;
+  --info-border: #c6d0b6;
+
+  --focus-ring: var(--acid-700);
+  --tier-free: #4a5642;
+  --dither-alpha: 0.28;
+  --dither-gradient: linear-gradient(
+    var(--dither-angle),
+    rgba(155, 209, 42, var(--dither-alpha)),
+    rgba(155, 209, 42, 0) 68%
+  );
+  --shadow-hard-neutral: 4px 4px 0 var(--border-default);
+  --shadow-2: 0 6px 18px rgba(20, 30, 16, 0.12);
+  --shadow-3: 0 20px 48px rgba(20, 30, 16, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+
+@theme inline {
+  --font-sans: "Karla", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--bg-surface);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--bg-raised);
+  --color-popover-foreground: var(--text-primary);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--bg-raised);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--bg-inset);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--bg-tint-accent);
+  --color-accent-foreground: var(--text-accent);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--text-primary);
+  --color-border: var(--border-subtle);
+  --color-input: var(--border-default);
+  --color-ring: var(--focus-ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 10px;
+  --radius-2xl: 10px;
+  --radius-3xl: 10px;
+  --radius-4xl: 10px;
 }
 
 @layer base {
-  :root {
-    /* Light: neutro frío, acento magenta Ado */
-    --background: 250 25% 97%;
-    --foreground: 250 30% 8%;
-    --card: 0 0% 100%;
-    --card-foreground: 250 30% 8%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 250 30% 8%;
-    --primary: 320 78% 46%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 250 20% 93%;
-    --secondary-foreground: 250 25% 18%;
-    --muted: 250 16% 93%;
-    --muted-foreground: 250 10% 40%;
-    --accent: 265 45% 94%;
-    --accent-foreground: 265 40% 28%;
-    --destructive: 0 72% 46%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 250 14% 88%;
-    --input: 250 14% 88%;
-    --ring: 320 78% 46%;
-    --radius: 0.75rem;
-    --ado-cyan: 195 100% 45%;
-    --ado-violet: 265 75% 55%;
-  }
-
-  .dark {
-    /* Escenario Ado: negros profundos + magenta eléctrico + cyan */
-    --background: 255 28% 4%;
-    --foreground: 250 20% 96%;
-    --card: 255 22% 7%;
-    --card-foreground: 250 20% 96%;
-    --popover: 255 22% 8%;
-    --popover-foreground: 250 20% 96%;
-    --primary: 320 90% 62%;
-    --primary-foreground: 255 30% 6%;
-    --secondary: 255 18% 14%;
-    --secondary-foreground: 250 15% 92%;
-    --muted: 255 16% 12%;
-    --muted-foreground: 250 10% 62%;
-    --accent: 265 35% 14%;
-    --accent-foreground: 265 80% 88%;
-    --destructive: 0 72% 52%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 255 16% 14%;
-    --input: 255 16% 14%;
-    --ring: 195 100% 55%;
-    --ado-cyan: 195 100% 55%;
-    --ado-violet: 265 80% 62%;
-  }
-
   * {
     @apply border-border;
   }
@@ -78,47 +220,71 @@
   html,
   body {
     @apply min-h-dvh bg-background text-foreground antialiased;
-    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--ring-focus);
+  }
+
+  ::selection {
+    background: var(--bg-tint-accent);
+    color: var(--text-primary);
   }
 }
 
-/* Ambiente del panel: brillos magenta / cyan sin saturar el contenido */
-.ado-shell {
+.ado-shell,
+.tobot-shell {
   position: relative;
   isolation: isolate;
+  background: var(--bg-base);
 }
 
-.ado-shell::before {
-  content: "";
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(
-      900px 480px at 12% -10%,
-      hsl(var(--primary) / 0.16),
-      transparent 60%
-    ),
-    radial-gradient(
-      700px 420px at 92% 8%,
-      hsl(var(--ado-cyan) / 0.1),
-      transparent 55%
-    ),
-    radial-gradient(
-      640px 360px at 70% 100%,
-      hsl(var(--ado-violet) / 0.1),
-      transparent 50%
-    );
+.tobot-dither {
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(circle at 1px 1px, var(--bg-base) 1.1px, transparent 1.2px),
+    var(--dither-gradient);
+  background-size:
+    3px 3px,
+    100% 100%;
+  background-repeat: repeat, no-repeat;
 }
 
-/* Preview Markdown estilo Discord (sin plugin typography) */
+.tobot-dither-quiet {
+  --dither-alpha: 0.12;
+}
+
+.tobot-dither-strong {
+  --dither-alpha: 0.38;
+}
+
+@keyframes tobot-ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes tobot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .discord-md p {
   margin: 0.25rem 0;
 }
 .discord-md strong {
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
 }
 .discord-md em {
   font-style: italic;
@@ -134,23 +300,39 @@
   list-style: decimal;
 }
 .discord-md a {
-  color: #00a8fc;
+  color: var(--text-link);
   text-decoration: none;
 }
 .discord-md a:hover {
   text-decoration: underline;
 }
 .discord-md code {
-  background: rgb(0 0 0 / 0.35);
-  border-radius: 0.25rem;
+  background: var(--bg-inset);
+  border-radius: 2px;
   padding: 0.1rem 0.3rem;
   font-size: 0.85em;
+  font-family: var(--font-mono);
 }
-
 .discord-md img.discord-emoji {
   display: inline-block;
   width: 1.25rem;
   height: 1.25rem;
   vertical-align: middle;
   object-fit: contain;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }

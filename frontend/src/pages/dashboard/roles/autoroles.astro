@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { AutoRoleBuilder } from "../../../features/autoroles";
+import { AutoRoleIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Autoroles"
   description="Log of active menus, compact creation, and roles on join."
 >
-  <AutoRoleBuilder client:load />
+  <AutoRoleIsland client:load/>
 </DashboardLayout>

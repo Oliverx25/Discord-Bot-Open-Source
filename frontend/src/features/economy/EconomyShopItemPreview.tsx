@@ -4,7 +4,7 @@ import { resolvePublicAssetUrl } from "@/lib/api";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-const BOT_NAME = "Adobos Bot";
+const BOT_NAME = "tobot.";
 const MOCK_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 const ACCENT = "#e11d48";
 

@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { AutoDeleteDashboard } from "../../../features/auto-delete";
+import { AutoDeleteIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Auto-Delete"
   description="Automatic deletion of messages in channels."
 >
-  <AutoDeleteDashboard client:load />
+  <AutoDeleteIsland client:load/>
 </DashboardLayout>

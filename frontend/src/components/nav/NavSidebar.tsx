@@ -153,7 +153,7 @@ export function NavSidebar({ currentPath }: NavSidebarProps) {
           className="border-primary/20"
           aria-label={drawerOpen ? "Close menu" : "Open menu"}
           aria-expanded={drawerOpen}
-          aria-controls="adobos-sidebar"
+          aria-controls="tobot-sidebar"
           onClick={() => setDrawerOpen((value) => !value)}
         >
           {drawerOpen ? <X className="size-4" /> : <Menu className="size-4" />}
@@ -163,7 +163,7 @@ export function NavSidebar({ currentPath }: NavSidebarProps) {
             <BrandIcon className="size-3.5" aria-hidden />
           </span>
           <span className="font-display text-sm font-semibold tracking-wide">
-            Adobos Bot
+            tobot.
           </span>
         </div>
       </div>
@@ -178,7 +178,7 @@ export function NavSidebar({ currentPath }: NavSidebarProps) {
       )}
 
       <aside
-        id="adobos-sidebar"
+        id="tobot-sidebar"
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex h-dvh w-[17.5rem] flex-col",
           "border-r border-border/80 bg-card/95 backdrop-blur-xl",
@@ -202,7 +202,7 @@ export function NavSidebar({ currentPath }: NavSidebarProps) {
             </div>
             <div>
               <p className="font-display text-sm font-semibold leading-none tracking-wide">
-                Adobos Bot
+                tobot.
               </p>
               <p className="mt-1.5 text-[11px] text-muted-foreground">
                 Panel · Ado aesthetic

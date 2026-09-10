@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EconomyJobsDashboard } from "../../../features/economy";
+import { EconomyJobsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Income and Jobs"
   description="Fixed rewards, /work jobs, and /crime crimes."
 >
-  <EconomyJobsDashboard client:load />
+  <EconomyJobsIsland client:load/>
 </DashboardLayout>

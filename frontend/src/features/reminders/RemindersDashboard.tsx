@@ -15,8 +15,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ToastBanner } from "@/components/ui/toast";
 import { TimezoneCombobox } from "@/features/scheduled-messages/TimezoneCombobox";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
+import { useForm } from "@tanstack/react-form";
 import { Loader2, Save, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 function formatDue(iso: string): string {
   const date = new Date(iso);
@@ -27,49 +30,56 @@ function formatDue(iso: string): string {
 export function RemindersDashboard() {
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
   const [rows, setRows] = useState<Reminder[]>([]);
-  const [timezone, setTimezone] = useState("UTC");
-  const [enabled, setEnabled] = useState(true);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const config = await fetchReminders();
-      setSettings(config.settings);
-      setRows(config.reminders);
-      setTimezone(config.settings.timezone);
-      setEnabled(config.settings.enabled);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.reminders, fetchReminders);
+  const loading = query.isPending;
+
+  const form = useForm({
+    defaultValues: {
+      timezone: "UTC",
+      enabled: true,
+    },
+    onSubmit: async ({ value }) => {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
+      try {
+        const next = await saveReminderSettings({
+          timezone: value.timezone,
+          enabled: value.enabled,
+        });
+        setSettings(next);
+        form.reset({ timezone: next.timezone, enabled: next.enabled });
+        setSuccess("Settings saved.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Couldn't save.");
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function onSave(): Promise<void> {
-    setSaving(true);
+    if (!query.data) return;
+    setSettings(query.data.settings);
+    setRows(query.data.reminders);
+    form.reset({
+      timezone: query.data.settings.timezone,
+      enabled: query.data.settings.enabled,
+    });
     setError(null);
-    setSuccess(null);
-    try {
-      const next = await saveReminderSettings({ timezone, enabled });
-      setSettings(next);
-      setTimezone(next.timezone);
-      setEnabled(next.enabled);
-      setSuccess("Settings saved.");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't save.");
-    } finally {
-      setSaving(false);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error ? query.error.message : "Couldn't load.",
+      );
     }
-  }
+  }, [query.isError, query.error]);
 
   async function onDelete(id: number): Promise<void> {
     setSaving(true);
@@ -78,7 +88,7 @@ export function RemindersDashboard() {
     try {
       await deleteReminder(id);
       setSuccess(`Cancelled #${id}.`);
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't cancel.");
     } finally {
@@ -119,19 +129,42 @@ export function RemindersDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <label className="flex items-center gap-2 text-sm">
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
-            Enabled
-          </label>
-          <TimezoneCombobox value={timezone} onChange={setTimezone} />
-          <Button type="button" disabled={saving} onClick={() => void onSave()}>
-            {saving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            Save
-          </Button>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
+            <form.Field name="enabled">
+              {(field) => (
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch
+                    checked={field.state.value}
+                    onCheckedChange={(checked) => field.handleChange(checked)}
+                  />
+                  Enabled
+                </label>
+              )}
+            </form.Field>
+            <form.Field name="timezone">
+              {(field) => (
+                <TimezoneCombobox
+                  value={field.state.value}
+                  onChange={(timezone) => field.handleChange(timezone)}
+                />
+              )}
+            </form.Field>
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              Save
+            </Button>
+          </form>
         </CardContent>
       </Card>
 

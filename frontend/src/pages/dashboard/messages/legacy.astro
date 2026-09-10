@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { MessageSender } from "../../../features/messages";
+import { MessageSenderIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Messages"
   description="Quick plain-text sending to a text or announcement channel."
 >
-  <MessageSender client:load />
+  <MessageSenderIsland client:load/>
 </DashboardLayout>

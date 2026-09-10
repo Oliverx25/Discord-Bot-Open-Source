@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { WelcomeBuilder } from "../../../features/welcome";
+import { WelcomeIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Welcome"
   description="Design the welcome PNG card (1920×1080) and pick the text or announcement channel."
 >
-  <WelcomeBuilder client:load />
+  <WelcomeIsland client:load/>
 </DashboardLayout>

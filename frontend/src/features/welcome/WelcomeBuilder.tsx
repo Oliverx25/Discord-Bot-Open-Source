@@ -1,3 +1,5 @@
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
@@ -81,7 +83,7 @@ const PREVIEW_CTX = {
   userMention: "@NewMember",
   username: "NewMember",
   displayName: "NewMember",
-  serverName: "Adobos",
+  serverName: "tobot",
   memberCount: 128,
 };
 
@@ -498,36 +500,35 @@ export function WelcomeBuilder() {
   const isSubmitting = feedback.kind === "loading";
   const previewBg = bgFilepath || backgroundUrl || WELCOME_CARD_FALLBACK_GRADIENT;
 
+  const query = useGuildQuery(
+    (gid) => queryKeys.welcome("welcome", gid),
+    async () => {
+      const [guildAssets, settings] = await Promise.all([
+        fetchGuildAssets(),
+        fetchWelcomeSettings(),
+      ]);
+      return { guildAssets, settings };
+    },
+  );
+
   useEffect(() => {
-    let cancelled = false;
+    if (!query.data) return;
+    setAssets(query.data.guildAssets);
+    setAssetsError(null);
+    applySettings(query.data.settings);
+    setLoadingSettings(false);
+  }, [query.data]);
 
-    async function load(): Promise<void> {
-      try {
-        const [guildAssets, settings] = await Promise.all([
-          fetchGuildAssets(),
-          fetchWelcomeSettings(),
-        ]);
-        if (cancelled) return;
-        setAssets(guildAssets);
-        setAssetsError(null);
-        applySettings(settings);
-      } catch (error: unknown) {
-        if (cancelled) return;
-        setAssetsError(
-          error instanceof Error
-            ? error.message
-            : "Couldn't load the configuration",
-        );
-      } finally {
-        if (!cancelled) setLoadingSettings(false);
-      }
+  useEffect(() => {
+    if (query.isError) {
+      setAssetsError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load the configuration",
+      );
+      setLoadingSettings(false);
     }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [query.isError, query.error]);
 
   function applySettings(settings: WelcomeSettingsResponse): void {
     setGuildId(settings.guildId);

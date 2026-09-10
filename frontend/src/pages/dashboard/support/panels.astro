@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { TicketsDashboard } from "../../../features/tickets";
+import { TicketsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Tickets"
   description="Panels with buttons to open support tickets."
 >
-  <TicketsDashboard client:load initialTab="panels" />
+  <TicketsIsland client:load initialTab="panels" />
 </DashboardLayout>

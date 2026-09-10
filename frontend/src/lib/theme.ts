@@ -1,10 +1,13 @@
 export type ThemePreference = "light" | "dark" | "system";
 
-export const THEME_STORAGE_KEY = "adobos-theme";
+export const THEME_STORAGE_KEY = "tobot-theme";
+const LEGACY_THEME_STORAGE_KEY = "adobos-theme";
 
 export function getStoredTheme(): ThemePreference {
   if (typeof window === "undefined") return "dark";
-  const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const raw =
+    window.localStorage.getItem(THEME_STORAGE_KEY) ??
+    window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
   if (raw === "light" || raw === "dark" || raw === "system") return raw;
   return "dark";
 }
@@ -19,10 +22,11 @@ export function resolveTheme(preference: ThemePreference): "light" | "dark" {
 export function applyTheme(preference: ThemePreference): void {
   const resolved = resolveTheme(preference);
   document.documentElement.classList.toggle("dark", resolved === "dark");
-  document.documentElement.dataset.theme = preference;
+  document.documentElement.dataset.theme = resolved;
 }
 
 export function setThemePreference(preference: ThemePreference): void {
   window.localStorage.setItem(THEME_STORAGE_KEY, preference);
+  window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
   applyTheme(preference);
 }

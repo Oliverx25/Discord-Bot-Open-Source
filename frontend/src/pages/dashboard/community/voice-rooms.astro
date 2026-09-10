@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { VoiceRoomsDashboard } from "../../../features/voice-rooms";
+import { VoiceRoomsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Voice Rooms"
   description="Temporary voice rooms: one hub, one room, deleted when empty."
 >
-  <VoiceRoomsDashboard client:load />
+  <VoiceRoomsIsland client:load/>
 </DashboardLayout>

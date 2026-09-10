@@ -66,6 +66,8 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type BuilderTab = "list" | "builder";
@@ -220,33 +222,35 @@ export function ScheduledDashboard() {
     [textChannels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [listRes, assets, templatesRes] = await Promise.all([
-        fetchScheduledMessages(),
-        fetchGuildAssets(),
-        listEmbedTemplates().catch(() => ({ templates: [] })),
-      ]);
-      setMessages(listRes.messages);
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-      setTemplates(templatesRes.templates);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Couldn't load Scheduled Messages.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.scheduled, async () => {
+    const [listRes, assets, templatesRes] = await Promise.all([
+      fetchScheduledMessages(),
+      fetchGuildAssets(),
+      listEmbedTemplates().catch(() => ({ templates: [] })),
+    ]);
+    return { listRes, assets, templatesRes };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setMessages(query.data.listRes.messages);
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setTemplates(query.data.templatesRes.templates);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Scheduled Messages.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   const openCreate = () => {
     if (atScheduledLimit) {
@@ -361,7 +365,7 @@ export function ScheduledDashboard() {
         await updateScheduledMessage(editingId, body);
         setSuccess("Schedule updated.");
       }
-      await load();
+      await query.refetch();
       setTab("list");
       setEditingId(null);
       setTemplateId("none");

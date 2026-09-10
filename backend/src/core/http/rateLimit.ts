@@ -2,7 +2,7 @@ import type { Request, RequestHandler } from "express";
 import rateLimit, { type Store } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import { hashSessionId } from "../auth/crypto.js";
-import { SESSION_COOKIE } from "../auth/types.js";
+import { SESSION_COOKIE_ALIASES } from "../auth/types.js";
 import { redisClient } from "../cache/redis.js";
 
 function skipPublic(req: Request): boolean {
@@ -24,10 +24,16 @@ function skipPublic(req: Request): boolean {
  */
 function sessionOrIpKey(req: Request): string {
   const cookies = req.cookies as Record<string, unknown> | undefined;
-  const sid =
-    typeof cookies?.[SESSION_COOKIE] === "string"
-      ? cookies[SESSION_COOKIE]
-      : "";
+  let sid = "";
+  if (cookies) {
+    for (const name of SESSION_COOKIE_ALIASES) {
+      const raw = cookies[name];
+      if (typeof raw === "string" && raw.length > 0) {
+        sid = raw;
+        break;
+      }
+    }
+  }
   if (sid) return `s:${hashSessionId(sid)}`;
   return req.ip ?? "unknown";
 }

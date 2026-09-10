@@ -41,8 +41,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToastBanner } from "@/components/ui/toast";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 const NONE = "__none__";
 
@@ -110,31 +112,37 @@ export function StreamAlertsDashboard() {
     [roles],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [config, assets] = await Promise.all([
-        fetchStreamAlerts(),
-        fetchGuildAssets(),
-      ]);
-      setAlerts(config.alerts);
-      setCredentials(config.credentials);
-      setDrafts(
-        Object.fromEntries(config.alerts.map((row) => [row.id, toDraft(row)])),
-      );
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.streamAlerts, async () => {
+    const [config, assets] = await Promise.all([
+      fetchStreamAlerts(),
+      fetchGuildAssets(),
+    ]);
+    return { config, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setAlerts(query.data.config.alerts);
+    setCredentials(query.data.config.credentials);
+    setDrafts(
+      Object.fromEntries(
+        query.data.config.alerts.map((row) => [row.id, toDraft(row)]),
+      ),
+    );
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error ? query.error.message : "Couldn't load.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   function payload(draft: Draft) {
     return {
@@ -160,7 +168,7 @@ export function StreamAlertsDashboard() {
       await createStreamAlert(payload(creating));
       setCreating(null);
       setSuccess("Alerta creada. El bot avisa al pasar a en directo.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't create.");
     } finally {
@@ -180,7 +188,7 @@ export function StreamAlertsDashboard() {
     try {
       await updateStreamAlert(id, payload(draft));
       setSuccess("Alerta guardada.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't save.");
     } finally {
@@ -195,7 +203,7 @@ export function StreamAlertsDashboard() {
     try {
       await deleteStreamAlert(id);
       setSuccess("Alerta borrada.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't delete.");
     } finally {

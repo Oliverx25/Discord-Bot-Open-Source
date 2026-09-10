@@ -1,4 +1,5 @@
 import type { HealthResponse } from "@adobos/shared";
+import { motion } from "motion/react";
 import { StatusIsland } from "@/features/dashboard/StatusIsland";
 import { getReadyModules } from "@/lib/nav";
 
@@ -11,50 +12,43 @@ export function DashboardHome({ initialHealth = null }: DashboardHomeProps) {
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/70 p-6 shadow-sm backdrop-blur-sm sm:p-8">
-        <div
-          className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-primary/20 blur-3xl"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -bottom-24 left-1/3 size-48 rounded-full bg-[hsl(var(--ado-cyan)/0.14)] blur-3xl"
-          aria-hidden
-        />
-        <div className="relative max-w-2xl">
-          <p className="font-display text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-            Welcome
-          </p>
-          <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-            Adobos Panel
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Manage messages, automation, moderation and integrations from one
-            place. The sidebar groups the bot's whole feature set so it can grow
-            without clutter.
-          </p>
-        </div>
+      <section className="relative overflow-hidden rounded-lg border border-border bg-card p-6 sm:p-8">
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+          01 / modules
+        </p>
+        <h2 className="mt-2 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+          tobot<span className="text-primary">.</span>
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          Moderation, logs, welcomes, levels and economy from one place. Turn on
+          one module, watch it work, then add the next.
+        </p>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <StatusIsland initialHealth={initialHealth} />
 
-        <section className="rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
-          <h2 className="font-display text-base font-semibold">
-            Ready modules
-          </h2>
+        <section className="rounded-lg border border-border bg-card p-5">
+          <h2 className="font-display text-base font-semibold">Ready modules</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Features available right now.
           </p>
-          <ul className="mt-4 space-y-2">
-            {ready.map((item) => {
+          <ul className="mt-4 grid gap-px bg-border sm:grid-cols-1">
+            {ready.map((item, index) => {
               const Icon = item.icon;
               return (
-                <li key={item.href}>
+                <motion.li
+                  key={item.href}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.02, duration: 0.14 }}
+                  className="bg-card"
+                >
                   <a
                     href={item.href}
-                    className="group flex items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 transition-colors hover:border-primary/25 hover:bg-primary/5"
+                    className="group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--bg-hover)]"
                   >
-                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-primary">
                       <Icon className="size-4" aria-hidden />
                     </span>
                     <span className="min-w-0">
@@ -68,7 +62,7 @@ export function DashboardHome({ initialHealth = null }: DashboardHomeProps) {
                       )}
                     </span>
                   </a>
-                </li>
+                </motion.li>
               );
             })}
           </ul>

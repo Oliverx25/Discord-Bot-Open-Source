@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 const MOCK_USER = "@SampleUser";
 const MOCK_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
-const BOT_NAME = "Adobos Bot";
+const BOT_NAME = "tobot.";
 const ACCENT = "#e11d48";
 const SUCCESS = "#57F287";
 

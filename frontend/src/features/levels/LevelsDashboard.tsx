@@ -59,6 +59,8 @@ import {
   TrendingUp,
   Volume2,
 } from "lucide-react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type TabId = "xp" | "rewards" | "leaderboard" | "discord";
@@ -294,31 +296,35 @@ export function LevelsDashboard() {
     }
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [cfgRes, assets] = await Promise.all([
-        fetchLevelsConfig(),
-        fetchGuildAssets(),
-      ]);
-      setConfig(cfgRes.config);
-      setSavedFingerprint(configFingerprint(cfgRes.config));
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-      setGuildIconUrl(assets.iconUrl ?? null);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Couldn't load Levels.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.levels, async () => {
+    const [cfgRes, assets] = await Promise.all([
+      fetchLevelsConfig(),
+      fetchGuildAssets(),
+    ]);
+    return { cfgRes, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setConfig(query.data.cfgRes.config);
+    setSavedFingerprint(configFingerprint(query.data.cfgRes.config));
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setGuildIconUrl(query.data.assets.iconUrl ?? null);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Levels.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   useEffect(() => {
     if (tab === "leaderboard") void loadLeaderboard();

@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EconomySettingsDashboard } from "../../../features/economy";
+import { EconomySettingsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Bank and Settings"
   description="Server currency, transfer tax, and economy leaderboard."
 >
-  <EconomySettingsDashboard client:load />
+  <EconomySettingsIsland client:load/>
 </DashboardLayout>

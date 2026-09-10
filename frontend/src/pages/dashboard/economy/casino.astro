@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EconomyCasinoDashboard } from "../../../features/economy";
+import { EconomyCasinoIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Casino"
   description="Coinflip, roulette, and blackjack: limits, multipliers, and messages."
 >
-  <EconomyCasinoDashboard client:load />
+  <EconomyCasinoIsland client:load/>
 </DashboardLayout>

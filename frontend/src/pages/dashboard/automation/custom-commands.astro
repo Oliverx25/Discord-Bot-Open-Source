@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { CustomCommandsDashboard } from "../../../features/custom-commands";
+import { CustomCommandsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Custom Commands"
   description="Your own responses and slash commands."
 >
-  <CustomCommandsDashboard client:load />
+  <CustomCommandsIsland client:load/>
 </DashboardLayout>

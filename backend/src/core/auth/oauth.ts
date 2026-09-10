@@ -20,7 +20,11 @@ import {
   toPanelUser,
   upsertPanelUser,
 } from "./sessionStore.js";
-import { SESSION_COOKIE, SESSION_TTL_MS } from "./types.js";
+import {
+  SESSION_COOKIE,
+  SESSION_COOKIE_ALIASES,
+  SESSION_TTL_MS,
+} from "./types.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const DISCORD_AUTHORIZE = "https://discord.com/oauth2/authorize";
@@ -56,10 +60,10 @@ function clientSecret(): string {
 }
 
 function cookieOptions(): CookieOptions {
-  const secure = process.env.NODE_ENV === "production";
+  const hostPrefixed = SESSION_COOKIE.startsWith("__Host-");
   return {
     httpOnly: true,
-    secure,
+    secure: hostPrefixed || process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_TTL_MS,
@@ -73,8 +77,13 @@ function pkcePair(): { verifier: string; challenge: string } {
 }
 
 function sessionIdFrom(req: Request): string | undefined {
-  const raw = req.cookies?.[SESSION_COOKIE];
-  return typeof raw === "string" && raw.length > 0 ? raw : undefined;
+  const cookies = req.cookies as Record<string, unknown> | undefined;
+  if (!cookies) return undefined;
+  for (const name of SESSION_COOKIE_ALIASES) {
+    const raw = cookies[name];
+    if (typeof raw === "string" && raw.length > 0) return raw;
+  }
+  return undefined;
 }
 
 export function authRouter(): Router {
@@ -220,7 +229,14 @@ export function authRouter(): Router {
   router.post("/logout", async (req, res) => {
     const sid = sessionIdFrom(req);
     if (sid) await deleteSession(hashSessionId(sid));
-    res.clearCookie(SESSION_COOKIE, { path: "/" });
+    for (const name of SESSION_COOKIE_ALIASES) {
+      const hostPrefixed = name.startsWith("__Host-");
+      res.clearCookie(name, {
+        path: "/",
+        secure: hostPrefixed || process.env.NODE_ENV === "production",
+        sameSite: "lax",
+      });
+    }
     res.status(204).end();
   });
 

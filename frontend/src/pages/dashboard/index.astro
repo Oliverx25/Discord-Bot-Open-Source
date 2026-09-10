@@ -1,7 +1,7 @@
 ---
 import type { HealthResponse } from "@adobos/shared";
 import DashboardLayout from "../../layouts/DashboardLayout.astro";
-import { DashboardHome } from "../../features/dashboard";
+import { DashboardHomeIsland } from "../../components/providers/islands";
 
 const API_ORIGIN = import.meta.env.INTERNAL_API_URL ?? "http://127.0.0.1:3000";
 
@@ -20,7 +20,7 @@ try {
 
 <DashboardLayout
   title="Dashboard"
-  description="Self-hosted control center — Adobos / Ado aesthetic."
+  description="Modules, status and the control center for this server."
 >
-  <DashboardHome client:load initialHealth={initialHealth} />
+  <DashboardHomeIsland client:load initialHealth={initialHealth} />
 </DashboardLayout>

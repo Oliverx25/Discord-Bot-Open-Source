@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { ModerationTools } from "../../../features/moderation";
+import { ModerationIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Moderation"
   description="Ban, mute, purge, and moderation utilities."
 >
-  <ModerationTools client:load />
+  <ModerationIsland client:load/>
 </DashboardLayout>

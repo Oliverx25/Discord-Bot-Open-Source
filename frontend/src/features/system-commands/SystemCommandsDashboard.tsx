@@ -46,7 +46,9 @@ import {
   TrendingUp,
   Wrench,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
+import { useEffect, useMemo, useState } from "react";
 
 type CategoryFilter = "all" | SystemCommandCategory;
 
@@ -140,34 +142,36 @@ export function SystemCommandsDashboard() {
     [channels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const listQuery = useGuildQuery(queryKeys.systemCommands, async () => {
+    const [list, assets] = await Promise.all([
+      fetchSystemCommands(),
+      fetchGuildAssets(),
+    ]);
+    return { list, assets };
+  });
+
+  useEffect(() => {
+    if (!listQuery.data) return;
+    setCommands(listQuery.data.list);
+    setSavedFingerprint(commandsFingerprint(listQuery.data.list));
+    setRoles(listQuery.data.assets.roles ?? []);
+    setChannels(listQuery.data.assets.channels ?? []);
+    setLoading(false);
     setToast(null);
-    try {
-      const [list, assets] = await Promise.all([
-        fetchSystemCommands(),
-        fetchGuildAssets(),
-      ]);
-      setCommands(list);
-      setSavedFingerprint(commandsFingerprint(list));
-      setRoles(assets.roles ?? []);
-      setChannels(assets.channels ?? []);
-    } catch (error) {
+  }, [listQuery.data]);
+
+  useEffect(() => {
+    if (listQuery.isError) {
       setToast({
         variant: "error",
         message:
-          error instanceof Error
-            ? error.message
+          listQuery.error instanceof Error
+            ? listQuery.error.message
             : "Couldn't load system commands.",
       });
-    } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }, [listQuery.isError, listQuery.error]);
 
   useEffect(() => {
     setBulkRoles([]);

@@ -39,8 +39,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToastBanner } from "@/components/ui/toast";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const NONE = "__none__";
 
@@ -107,30 +109,36 @@ export function VoiceRoomsDashboard() {
     [channels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [config, assets] = await Promise.all([
-        fetchVoiceRooms(),
-        fetchGuildAssets(),
-      ]);
-      setGenerators(config.generators);
-      setLiveCount(config.rooms.length);
-      setDrafts(
-        Object.fromEntries(config.generators.map((g) => [g.id, toDraft(g)])),
-      );
-      setChannels(assets.channels);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Couldn't load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.voiceRooms, async () => {
+    const [config, assets] = await Promise.all([
+      fetchVoiceRooms(),
+      fetchGuildAssets(),
+    ]);
+    return { config, assets };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setGenerators(query.data.config.generators);
+    setLiveCount(query.data.config.rooms.length);
+    setDrafts(
+      Object.fromEntries(
+        query.data.config.generators.map((g) => [g.id, toDraft(g)]),
+      ),
+    );
+    setChannels(query.data.assets.channels);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error ? query.error.message : "Couldn't load.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   function patchDraft(id: number, patch: Partial<Draft>): void {
     setDrafts((prev) => ({
@@ -174,7 +182,7 @@ export function VoiceRoomsDashboard() {
       });
       setCreating(null);
       setSuccess("Generator created.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't create.");
     } finally {
@@ -203,7 +211,7 @@ export function VoiceRoomsDashboard() {
         allowedActions: draft.allowedActions,
       });
       setSuccess("Generator saved.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't save.");
     } finally {
@@ -218,7 +226,7 @@ export function VoiceRoomsDashboard() {
     try {
       await deleteVoiceRoomGenerator(id);
       setSuccess("Generator deleted. That hub's live rooms are removed.");
-      await load();
+      await query.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Couldn't delete.");
     } finally {

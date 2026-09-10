@@ -61,7 +61,9 @@ import {
   Lock,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EconomyShopItemPreview, ShopItemIcon } from "./EconomyShopItemPreview";
 
 type MainTab = "list" | "builder";
@@ -130,7 +132,7 @@ export function EconomyShopDashboard() {
   const [items, setItems] = useState<EconomyShopItem[]>([]);
   const [draft, setDraft] = useState<DraftItem>(() => emptyDraft());
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [currencyName, setCurrencyName] = useState("Adobos Coins");
+  const [currencyName, setCurrencyName] = useState("Tobot Coins");
   const [roles, setRoles] = useState<GuildRoleAsset[]>([]);
   const [channels, setChannels] = useState<GuildChannelAsset[]>([]);
   const [emojis, setEmojis] = useState<GuildEmojiAsset[]>([]);
@@ -171,38 +173,40 @@ export function EconomyShopDashboard() {
     [channels],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const query = useGuildQuery(queryKeys.economyShop, async () => {
+    const [shopItems, economy, assets] = await Promise.all([
+      fetchShopItems(),
+      fetchEconomyConfig().catch(() => null),
+      fetchGuildAssets().catch(() => null),
+    ]);
+    return { shopItems, economy, assets };
+  });
+
+  useEffect(() => {
+    if (!query.data) return;
+    setItems(query.data.shopItems);
+    if (query.data.economy) setCurrencyName(query.data.economy.currencyName);
+    if (query.data.assets) {
+      setRoles(query.data.assets.roles);
+      setChannels(query.data.assets.channels);
+      setEmojis(query.data.assets.emojis);
+    }
+    setLoading(false);
     setToast(null);
-    try {
-      const [shopItems, economy, assets] = await Promise.all([
-        fetchShopItems(),
-        fetchEconomyConfig().catch(() => null),
-        fetchGuildAssets().catch(() => null),
-      ]);
-      setItems(shopItems);
-      if (economy) setCurrencyName(economy.currencyName);
-      if (assets) {
-        setRoles(assets.roles);
-        setChannels(assets.channels);
-        setEmojis(assets.emojis);
-      }
-    } catch (error) {
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
       setToast({
         variant: "error",
         message:
-          error instanceof Error
-            ? error.message
+          query.error instanceof Error
+            ? query.error.message
             : "Couldn't load the shop.",
       });
-    } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }, [query.isError, query.error]);
 
   function openCreate(): void {
     setEditingId(null);
@@ -264,7 +268,7 @@ export function EconomyShopDashboard() {
         await createShopItem(payload);
         setToast({ variant: "success", message: "Item created." });
       }
-      await load();
+      await query.refetch();
       setMainTab("list");
     } catch (error) {
       setToast({
@@ -282,7 +286,7 @@ export function EconomyShopDashboard() {
     try {
       await deleteShopItem(id);
       setToast({ variant: "success", message: "Item deleted." });
-      await load();
+      await query.refetch();
     } catch (error) {
       setToast({
         variant: "error",

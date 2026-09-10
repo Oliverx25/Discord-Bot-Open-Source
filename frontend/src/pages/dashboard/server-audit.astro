@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../layouts/DashboardLayout.astro";
-import { ServerAuditLog } from "../../features/moderation";
+import { ServerAuditIsland } from "../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Server Audit"
   description="Read-only mirror of Discord's native audit log."
 >
-  <ServerAuditLog client:load />
+  <ServerAuditIsland client:load/>
 </DashboardLayout>

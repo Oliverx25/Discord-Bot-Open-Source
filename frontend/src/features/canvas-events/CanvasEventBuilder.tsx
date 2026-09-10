@@ -31,6 +31,8 @@ import {
   WELCOME_TEXT_LAYERS_MAX,
 } from "@adobos/shared";
 import { fetchGuildAssets, uploadBackgroundFile } from "@/lib/api";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { BackgroundImageUpload } from "@/components/shared/BackgroundImageUpload";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +59,7 @@ import { VariableListBase } from "@/components/shared/VariableListBase";
 import { cn } from "@/lib/utils";
 
 export interface CanvasEventBuilderConfig {
+  kind: "leave" | "ban" | "boost";
   cardTitle: string;
   cardDescription: string;
   defaultMessage: string;
@@ -92,7 +95,7 @@ const PREVIEW_CTX = {
   userMention: "@NewMember",
   username: "NewMember",
   displayName: "NewMember",
-  serverName: "Adobos",
+  serverName: "tobot",
   memberCount: 128,
 };
 
@@ -575,36 +578,35 @@ export function CanvasEventBuilder({ config }: { config: CanvasEventBuilderConfi
   const isSubmitting = feedback.kind === "loading";
   const previewBg = bgFilepath || backgroundUrl || WELCOME_CARD_FALLBACK_GRADIENT;
 
+  const query = useGuildQuery(
+    (gid) => queryKeys.canvasEvent(config.kind, gid),
+    async () => {
+      const [guildAssets, settings] = await Promise.all([
+        fetchGuildAssets(),
+        config.fetchSettings(),
+      ]);
+      return { guildAssets, settings };
+    },
+  );
+
   useEffect(() => {
-    let cancelled = false;
+    if (!query.data) return;
+    setAssets(query.data.guildAssets);
+    setAssetsError(null);
+    applySettings(query.data.settings);
+    setLoadingSettings(false);
+  }, [query.data]);
 
-    async function load(): Promise<void> {
-      try {
-        const [guildAssets, settings] = await Promise.all([
-          fetchGuildAssets(),
-          config.fetchSettings(),
-        ]);
-        if (cancelled) return;
-        setAssets(guildAssets);
-        setAssetsError(null);
-        applySettings(settings);
-      } catch (error: unknown) {
-        if (cancelled) return;
-        setAssetsError(
-          error instanceof Error
-            ? error.message
-            : "Couldn't load the configuration",
-        );
-      } finally {
-        if (!cancelled) setLoadingSettings(false);
-      }
+  useEffect(() => {
+    if (query.isError) {
+      setAssetsError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load the configuration",
+      );
+      setLoadingSettings(false);
     }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [config]);
+  }, [query.isError, query.error]);
 
   function applySettings(settings: CanvasEventSettingsResponse): void {
     setGuildId(settings.guildId);

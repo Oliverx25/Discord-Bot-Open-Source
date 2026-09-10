@@ -50,6 +50,8 @@ import {
   Save,
   X,
 } from "lucide-react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type TabId = "settings" | "leaderboard";
@@ -201,29 +203,35 @@ export function EconomySettingsDashboard() {
     [config.currencySymbol, serverEmojis],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const query = useGuildQuery(queryKeys.economy, async () => {
+    const [next, assets] = await Promise.all([
+      fetchEconomyConfig(),
+      fetchGuildAssets().catch(() => null),
+    ]);
+    return { next, assets };
+  });
+
+  useEffect(() => {
+    if (!query.data) return;
+    setConfig(query.data.next);
+    setSavedFingerprint(configFingerprint(query.data.next));
+    if (query.data.assets?.emojis) setServerEmojis(query.data.assets.emojis);
+    setLoading(false);
     setToast(null);
-    try {
-      const [next, assets] = await Promise.all([
-        fetchEconomyConfig(),
-        fetchGuildAssets().catch(() => null),
-      ]);
-      setConfig(next);
-      setSavedFingerprint(configFingerprint(next));
-      if (assets?.emojis) setServerEmojis(assets.emojis);
-    } catch (error) {
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
       setToast({
         variant: "error",
         message:
-          error instanceof Error
-            ? error.message
+          query.error instanceof Error
+            ? query.error.message
             : "Couldn't load the economy.",
       });
-    } finally {
       setLoading(false);
     }
-  }, []);
+  }, [query.isError, query.error]);
 
   const loadLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
@@ -243,10 +251,6 @@ export function EconomySettingsDashboard() {
       setLeaderboardLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   useEffect(() => {
     if (tab === "leaderboard") void loadLeaderboard();
@@ -494,7 +498,7 @@ export function EconomySettingsDashboard() {
                               currencyName: e.target.value,
                             }))
                           }
-                          placeholder="Adobos Coins"
+                          placeholder="Tobot Coins"
                         />
                       </div>
                       <div className="space-y-2">

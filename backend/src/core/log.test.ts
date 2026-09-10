@@ -37,7 +37,7 @@ describe("logger redaction (SEC logging seguro)", () => {
       {
         req: {
           headers: {
-            cookie: "adobos_session=super-secret",
+            cookie: "tobot_session=super-secret",
             authorization: "Bearer secret-token",
             "stripe-signature": "t=1,v1=abcdef",
           },

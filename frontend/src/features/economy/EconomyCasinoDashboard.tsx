@@ -31,6 +31,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToastBanner } from "@/components/ui/toast";
 import { Loader2, Save } from "lucide-react";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { useEffect, useMemo, useState } from "react";
 import {
   EconomyCasinoDiscordPreview,
@@ -62,47 +64,47 @@ export function EconomyCasinoDashboard() {
     [config, savedFingerprint],
   );
 
+  const query = useGuildQuery(queryKeys.economyCasino, async () => {
+    const [casino, economy] = await Promise.all([
+      fetchEconomyCasinoConfig(),
+      fetchEconomyConfig().catch((): EconomyConfig | null => null),
+    ]);
+    return { casino, economy };
+  });
+
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [casino, economy] = await Promise.all([
-          fetchEconomyCasinoConfig(),
-          fetchEconomyConfig().catch((): EconomyConfig | null => null),
-        ]);
-        if (cancelled) return;
-        const merged = {
-          ...casino,
-          blackjack: {
-            ...defaultCasinoBlackjack(),
-            ...casino.blackjack,
-          },
-          slots: {
-            ...defaultCasinoSlots(),
-            ...casino.slots,
-          },
-        };
-        setConfig(merged);
-        setSavedFingerprint(fingerprint(merged));
-        if (economy?.currencyName) setCurrencyName(economy.currencyName);
-      } catch (error) {
-        if (!cancelled) {
-          setToast({
-            variant: "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Couldn't load the casino.",
-          });
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
+    if (!query.data) return;
+    const merged = {
+      ...query.data.casino,
+      blackjack: {
+        ...defaultCasinoBlackjack(),
+        ...query.data.casino.blackjack,
+      },
+      slots: {
+        ...defaultCasinoSlots(),
+        ...query.data.casino.slots,
+      },
     };
-  }, []);
+    setConfig(merged);
+    setSavedFingerprint(fingerprint(merged));
+    if (query.data.economy?.currencyName) {
+      setCurrencyName(query.data.economy.currencyName);
+    }
+    setLoading(false);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setToast({
+        variant: "error",
+        message:
+          query.error instanceof Error
+            ? query.error.message
+            : "Couldn't load the casino.",
+      });
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   async function handleSave(): Promise<void> {
     setSaving(true);

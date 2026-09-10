@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { BillingDashboard } from "../../../features/billing";
+import { BillingIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Plan and billing"
   description="Free, Pro, and Business plans. One subscription covers several servers."
 >
-  <BillingDashboard client:load />
+  <BillingIsland client:load/>
 </DashboardLayout>

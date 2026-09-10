@@ -42,8 +42,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToastBanner } from "@/components/ui/toast";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 import { Loader2, Plus, Save, Send } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5]);
 
@@ -97,31 +99,35 @@ export function GiveawaysDashboard() {
   );
   const runningCount = rows.filter((row) => row.status === "running").length;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [assets, cfg, list] = await Promise.all([
-        fetchGuildAssets(),
-        fetchGiveawaySettings(),
-        fetchGiveaways(),
-      ]);
-      setChannels(assets.channels);
-      setRoles(assets.roles);
-      setSettings(cfg.settings);
-      setRows(list.giveaways);
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Couldn't load Giveaways.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useGuildQuery(queryKeys.giveaways, async () => {
+    const [assets, cfg, list] = await Promise.all([
+      fetchGuildAssets(),
+      fetchGiveawaySettings(),
+      fetchGiveaways(),
+    ]);
+    return { assets, cfg, list };
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!query.data) return;
+    setChannels(query.data.assets.channels);
+    setRoles(query.data.assets.roles);
+    setSettings(query.data.cfg.settings);
+    setRows(query.data.list.giveaways);
+    setLoading(false);
+    setError(null);
+  }, [query.data]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setError(
+        query.error instanceof Error
+          ? query.error.message
+          : "Couldn't load Giveaways.",
+      );
+      setLoading(false);
+    }
+  }, [query.isError, query.error]);
 
   async function withBusy(fn: () => Promise<void>, ok?: string): Promise<void> {
     setSaving(true);

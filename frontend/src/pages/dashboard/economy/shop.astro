@@ -1,11 +1,11 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EconomyShopDashboard } from "../../../features/economy";
+import { EconomyShopIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Shop"
   description="Catalog of items redeemable with the server currency."
 >
-  <EconomyShopDashboard client:load />
+  <EconomyShopIsland client:load/>
 </DashboardLayout>

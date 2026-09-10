@@ -28,7 +28,7 @@ export interface ActionLogDiscordPreviewProps {
  * Author = ejecutor + ID · Footer = afectado + avatar.
  */
 export function ActionLogDiscordPreview({
-  webhookDisplayName = "Adobos Audit",
+  webhookDisplayName = "tobot Audit",
   webhookAvatarUrl = null,
 }: ActionLogDiscordPreviewProps) {
   return (
