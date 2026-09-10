@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { includeGuildAssetRole, isGuildAssetChannelType } from "./common.js";
+import {
+  includeGuildAssetRole,
+  isGuildAssetChannelType,
+  SIGNED_IN_HINT_COOKIE,
+  SIGNED_IN_HINT_MAX_AGE_SEC,
+} from "./common.js";
 
 describe("Guild Assets catalog", () => {
   it("includes voice and forum; does not trim to text+announcements", () => {
@@ -44,5 +49,12 @@ describe("Guild Assets catalog", () => {
         managed: false,
       }),
     ).toBe(true);
+  });
+});
+
+describe("SIGNED_IN_HINT_COOKIE", () => {
+  it("is a readable name, not the HttpOnly session cookie", () => {
+    expect(SIGNED_IN_HINT_COOKIE).toBe("tobot_signed_in");
+    expect(SIGNED_IN_HINT_MAX_AGE_SEC).toBe(7 * 24 * 60 * 60);
   });
 });

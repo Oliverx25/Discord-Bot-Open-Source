@@ -33,6 +33,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { LandingHeader, Wordmark } from "./LandingHeader";
+import { useLandingSession } from "./useLandingSession";
 
 gsap.registerPlugin(useGSAP);
 
@@ -155,6 +156,7 @@ export function LandingPage() {
   const root = useRef<HTMLDivElement>(null);
   const [servers, setServers] = useState(3);
   const [faqOpen, setFaqOpen] = useState(0);
+  const { user } = useLandingSession();
   const rival = servers * 17;
 
   useGSAP(
@@ -190,7 +192,7 @@ export function LandingPage() {
 
   return (
     <div ref={root} className="relative bg-background text-foreground">
-      <LandingHeader />
+      <LandingHeader user={user} />
 
       <section className="tobot-dither relative flex min-h-[100dvh] flex-col">
         <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col justify-center px-6 pb-16 pt-24 lg:pb-20">
@@ -205,8 +207,21 @@ export function LandingPage() {
               on your account, not a new bill per community.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <CtaLink href="/auth/discord" size="lg" reload>
+              <CtaLink
+                href="/auth/discord"
+                size="lg"
+                reload
+                className="landing-cta-guest"
+              >
                 Get started
+              </CtaLink>
+              <CtaLink
+                href="/dashboard"
+                size="lg"
+                reload
+                className="landing-cta-user"
+              >
+                Open dashboard
               </CtaLink>
               <CtaLink
                 href="#modules"

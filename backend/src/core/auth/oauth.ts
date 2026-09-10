@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { buildBotInviteUrl } from "@adobos/shared";
+import { buildBotInviteUrl, SIGNED_IN_HINT_COOKIE } from "@adobos/shared";
 import {
   type CookieOptions,
   type Request,
@@ -59,11 +59,28 @@ function clientSecret(): string {
   return secret;
 }
 
+function cookieSecure(): boolean {
+  return (
+    SESSION_COOKIE.startsWith("__Host-") ||
+    process.env.NODE_ENV === "production"
+  );
+}
+
 function cookieOptions(): CookieOptions {
-  const hostPrefixed = SESSION_COOKIE.startsWith("__Host-");
   return {
     httpOnly: true,
-    secure: hostPrefixed || process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL_MS,
+  };
+}
+
+/** Hint de UX para el landing: JS puede leerla; no autoriza nada. */
+function signedInHintCookieOptions(): CookieOptions {
+  return {
+    httpOnly: false,
+    secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_TTL_MS,
@@ -216,6 +233,7 @@ export function authRouter(): Router {
         accessExpiresAt,
       });
       res.cookie(SESSION_COOKIE, sessionId, cookieOptions());
+      res.cookie(SIGNED_IN_HINT_COOKIE, "1", signedInHintCookieOptions());
       res.redirect("/dashboard");
     } catch (error: unknown) {
       logger.error({ err: error }, "OAuth callback failed:");
@@ -237,6 +255,11 @@ export function authRouter(): Router {
         sameSite: "lax",
       });
     }
+    res.clearCookie(SIGNED_IN_HINT_COOKIE, {
+      path: "/",
+      secure: cookieSecure(),
+      sameSite: "lax",
+    });
     res.status(204).end();
   });
 
@@ -245,6 +268,19 @@ export function authRouter(): Router {
 
 export function meRouter(gateway: BotGateway): Router {
   const router = Router();
+
+  /** Usuario de la fila de sesión; no lista guilds ni llama a Discord. */
+  router.get("/user", (req, res) => {
+    const session = req.panelSession;
+    if (!session) {
+      res
+        .status(401)
+        .json({ error: "No autenticado.", code: "UNAUTHENTICATED" });
+      return;
+    }
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ user: toPanelUser(session) });
+  });
 
   router.get("/", async (req, res) => {
     const session = req.panelSession;

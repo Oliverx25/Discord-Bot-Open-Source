@@ -42,9 +42,23 @@ const {
             /* ignore */
           }
         }
+        function applySignedInHint() {
+          try {
+            var signedIn = document.cookie.split(";").some(function (part) {
+              return part.trim().indexOf("tobot_signed_in=") === 0;
+            });
+            if (signedIn) document.documentElement.dataset.signedIn = "1";
+            else delete document.documentElement.dataset.signedIn;
+          } catch (_) {
+            /* ignore */
+          }
+        }
         applyThemeFromStorage();
+        applySignedInHint();
         document.addEventListener("astro:page-load", applyThemeFromStorage);
         document.addEventListener("astro:after-swap", applyThemeFromStorage);
+        document.addEventListener("astro:page-load", applySignedInHint);
+        document.addEventListener("astro:after-swap", applySignedInHint);
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

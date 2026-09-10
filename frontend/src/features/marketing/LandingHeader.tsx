@@ -1,5 +1,15 @@
-import { Book, CircleHelp, LayoutGrid, Menu, Tag, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type LucideIcon } from "react";
+import type { PanelMeUser } from "@adobos/shared";
+import {
+  Book,
+  CircleHelp,
+  LayoutGrid,
+  Menu,
+  Tag,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS: Array<[string, string, LucideIcon]> = [
@@ -50,7 +60,40 @@ function DiscordLoginButton({ compact }: { compact?: boolean }) {
   );
 }
 
-export function LandingHeader() {
+function AuthSlot({ user }: { user: PanelMeUser | null }) {
+  return (
+    <>
+      <div className="landing-auth-guest">
+        <div className="hidden md:block">
+          <DiscordLoginButton />
+        </div>
+        <div className="md:hidden">
+          <DiscordLoginButton compact />
+        </div>
+      </div>
+      <a
+        href="/dashboard"
+        data-astro-reload
+        className="landing-auth-user items-center gap-2"
+      >
+        {user?.avatarUrl ? (
+          <img
+            src={user.avatarUrl}
+            alt=""
+            width={38}
+            height={38}
+            className="hidden size-[38px] shrink-0 rounded-md object-cover md:block"
+          />
+        ) : null}
+        <span className={buttonVariants({ size: "default" })}>
+          Open dashboard
+        </span>
+      </a>
+    </>
+  );
+}
+
+export function LandingHeader({ user }: { user: PanelMeUser | null }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -142,12 +185,7 @@ export function LandingHeader() {
             </a>
 
             <div className="z-10 flex items-center justify-end">
-              <div className="hidden md:block">
-                <DiscordLoginButton />
-              </div>
-              <div className="md:hidden">
-                <DiscordLoginButton compact />
-              </div>
+              <AuthSlot user={user} />
             </div>
           </div>
 

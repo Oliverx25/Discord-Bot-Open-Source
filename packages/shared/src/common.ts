@@ -55,6 +55,19 @@ export interface MeResponse {
   inviteUrl: string;
 }
 
+/** GET /api/me/user — sesión válida sin pegarle a Discord (nav del landing). */
+export interface SessionUserResponse {
+  user: PanelMeUser;
+}
+
+/**
+ * Cookie JS-readable: solo un hint de UX (`1`). No es la sesión.
+ * La sesión real sigue en la cookie HttpOnly.
+ */
+export const SIGNED_IN_HINT_COOKIE = "tobot_signed_in";
+/** Alineado con la TTL de sesión del panel (7 días). */
+export const SIGNED_IN_HINT_MAX_AGE_SEC = 7 * 24 * 60 * 60;
+
 /**
  * Códigos que emite el kernel (auth, guild, entitlements, rate limit, mapper HTTP).
  * Los Lego pueden devolver otros; `ApiErrorBody.code` los admite como string.

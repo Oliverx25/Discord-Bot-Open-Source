@@ -317,6 +317,22 @@
   transform: translate(var(--press-offset-full), var(--press-offset-full));
 }
 
+/* Chrome de sesión: el script inline pone html[data-signed-in] antes del paint. */
+html:not([data-signed-in]) .landing-auth-user,
+html:not([data-signed-in]) .landing-cta-user {
+  display: none;
+}
+
+html[data-signed-in] .landing-auth-guest,
+html[data-signed-in] .landing-cta-guest {
+  display: none;
+}
+
+html[data-signed-in] .landing-auth-user,
+html[data-signed-in] .landing-cta-user {
+  display: inline-flex;
+}
+
 [data-theme="light"] .landing-nav-filled {
   border-bottom-color: rgb(14 18 13 / 0.08);
   background: rgb(248 251 243 / 0.78);
