@@ -1,4 +1,4 @@
-import { CircleHelp, LayoutGrid, Menu, Tag, X } from "lucide-react";
+import { Book, CircleHelp, LayoutGrid, Menu, Tag, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type LucideIcon } from "react";
 import { cn } from "@/lib/utils";
 
@@ -6,6 +6,7 @@ const NAV_LINKS: Array<[string, string, LucideIcon]> = [
   ["Modules", "#modules", LayoutGrid],
   ["Pricing", "#pricing", Tag],
   ["FAQ", "#faq", CircleHelp],
+  ["Docs", "https://docs.tobot.io", Book],
 ];
 
 export function Wordmark({ className = "text-2xl" }: { className?: string }) {

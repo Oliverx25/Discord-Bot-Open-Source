@@ -190,37 +190,12 @@ export function LandingPage() {
 
   return (
     <div ref={root} className="relative bg-background text-foreground">
-      <div
-        className="tobot-dither pointer-events-none absolute inset-x-0 top-0 z-0 h-64"
-        aria-hidden
-      />
       <LandingHeader />
 
-      {/* <div className="overflow-hidden border-b border-border bg-card">
-        <div className="flex w-max animate-[tobot-ticker_28s_linear_infinite] font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-          {[0, 1].map((copy) => (
-            <div key={copy} className="flex shrink-0 items-center">
-              {TICKER.map((item) => (
-                <span key={`${copy}-${item}`} className="px-8 py-2">
-                  {item}
-                  <span className="ml-8 text-primary">/</span>
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div> */}
-
-      <section className="tobot-dither border-b border-border">
-        <div className="mx-auto grid max-w-[1200px] gap-12 px-6 py-24 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:py-28">
-          <div className="hero-copy">
-            <div className="flex items-baseline gap-3">
-              <span className="font-mono text-[11px] tracking-[0.16em] text-primary">
-                01 /
-              </span>
-              <Overline>The problem</Overline>
-            </div>
-            <h1 className="mt-5 font-display text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+      <section className="tobot-dither relative flex min-h-[100dvh] flex-col">
+        <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col justify-center px-6 pb-16 pt-24 lg:pb-20">
+          <div className="hero-copy max-w-[40rem]">
+            <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
               Six bots do the job.
               <br />
               One <span className="text-primary">should be enough.</span>
@@ -237,37 +212,6 @@ export function LandingPage() {
               <CtaLink href="#modules" size="lg" variant="secondary">
                 See the 18 modules
               </CtaLink>
-            </div>
-            <p className="mt-5 font-mono text-xs text-muted-foreground">
-              {"// no card · 15 of 18 modules free forever, on every server"}
-            </p>
-          </div>
-
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <Overline>Your current stack</Overline>
-              <span className="font-mono text-xs text-destructive">
-                $17/mo × 3 servers
-              </span>
-            </div>
-            {STACK.map(([name, price]) => (
-              <div
-                key={name}
-                className="stack-row flex items-center justify-between border-b border-border px-5 py-[11px] opacity-55"
-              >
-                <span className="text-sm line-through decoration-destructive">
-                  {name}
-                </span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {price}
-                </span>
-              </div>
-            ))}
-            <div className="flex items-center justify-between border-t border-primary bg-[var(--bg-tint-accent)] px-5 py-4">
-              <Wordmark className="text-xl" />
-              <span className="font-mono text-sm">
-                $6/mo · ALL your servers
-              </span>
             </div>
           </div>
         </div>
