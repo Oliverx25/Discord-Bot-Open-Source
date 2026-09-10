@@ -6,6 +6,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Popover } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { setSelectedGuildId } from "@/stores/guild";
@@ -19,9 +20,9 @@ function GuildGlyph({
   iconUrl: string | null;
 }) {
   return (
-    <span className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--bg-hover)] font-display text-[10px] font-bold">
+    <span className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-[var(--border-default)] bg-[var(--bg-raised)] font-display text-[10px] font-bold text-[var(--text-secondary)]">
       {iconUrl ? (
-        <Avatar className="size-6 rounded-sm">
+        <Avatar className="size-6 rounded-sm bg-transparent">
           <AvatarImage src={iconUrl} alt="" />
           <AvatarFallback className="rounded-sm bg-transparent font-display text-[10px] font-bold">
             {guildTag(name)}
@@ -34,6 +35,9 @@ function GuildGlyph({
   );
 }
 
+const itemClass =
+  "flex w-full cursor-pointer items-center gap-3 rounded-sm px-[9px] py-[7px] text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-foreground";
+
 export function PanelGuildSwitcher({
   guilds,
   selected,
@@ -42,6 +46,7 @@ export function PanelGuildSwitcher({
   selected: PanelMeGuild | null;
 }) {
   const [open, setOpen] = useState(false);
+  const joined = guilds.filter((guild) => guild.botPresent);
 
   useEffect(() => {
     if (selected) setSelectedGuildId(selected.id);
@@ -60,73 +65,73 @@ export function PanelGuildSwitcher({
       onOpenChange={setOpen}
       portalled
       rootClassName="relative max-w-full"
-      className="tobot-glass w-72 rounded-md p-1 shadow-none"
+      className="w-72 rounded-md border-[var(--border-default)] bg-[var(--bg-raised)] p-1 shadow-[var(--shadow-2)]"
       trigger={
-        <button
+        <Button
           type="button"
-          disabled={guilds.length === 0}
+          variant="secondary"
           aria-label="Switch server"
+          aria-haspopup="listbox"
           aria-expanded={open}
-          data-open={open ? "" : undefined}
-          className="tobot-glass flex h-[38px] max-w-[18rem] items-center gap-2 rounded-md px-2.5 text-left transition-[border-color,background] duration-[var(--dur-fast)] disabled:opacity-60"
+          className={cn(
+            "max-w-[18rem] justify-start px-2.5 font-sans text-sm font-medium normal-case tracking-normal",
+            open && "border-primary text-[var(--text-accent)]",
+          )}
         >
           {selected ? (
             <GuildGlyph name={selected.name} iconUrl={selected.iconUrl} />
           ) : (
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-[var(--bg-hover)] font-display text-[10px] font-bold">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-sm border border-[var(--border-default)] bg-[var(--bg-raised)] font-display text-[10px] font-bold text-[var(--text-muted)]">
               —
             </span>
           )}
-          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">
+          <span className="min-w-0 flex-1 truncate">
             {selected?.name ?? "No server"}
           </span>
           <ChevronDown
             className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform duration-[var(--dur-fast)]",
+              "size-[13px] shrink-0 text-[var(--text-muted)] transition-transform duration-[var(--dur-fast)] ease-[var(--ease-standard)]",
               open && "rotate-180",
             )}
             aria-hidden
           />
-        </button>
+        </Button>
       }
     >
-      <ul className="max-h-80 overflow-y-auto p-1">
-        {guilds.map((guild) => {
+      <ul className="max-h-80 overflow-y-auto" role="listbox">
+        {joined.map((guild) => {
           const active = selected?.id === guild.id;
           return (
             <li key={guild.id}>
               <button
                 type="button"
+                role="option"
+                aria-selected={active}
                 onClick={() => {
-                  setOpen(false);
                   if (!active) selectGuild(guild);
+                  else setOpen(false);
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]",
-                  active
-                    ? "bg-[var(--bg-tint-accent)] text-primary"
-                    : "text-foreground hover:bg-[var(--bg-hover)]",
+                  itemClass,
+                  active &&
+                    "bg-[var(--bg-tint-accent)] text-primary hover:bg-[var(--bg-tint-accent)] hover:text-primary",
                 )}
               >
                 <GuildGlyph name={guild.name} iconUrl={guild.iconUrl} />
                 <span className="min-w-0 flex-1 truncate">{guild.name}</span>
-                {guild.botPresent ? null : (
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                    no bot
-                  </span>
-                )}
               </button>
             </li>
           );
         })}
       </ul>
+      <div className="my-1 h-px bg-[var(--border-subtle)]" />
       <a
         href="/auth/invite"
         data-astro-reload
-        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-[var(--bg-hover)] hover:text-foreground"
+        className={itemClass}
         onClick={() => setOpen(false)}
       >
-        <Plus className="size-4" aria-hidden />
+        <Plus className="size-4 text-[var(--text-muted)]" aria-hidden />
         Add to a server
       </a>
     </Popover>

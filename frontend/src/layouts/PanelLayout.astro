@@ -4,7 +4,7 @@ import PanelSidebar from "../components/panel/PanelSidebar.astro";
 import { PanelGuildSwitcher } from "../components/panel/PanelGuildSwitcher";
 import { PanelUserMenu } from "../components/panel/PanelUserMenu";
 import { PanelMobileMenu } from "../components/panel/PanelMobileMenu";
-import { buttonVariants } from "../components/ui/button";
+import { Button } from "../components/ui/button";
 
 interface Props {
   title: string;
@@ -71,9 +71,7 @@ const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
                 ask for the permissions; then come back and sign in with your
                 account.
               </p>
-              <a href="/auth/invite" class={buttonVariants({ size: "default" })}>
-                Add to a server
-              </a>
+              <Button href="/auth/invite">Add to a server</Button>
             </div>
           ) : (
             <main class="h-full overflow-y-auto px-[var(--dash-pad)] py-[var(--dash-pad)]">

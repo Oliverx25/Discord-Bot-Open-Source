@@ -95,8 +95,11 @@
 
   --shadow-hard: 4px 4px 0 var(--accent-shadow);
   --shadow-hard-sm: 3px 3px 0 var(--accent-shadow);
+  --shadow-hard-hover: 2px 2px 0 var(--accent-shadow);
   --shadow-hard-neutral: 4px 4px 0 var(--border-subtle);
+  --shadow-hard-neutral-hover: 2px 2px 0 var(--border-subtle);
   --shadow-hard-danger: 4px 4px 0 var(--danger-shadow);
+  --shadow-hard-danger-hover: 2px 2px 0 var(--danger-shadow);
   --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.5);
   --shadow-3: 0 20px 48px rgba(0, 0, 0, 0.62);
   --ring-focus: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--focus-ring);
@@ -167,6 +170,7 @@
     rgba(155, 209, 42, 0) 68%
   );
   --shadow-hard-neutral: 4px 4px 0 var(--border-default);
+  --shadow-hard-neutral-hover: 2px 2px 0 var(--border-default);
   --shadow-2: 0 6px 18px rgba(20, 30, 16, 0.12);
   --shadow-3: 0 20px 48px rgba(20, 30, 16, 0.18);
 }
@@ -316,30 +320,125 @@ button.tobot-glass[data-open] {
   background: rgb(255 255 255 / 0.06);
 }
 
-/* CTA de Discord: kit blurple + Clyde, radio y sombra del sistema tobot. */
-.landing-discord-btn {
-  border: 1px solid #5865f2;
-  background: #5865f2;
-  color: #fff;
-  box-shadow: 4px 4px 0 #3540b3;
-  transition:
-    transform var(--dur-fast) var(--ease-snap),
-    box-shadow var(--dur-fast) var(--ease-snap),
-    background-color var(--dur-fast) var(--ease-snap);
+/* Placa de sombra plantada: no se transforma. Solo se mueve la cara. */
+.tobot-physical {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  margin: 0 var(--press-offset-full) var(--press-offset-full) 0;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  vertical-align: top;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.landing-discord-btn:hover {
-  background: #4752c4;
-  border-color: #4752c4;
-  box-shadow: 2px 2px 0 #3540b3;
+.tobot-physical::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  background: var(--physical-plate, var(--accent-shadow));
+  transform: translate(var(--press-offset-full), var(--press-offset-full));
+}
+
+.tobot-physical--accent {
+  --physical-plate: var(--accent-shadow);
+}
+
+.tobot-physical--neutral {
+  --physical-plate: var(--border-subtle);
+}
+
+.tobot-physical--danger {
+  --physical-plate: var(--danger-shadow);
+}
+
+.tobot-physical--blurple {
+  --physical-plate: #3540b3;
+}
+
+[data-theme="light"] .tobot-physical--neutral {
+  --physical-plate: var(--border-default);
+}
+
+.tobot-physical > * {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  transition: transform var(--dur-fast) var(--ease-snap);
+}
+
+.tobot-physical.w-full,
+.tobot-physical.flex-1,
+.tobot-physical:has(.w-full) {
+  width: 100%;
+}
+
+.tobot-physical.flex-1,
+.tobot-physical:has(.flex-1) {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.tobot-physical.w-full > *,
+.tobot-physical.flex-1 > *,
+.tobot-physical:has(.w-full) > *,
+.tobot-physical:has(.flex-1) > * {
+  width: 100%;
+}
+
+.tobot-physical:hover:not(:disabled):not([aria-disabled="true"]) > * {
   transform: translate(var(--press-offset), var(--press-offset));
 }
 
-.landing-discord-btn:active {
+.tobot-physical:active:not(:disabled):not([aria-disabled="true"]) > * {
+  transform: translate(var(--press-offset-full), var(--press-offset-full));
+}
+
+.tobot-physical:disabled,
+.tobot-physical[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.tobot-physical:disabled::before,
+.tobot-physical[aria-disabled="true"]::before {
+  content: none;
+}
+
+.tobot-physical:disabled > *,
+.tobot-physical[aria-disabled="true"] > * {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tobot-physical > * {
+    transition: none;
+  }
+
+  .tobot-physical:hover > *,
+  .tobot-physical:active > * {
+    transform: none;
+  }
+}
+
+.tobot-physical--blurple:hover:not(:disabled):not([aria-disabled="true"]) > * {
+  background: #4752c4;
+  border-color: #4752c4;
+}
+
+.tobot-physical--blurple:active:not(:disabled):not([aria-disabled="true"]) > * {
   background: #3c45a5;
   border-color: #3c45a5;
-  box-shadow: none;
-  transform: translate(var(--press-offset-full), var(--press-offset-full));
 }
 
 /* Chrome de sesión: el script inline pone html[data-signed-in] antes del paint. */

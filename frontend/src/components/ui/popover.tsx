@@ -1,10 +1,14 @@
 import {
+  cloneElement,
+  isValidElement,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
   type HTMLAttributes,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -94,18 +98,46 @@ export function Popover({
     };
   }, [open, onOpenChange]);
 
+  function onTriggerClick(event: ReactMouseEvent<HTMLElement>): void {
+    if (event.defaultPrevented) return;
+    onOpenChange(!open);
+  }
+
+  const triggerNode = isValidElement(trigger)
+    ? cloneElement(
+        trigger as ReactElement<{
+          onClick?: (event: ReactMouseEvent<HTMLElement>) => void;
+        }>,
+        {
+          onClick: (event: ReactMouseEvent<HTMLElement>) => {
+            (
+              trigger as ReactElement<{
+                onClick?: (event: ReactMouseEvent<HTMLElement>) => void;
+              }>
+            ).props.onClick?.(event);
+            onTriggerClick(event);
+          },
+        },
+      )
+    : trigger;
+
   const panel = open ? (
     <div
       ref={contentRef}
       className={cn(
-        "z-50 rounded-md border border-border bg-popover text-popover-foreground shadow-md outline-none",
+        "z-[80] rounded-md border border-border bg-popover text-popover-foreground shadow-md outline-none",
         !portalled && "absolute mt-2",
         !portalled && (align === "end" ? "right-0" : "left-0"),
         className,
       )}
       style={
-        portalled && coords
-          ? { position: "fixed", top: coords.top, left: coords.left }
+        portalled
+          ? {
+              position: "fixed",
+              top: coords?.top ?? 0,
+              left: coords?.left ?? 0,
+              visibility: coords ? "visible" : "hidden",
+            }
           : undefined
       }
       role="dialog"
@@ -116,7 +148,7 @@ export function Popover({
 
   return (
     <div ref={rootRef} className={cn("relative inline-flex", rootClassName)}>
-      {trigger}
+      {triggerNode}
       {portalled && typeof document !== "undefined"
         ? panel
           ? createPortal(panel, document.body)

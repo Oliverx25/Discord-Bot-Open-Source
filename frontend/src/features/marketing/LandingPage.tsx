@@ -29,9 +29,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { cn } from "@/lib/utils";
 import { LandingHeader, Wordmark } from "./LandingHeader";
 import { useLandingSession } from "./useLandingSession";
 
@@ -142,13 +141,15 @@ function CtaLink({
   reload?: boolean;
 }) {
   return (
-    <a
+    <Button
       href={href}
-      {...(reload ? { "data-astro-reload": true } : {})}
-      className={cn(buttonVariants({ variant, size }), className)}
+      variant={variant}
+      size={size}
+      className={className}
+      reload={reload}
     >
       {children}
-    </a>
+    </Button>
   );
 }
 

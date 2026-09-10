@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS: Array<[string, string, LucideIcon]> = [
@@ -45,18 +45,16 @@ function DiscordMark({ className }: { className?: string }) {
 
 function DiscordLoginButton({ compact }: { compact?: boolean }) {
   return (
-    <a
+    <Button
       href="/auth/discord"
-      data-astro-reload
+      variant="discord"
+      size={compact ? "icon" : "default"}
       aria-label={compact ? "Login with Discord" : undefined}
-      className={cn(
-        "landing-discord-btn inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium tracking-tight",
-        compact ? "size-[38px] p-0" : "h-[38px] px-[18px]",
-      )}
+      reload
     >
       <DiscordMark className="size-4 shrink-0" />
       {compact ? null : "Login with Discord"}
-    </a>
+    </Button>
   );
 }
 
@@ -85,9 +83,7 @@ function AuthSlot({ user }: { user: PanelMeUser | null }) {
             className="hidden size-[38px] shrink-0 rounded-md object-cover md:block"
           />
         ) : null}
-        <span className={buttonVariants({ size: "default" })}>
-          Open dashboard
-        </span>
+        <Button as="span">Open dashboard</Button>
       </a>
     </>
   );
