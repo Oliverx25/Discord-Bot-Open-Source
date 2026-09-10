@@ -205,8 +205,8 @@ export function LandingPage() {
               on your account, not a new bill per community.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <CtaLink href="/auth/invite" size="lg" reload>
-                Add to Discord
+              <CtaLink href="/auth/discord" size="lg" reload>
+                Get started
               </CtaLink>
               <CtaLink
                 href="#modules"
