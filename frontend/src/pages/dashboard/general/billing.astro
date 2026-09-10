@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { BillingIsland } from "../../../components/providers/islands";
+// import { BillingIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Plan and billing"
   description="Free, Pro, and Business plans. One subscription covers several servers."
 >
-  <BillingIsland client:load/>
+  <!-- <BillingIsland client:load/> -->
 </DashboardLayout>

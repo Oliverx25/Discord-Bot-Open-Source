@@ -1,0 +1,33 @@
+---
+import type { PlanTier } from "@adobos/shared";
+import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { PanelPlanCard } from "./PanelPlanCard";
+import PanelNav from "./PanelNav.astro";
+
+interface Props {
+  currentPath: string;
+  tier: PlanTier;
+}
+
+const { currentPath, tier } = Astro.props;
+---
+
+<aside
+  id="tobot-sidebar"
+  class="fixed inset-y-0 left-0 z-50 flex h-dvh w-[var(--sidebar-w)] flex-col bg-background max-lg:top-[var(--topbar-h)] max-lg:h-[calc(100dvh-var(--topbar-h))] max-lg:-translate-x-full max-lg:data-[open]:translate-x-0 lg:sticky lg:top-0 lg:translate-x-0 transition-transform duration-[var(--dur-slow)] ease-[var(--ease-standard)]"
+>
+  <div class="flex h-[var(--topbar-h)] shrink-0 items-center px-3.5">
+    <a href="/dashboard" class="min-w-0" aria-label="tobot. dashboard">
+      <span class="font-display text-xl font-extrabold tracking-tight">
+        tobot<span class="text-primary">.</span>
+      </span>
+    </a>
+  </div>
+
+  <PanelNav currentPath={currentPath} />
+
+  <div class="flex shrink-0 flex-col gap-3 p-3">
+    <PanelPlanCard tier={tier} />
+    <ThemeToggle client:load />
+  </div>
+</aside>

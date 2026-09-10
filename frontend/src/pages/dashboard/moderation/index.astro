@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { ModerationIsland } from "../../../components/providers/islands";
+// import { ModerationIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Moderation"
   description="Ban, mute, purge, and moderation utilities."
 >
-  <ModerationIsland client:load/>
+  <!-- <ModerationIsland client:load/> -->
 </DashboardLayout>

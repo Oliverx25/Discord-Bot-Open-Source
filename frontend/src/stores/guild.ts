@@ -1,4 +1,5 @@
 import { atom } from "nanostores";
+import { clearGuildCookie, writeGuildCookie } from "@/lib/guildCookie";
 
 export const GUILD_STORAGE_KEY = "tobot-guild-id";
 const LEGACY_GUILD_STORAGE_KEY = "adobos-guild-id";
@@ -21,11 +22,13 @@ export function getSelectedGuildId(): string | null {
 export function setSelectedGuildId(id: string): void {
   window.localStorage.setItem(GUILD_STORAGE_KEY, id);
   window.localStorage.removeItem(LEGACY_GUILD_STORAGE_KEY);
+  writeGuildCookie(id);
   $guildId.set(id);
 }
 
 export function clearSelectedGuildId(): void {
   window.localStorage.removeItem(GUILD_STORAGE_KEY);
   window.localStorage.removeItem(LEGACY_GUILD_STORAGE_KEY);
+  clearGuildCookie();
   $guildId.set(null);
 }

@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EconomyCasinoIsland } from "../../../components/providers/islands";
+// import { EconomyCasinoIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Casino"
   description="Coinflip, roulette, and blackjack: limits, multipliers, and messages."
 >
-  <EconomyCasinoIsland client:load/>
+  <!-- <EconomyCasinoIsland client:load/> -->
 </DashboardLayout>

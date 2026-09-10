@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PanelMeGuild } from "@adobos/shared";
 import { ChevronDown, Plus } from "lucide-react";
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/avatar";
 import { Popover } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { setSelectedGuildId } from "@/stores/guild";
 import { guildTag } from "./guildTag";
 
 function GuildGlyph({
@@ -36,15 +37,22 @@ function GuildGlyph({
 export function PanelGuildSwitcher({
   guilds,
   selected,
-  loading,
-  onSelect,
 }: {
   guilds: PanelMeGuild[];
   selected: PanelMeGuild | null;
-  loading: boolean;
-  onSelect: (guild: PanelMeGuild) => void;
 }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (selected) setSelectedGuildId(selected.id);
+  }, [selected]);
+
+  function selectGuild(guild: PanelMeGuild): void {
+    setOpen(false);
+    if (selected?.id === guild.id) return;
+    setSelectedGuildId(guild.id);
+    window.location.reload();
+  }
 
   return (
     <Popover
@@ -56,7 +64,7 @@ export function PanelGuildSwitcher({
       trigger={
         <button
           type="button"
-          disabled={loading || guilds.length === 0}
+          disabled={guilds.length === 0}
           aria-label="Switch server"
           aria-expanded={open}
           data-open={open ? "" : undefined}
@@ -70,7 +78,7 @@ export function PanelGuildSwitcher({
             </span>
           )}
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">
-            {loading ? "Loading…" : (selected?.name ?? "No server")}
+            {selected?.name ?? "No server"}
           </span>
           <ChevronDown
             className={cn(
@@ -91,7 +99,7 @@ export function PanelGuildSwitcher({
                 type="button"
                 onClick={() => {
                   setOpen(false);
-                  if (!active) onSelect(guild);
+                  if (!active) selectGuild(guild);
                 }}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]",

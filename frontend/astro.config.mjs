@@ -4,58 +4,100 @@ import { defineConfig, envField } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
-import { SESSION_USER_HEADER } from "./src/server/session-header";
+import { readGuildIdFromCookieHeader } from "./src/lib/guildCookie";
+import {
+  PANEL_CONTEXT_HEADER,
+  SESSION_USER_HEADER,
+} from "./src/server/session-header";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const backendUrl = process.env.INTERNAL_API_URL ?? "http://127.0.0.1:3000";
 const apiOrigin = backendUrl.replace(/\/$/, "");
 
-/** Node resuelve `backend` en Docker; workerd no. Inyecta el user al SSR. */
+function isDashboardPath(pathname) {
+  return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+}
+
+/** Node resuelve `backend` en Docker; workerd no. Inyecta sesión al SSR. */
 function sessionProbePlugin() {
   return {
     name: "tobot-session-probe",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const pathName = (req.url ?? "/").split("?")[0];
-        if (pathName !== "/") {
-          next();
-          return;
-        }
         delete req.headers[SESSION_USER_HEADER];
+        delete req.headers[PANEL_CONTEXT_HEADER];
         const cookie = req.headers.cookie;
         if (!cookie) {
           next();
           return;
         }
+
+        const isLanding = pathName === "/" || pathName === "";
+        const isDashboard = isDashboardPath(pathName);
+        if (!isLanding && !isDashboard) {
+          next();
+          return;
+        }
+
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 2500);
-        fetch(`${apiOrigin}/api/me/user`, {
-          headers: { Accept: "application/json", Cookie: cookie },
-          signal: controller.signal,
-        })
-          .then(async (response) => {
-            if (!response.ok) return;
-            const body = await response.json();
-            const user = body?.user;
-            if (user?.id) {
-              req.headers[SESSION_USER_HEADER] = encodeURIComponent(
-                JSON.stringify(user),
+        const timer = setTimeout(() => controller.abort(), 4000);
+        const headers = { Accept: "application/json", Cookie: cookie };
+
+        const probe = isLanding
+          ? fetch(`${apiOrigin}/api/me/user`, {
+              headers,
+              signal: controller.signal,
+            }).then(async (response) => {
+              if (!response.ok) return;
+              const body = await response.json();
+              const user = body?.user;
+              if (user?.id) {
+                req.headers[SESSION_USER_HEADER] = encodeURIComponent(
+                  JSON.stringify(user),
+                );
+              }
+            })
+          : fetch(`${apiOrigin}/api/me`, {
+              headers,
+              signal: controller.signal,
+            }).then(async (response) => {
+              if (!response.ok) return;
+              const me = await response.json();
+              if (!me?.user?.id) return;
+              const guilds = Array.isArray(me.guilds) ? me.guilds : [];
+              const wanted = readGuildIdFromCookieHeader(cookie);
+              const selected =
+                guilds.find((guild) => guild.id === wanted) ?? guilds[0];
+              let tier = "free";
+              if (selected?.id) {
+                const entUrl = new URL("/api/entitlements", `${apiOrigin}/`);
+                entUrl.searchParams.set("guildId", selected.id);
+                const entRes = await fetch(entUrl, {
+                  headers,
+                  signal: controller.signal,
+                });
+                if (entRes.ok) {
+                  const snapshot = await entRes.json();
+                  if (snapshot?.tier) tier = snapshot.tier;
+                }
+              }
+              req.headers[PANEL_CONTEXT_HEADER] = encodeURIComponent(
+                JSON.stringify({ me, tier }),
               );
-            }
-          })
-          .catch(() => {})
-          .finally(() => {
-            clearTimeout(timer);
-            next();
-          });
+            });
+
+        probe.catch(() => {}).finally(() => {
+          clearTimeout(timer);
+          next();
+        });
       });
     },
   };
 }
 
 /**
- * SSR en Cloudflare. El dashboard legacy se prerenderiza.
- * Worker proxea /api /auth /uploads al VPS.
+ * SSR en Cloudflare. Worker proxea /api /auth /uploads al VPS.
  */
 export default defineConfig({
   site: process.env.PUBLIC_SITE_URL ?? "https://tobot.gg",

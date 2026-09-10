@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { CustomCommandsIsland } from "../../../components/providers/islands";
+// import { CustomCommandsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Custom Commands"
   description="Your own responses and slash commands."
 >
-  <CustomCommandsIsland client:load/>
+  <!-- <CustomCommandsIsland client:load/> -->
 </DashboardLayout>

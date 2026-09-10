@@ -3,6 +3,7 @@
 declare namespace App {
   interface Locals {
     user: import("@adobos/shared").PanelMeUser | null;
+    panel: import("./server/panel").PanelContext | null;
     runtime?: {
       env?: {
         ORIGIN_URL?: string;

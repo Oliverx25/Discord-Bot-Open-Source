@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { BotProfileIsland } from "../../../components/providers/islands";
+// import { BotProfileIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Bot Profile"
   description="The bot's local nickname and avatar as a member of this server."
 >
-  <BotProfileIsland client:load/>
+  <!-- <BotProfileIsland client:load/> -->
 </DashboardLayout>

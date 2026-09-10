@@ -1,7 +1,10 @@
 ---
-import { ClientRouter } from "astro:transitions";
 import BaseLayout from "./BaseLayout.astro";
-import { PanelShellIsland } from "../components/providers/chromeIslands";
+import PanelSidebar from "../components/panel/PanelSidebar.astro";
+import { PanelGuildSwitcher } from "../components/panel/PanelGuildSwitcher";
+import { PanelUserMenu } from "../components/panel/PanelUserMenu";
+import { PanelMobileMenu } from "../components/panel/PanelMobileMenu";
+import { buttonVariants } from "../components/ui/button";
 
 interface Props {
   title: string;
@@ -9,47 +12,75 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+const panel = Astro.locals.panel;
+if (!panel) {
+  return Astro.redirect("/");
+}
+
 const currentPath = Astro.url.pathname.replace(/\/$/, "") || "/";
+const { me, selectedGuild, tier } = panel;
+const emptyGuilds = me.guilds.length === 0;
+const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
 ---
 
 <BaseLayout title={`${title} — tobot.`} description={description}>
-  <ClientRouter slot="head" />
   <div class="tobot-shell flex h-dvh overflow-hidden bg-background">
     <div class="flex h-dvh shrink-0 max-lg:w-0 max-lg:overflow-visible">
-      <PanelShellIsland client:load currentPath={currentPath} />
+      <PanelSidebar currentPath={currentPath} tier={tier} />
     </div>
 
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <header
         class="relative z-50 flex h-[var(--topbar-h)] shrink-0 items-center gap-3 bg-background px-[var(--dash-pad)]"
       >
-        <div id="panel-menu-host" class="shrink-0 lg:hidden"></div>
+        <PanelMobileMenu client:load />
         <h1 class="sr-only">{title}</h1>
-        <div id="panel-guild-host" class="min-w-0 flex-1"></div>
-        <div
-          id="dashboard-header-actions"
-          class="hidden shrink-0 items-center gap-3 lg:flex"
-        >
+        <div class="min-w-0 flex-1">
+          <PanelGuildSwitcher
+            client:load
+            guilds={me.guilds}
+            selected={selectedGuild}
+          />
         </div>
-        <div
-          id="dashboard-header-actions-mobile"
-          class="flex shrink-0 items-center gap-2 lg:hidden"
-        >
-        </div>
-        <div id="panel-user-host" class="shrink-0"></div>
+        <PanelUserMenu client:load user={me.user} tier={tier} />
       </header>
-      <div id="panel-banner-host" class="shrink-0"></div>
+
+      {
+        missingBot && selectedGuild ? (
+          <div class="flex flex-wrap items-center justify-between gap-2 bg-background px-[var(--dash-pad)] py-2 text-sm">
+            <p class="text-muted-foreground">
+              tobot isn't in this server. Add it to use the dashboard.
+            </p>
+            <a
+              href={`/auth/invite?guildId=${encodeURIComponent(selectedGuild.id)}`}
+              class="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary hover:underline"
+            >
+              Add to the server
+            </a>
+          </div>
+        ) : null
+      }
+
       <div class="relative min-h-0 flex-1">
-        <div
-          id="panel-empty-host"
-          class="pointer-events-none absolute inset-0 z-10"
-        >
-        </div>
-        <main
-          class="h-full overflow-y-auto px-[var(--dash-pad)] py-[var(--dash-pad)]"
-        >
-          <slot />
-        </main>
+        {
+          emptyGuilds ? (
+            <div class="flex h-full flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+              <h2 class="font-display text-lg font-semibold">No servers</h2>
+              <p class="max-w-md text-sm text-muted-foreground">
+                Add tobot to a server where you can Manage Server. Discord will
+                ask for the permissions; then come back and sign in with your
+                account.
+              </p>
+              <a href="/auth/invite" class={buttonVariants({ size: "default" })}>
+                Add to a server
+              </a>
+            </div>
+          ) : (
+            <main class="h-full overflow-y-auto px-[var(--dash-pad)] py-[var(--dash-pad)]">
+              <slot />
+            </main>
+          )
+        }
       </div>
     </div>
   </div>

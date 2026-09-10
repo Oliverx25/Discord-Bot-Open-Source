@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { AntiRaidIsland } from "../../../components/providers/islands";
+// import { AntiRaidIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Anti-Raid"
   description="Join floods, emergency lockdown, and Anti-Nuke (Pro)."
 >
-  <AntiRaidIsland client:load/>
+  <!-- <AntiRaidIsland client:load/> -->
 </DashboardLayout>

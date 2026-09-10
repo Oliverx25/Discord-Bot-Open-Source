@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { ActionLogsIsland } from "../../../components/providers/islands";
+// import { ActionLogsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Action Logs"
   description="Audit of messages, members, roles, and channels."
 >
-  <ActionLogsIsland client:load/>
+  <!-- <ActionLogsIsland client:load/> -->
 </DashboardLayout>

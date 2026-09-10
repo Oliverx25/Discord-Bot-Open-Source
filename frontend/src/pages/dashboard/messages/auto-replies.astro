@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { AutoRepliesIsland } from "../../../components/providers/islands";
+// import { AutoRepliesIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Auto-Replies"
   description="The bot replies when a message matches a trigger."
 >
-  <AutoRepliesIsland client:load/>
+  <!-- <AutoRepliesIsland client:load/> -->
 </DashboardLayout>

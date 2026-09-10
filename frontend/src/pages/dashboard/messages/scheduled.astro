@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { ScheduledIsland } from "../../../components/providers/islands";
+// import { ScheduledIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Scheduled Messages"
   description="Announcements in a channel at a fixed time."
 >
-  <ScheduledIsland client:load/>
+  <!-- <ScheduledIsland client:load/> -->
 </DashboardLayout>

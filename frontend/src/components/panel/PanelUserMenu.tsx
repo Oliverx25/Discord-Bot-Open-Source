@@ -9,7 +9,9 @@ import {
 } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Popover } from "@/components/ui/popover";
+import { logout } from "@/lib/api/me";
 import { cn } from "@/lib/utils";
+import { clearSelectedGuildId } from "@/stores/guild";
 
 const itemClass =
   "flex w-full items-center rounded-sm px-[9px] py-[7px] text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-foreground";
@@ -17,17 +19,21 @@ const itemClass =
 export function PanelUserMenu({
   user,
   tier,
-  loading,
-  onSignOut,
 }: {
   user: PanelMeUser | null;
   tier: PlanTier;
-  loading: boolean;
-  onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const label = user?.globalName || user?.username || "Account";
   const paid = tier !== "free";
+
+  function signOut(): void {
+    setOpen(false);
+    void logout().finally(() => {
+      clearSelectedGuildId();
+      window.location.assign("/");
+    });
+  }
 
   return (
     <Popover
@@ -40,10 +46,9 @@ export function PanelUserMenu({
       trigger={
         <button
           type="button"
-          disabled={loading}
           aria-label="Account menu"
           aria-expanded={open}
-          className="flex items-center gap-2 rounded-md bg-transparent p-0.5 text-left outline-none hover:bg-[var(--bg-hover)] focus-visible:shadow-[var(--ring-focus)] disabled:opacity-40"
+          className="flex items-center gap-2 rounded-md bg-transparent p-0.5 text-left outline-none hover:bg-[var(--bg-hover)] focus-visible:shadow-[var(--ring-focus)]"
         >
           <Avatar className="size-[38px] rounded-md border-0 bg-[var(--bg-raised)]">
             {user?.avatarUrl ? (
@@ -55,7 +60,7 @@ export function PanelUserMenu({
           </Avatar>
           <span className="hidden min-w-0 flex-col items-start gap-0.5 sm:flex">
             <span className="max-w-[9rem] truncate text-[13px] font-semibold leading-tight tracking-tight">
-              {loading ? "…" : (user?.username ?? "")}
+              {user?.username ?? ""}
             </span>
             <Badge
               className={cn(
@@ -97,7 +102,7 @@ export function PanelUserMenu({
           )}
           onClick={() => {
             setOpen(false);
-            onSignOut();
+            signOut();
           }}
         >
           Sign out

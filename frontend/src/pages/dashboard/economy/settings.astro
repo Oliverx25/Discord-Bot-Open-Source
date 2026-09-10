@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EconomySettingsIsland } from "../../../components/providers/islands";
+// import { EconomySettingsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Bank and Settings"
   description="Server currency, transfer tax, and economy leaderboard."
 >
-  <EconomySettingsIsland client:load/>
+  <!-- <EconomySettingsIsland client:load/> -->
 </DashboardLayout>

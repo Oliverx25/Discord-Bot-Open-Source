@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { TicketsIsland } from "../../../components/providers/islands";
+// import { TicketsIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Tickets"
   description="Panels with buttons to open support tickets."
 >
-  <TicketsIsland client:load initialTab="panels" />
+  <!-- <TicketsIsland client:load initialTab="panels" /> -->
 </DashboardLayout>

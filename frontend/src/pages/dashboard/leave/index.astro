@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { LeaveIsland } from "../../../components/providers/islands";
+// import { LeaveIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Leave"
   description="Design the PNG card for when someone leaves the server."
 >
-  <LeaveIsland client:load/>
+  <!-- <LeaveIsland client:load/> -->
 </DashboardLayout>

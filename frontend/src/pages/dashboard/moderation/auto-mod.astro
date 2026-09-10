@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { AutoModIsland } from "../../../components/providers/islands";
+// import { AutoModIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Auto-Mod"
   description="Anti-spam filters, blocked words, and Warns integration."
 >
-  <AutoModIsland client:load/>
+  <!-- <AutoModIsland client:load/> -->
 </DashboardLayout>

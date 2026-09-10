@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { EconomyShopIsland } from "../../../components/providers/islands";
+// import { EconomyShopIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Shop"
   description="Catalog of items redeemable with the server currency."
 >
-  <EconomyShopIsland client:load/>
+  <!-- <EconomyShopIsland client:load/> -->
 </DashboardLayout>

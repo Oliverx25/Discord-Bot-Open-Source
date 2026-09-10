@@ -1,12 +1,12 @@
 ---
-export const prerender = true;
+export const prerender = false;
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
-import { RolesBuilderIsland } from "../../../components/providers/islands";
+// import { RolesBuilderIsland } from "../../../components/providers/islands";
 ---
 
 <DashboardLayout
   title="Roles Builder"
   description="Create and edit Discord roles from the dashboard."
 >
-  <RolesBuilderIsland client:load/>
+  <!-- <RolesBuilderIsland client:load/> -->
 </DashboardLayout>
