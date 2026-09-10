@@ -108,7 +108,7 @@ export function LandingHeader() {
                   <li key={label}>
                     <a
                       href={href}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors duration-[var(--dur-fast)] hover:text-foreground"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-medium text-[var(--text-secondary)] transition-colors duration-[var(--dur-fast)] hover:text-foreground"
                     >
                       <Icon className="size-4" strokeWidth={1.75} aria-hidden />
                       {label}
@@ -170,7 +170,7 @@ export function LandingHeader() {
                       href={href}
                       tabIndex={menuOpen ? 0 : -1}
                       onClick={() => setMenuOpen(false)}
-                      className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+                      className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-[var(--text-secondary)] hover:bg-white/[0.06] hover:text-foreground"
                     >
                       <Icon className="size-4" strokeWidth={1.75} aria-hidden />
                       {label}

@@ -200,16 +200,20 @@ export function LandingPage() {
               <br />
               One <span className="text-primary">should be enough.</span>
             </h1>
-            <p className="mt-6 max-w-[52ch] text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Moderation, logs, welcomes, levels, economy, forms and automation
-              in one place. One subscription covers every server you run — not
-              one.
+            <p className="mt-6 max-w-[46ch] text-base leading-relaxed text-[var(--text-secondary)] sm:text-lg">
+              Fifteen modules stay free. One subscription covers every server
+              on your account, not a new bill per community.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <CtaLink href="/auth/invite" size="lg" reload>
                 Add to Discord
               </CtaLink>
-              <CtaLink href="#modules" size="lg" variant="secondary">
+              <CtaLink
+                href="#modules"
+                size="lg"
+                variant="ghost"
+                className="text-[var(--text-secondary)] hover:text-foreground"
+              >
                 See the 18 modules
               </CtaLink>
             </div>
