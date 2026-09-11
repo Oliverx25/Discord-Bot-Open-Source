@@ -58,6 +58,7 @@ export function BotProfileMixin<
             globalBannerUrl: userBannerUrl(botUser ?? me.user),
             serverBannerUrl: memberBannerUrl(guildId, me),
             hasServerAvatar: Boolean(me.avatar),
+            joinedAt: me.joined_at ?? null,
           };
         },
       );

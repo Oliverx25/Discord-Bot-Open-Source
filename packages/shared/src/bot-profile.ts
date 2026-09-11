@@ -67,6 +67,8 @@ export interface BotGuildProfileResponse {
   globalBannerURL: string | null;
   serverBannerURL: string | null;
   hasServerAvatar: boolean;
+  /** Fecha en que Discord registró al bot como miembro del servidor. */
+  joinedAt: string | null;
   settings: BotGuildSettings;
 }
 

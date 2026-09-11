@@ -103,6 +103,7 @@ function toProfileResponse(
     globalBannerURL: summary.globalBannerUrl,
     serverBannerURL: summary.serverBannerUrl,
     hasServerAvatar: summary.hasServerAvatar,
+    joinedAt: summary.joinedAt,
     settings,
   };
 }

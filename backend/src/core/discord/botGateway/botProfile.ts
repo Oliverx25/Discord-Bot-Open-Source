@@ -11,6 +11,8 @@ export interface BotProfileSummary {
   globalBannerUrl: string | null;
   serverBannerUrl: string | null;
   hasServerAvatar: boolean;
+  /** Fecha en que Discord registró al bot como miembro del servidor. */
+  joinedAt: string | null;
 }
 
 /** Perfil del bot en el guild (apodo/avatar de servidor). */

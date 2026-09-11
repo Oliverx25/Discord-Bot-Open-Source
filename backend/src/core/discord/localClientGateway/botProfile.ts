@@ -45,6 +45,7 @@ export function BotProfileMixin<
           botUser.bannerURL({ extension: "png", size: 480 }) ?? null,
         serverBannerUrl: me.bannerURL({ extension: "png", size: 480 }) ?? null,
         hasServerAvatar: Boolean(me.avatar),
+        joinedAt: me.joinedAt?.toISOString() ?? null,
       };
     }
   };
