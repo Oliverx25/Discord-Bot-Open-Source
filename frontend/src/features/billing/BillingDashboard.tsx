@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BILLING_PLAN_PRICES,
   formatUsd,
@@ -132,6 +133,11 @@ function readCheckoutFlag(): "success" | "canceled" | null {
   if (value === "success") return "success";
   if (value === "canceled") return "canceled";
   return null;
+}
+
+function hasPortalReturnFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("portal") === "return";
 }
 
 function badgeTone(tier: PlanTier): "free" | "pro" {
@@ -274,6 +280,8 @@ export function BillingDashboard({
   guildName?: string | null;
 }) {
   const checkoutBanner = useMemo(() => readCheckoutFlag(), []);
+  const portalReturn = useMemo(() => hasPortalReturnFlag(), []);
+  const queryClient = useQueryClient();
   const waitingSince = useRef(Date.now());
   const announcedPaid = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -301,6 +309,20 @@ export function BillingDashboard({
     url.searchParams.delete("checkout");
     window.history.replaceState({}, "", url.pathname + url.search);
   }, [checkoutBanner]);
+
+  useEffect(() => {
+    if (!portalReturn || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("portal");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, [portalReturn]);
+
+  useEffect(() => {
+    if (!portalReturn || !query.guildId) return;
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.billing(query.guildId),
+    });
+  }, [portalReturn, query.guildId, queryClient]);
 
   useEffect(() => {
     if (checkoutBanner === "canceled") {
