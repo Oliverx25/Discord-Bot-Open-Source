@@ -29,9 +29,9 @@ const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
       <PanelSidebar currentPath={currentPath} tier={tier} />
     </div>
 
-    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <header
-        class="relative z-50 flex h-[var(--topbar-h)] shrink-0 items-center gap-3 bg-background px-[var(--dash-pad)]"
+        class="landing-nav-filled absolute inset-x-0 top-0 z-50 flex h-[var(--topbar-h)] items-center gap-3 px-[var(--dash-pad)] transition-[background-color,border-color,backdrop-filter] duration-[var(--dur-slow)] ease-[cubic-bezier(0.32,0.72,0,1)]"
       >
         <PanelMobileMenu client:load transition:persist="panel-mobile-menu" />
         <h1 class="sr-only">{title}</h1>
@@ -51,24 +51,24 @@ const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
         />
       </header>
 
-      {
-        missingBot && selectedGuild ? (
-          <div class="flex flex-wrap items-center justify-between gap-2 bg-background px-[var(--dash-pad)] py-2 text-sm">
-            <p class="text-muted-foreground">
-              tobot isn't in this server. Add it to use the dashboard.
-            </p>
-            <a
-              href={`/auth/invite?guildId=${encodeURIComponent(selectedGuild.id)}`}
-              data-astro-reload
-              class="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary hover:underline"
-            >
-              Add to the server
-            </a>
-          </div>
-        ) : null
-      }
+      <div class="tobot-scroll relative min-h-0 flex-1 overflow-y-auto pt-[var(--topbar-h)]">
+        {
+          missingBot && selectedGuild ? (
+            <div class="flex flex-wrap items-center justify-between gap-2 bg-background px-[var(--dash-pad)] py-2 text-sm">
+              <p class="text-muted-foreground">
+                tobot isn't in this server. Add it to use the dashboard.
+              </p>
+              <a
+                href={`/auth/invite?guildId=${encodeURIComponent(selectedGuild.id)}`}
+                data-astro-reload
+                class="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary hover:underline"
+              >
+                Add to the server
+              </a>
+            </div>
+          ) : null
+        }
 
-      <div class="relative min-h-0 flex-1">
         {
           emptyGuilds ? (
             <div class="flex h-full flex-col items-center justify-center gap-3 bg-background px-6 text-center">
@@ -81,7 +81,7 @@ const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
               <Button href="/auth/invite" reload>Add to a server</Button>
             </div>
           ) : (
-            <main class="h-full overflow-y-auto px-[var(--dash-pad)] py-[var(--dash-pad)]">
+            <main class="min-h-full px-[var(--dash-pad)] py-[var(--dash-pad)]">
               <slot />
             </main>
           )
