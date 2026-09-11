@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type {
   BotActivityTypeName,
+  BotGuildSettings,
   BotGuildProfileResponse,
   BotPresenceStatus,
   UpdateBotGuildProfileRequest,
@@ -10,6 +11,7 @@ import {
   BOT_GUILD_NICKNAME_MAX,
   isBotGuildNicknameTooLong,
   parseBotActivityType,
+  parseBotGuildLocale,
   parseBotPresenceStatus,
 } from "@adobos/shared";
 import {
@@ -23,13 +25,15 @@ import {
 import { eq } from "drizzle-orm";
 import type { BotGateway } from "#core/discord/botGateway.js";
 import { BotGatewayError } from "#core/discord/botGateway.js";
+import { assertFeature } from "#core/entitlements/service.js";
 import { logger } from "#core/log.js";
 import { getDb, one } from "#db/client.js";
-import { botPresenceSettings } from "#db/schema.js";
+import { botPresenceSettings, guildSettings } from "#db/schema.js";
 import {
   resolvePublicUploadPath,
   uploadBelongsToGuild,
 } from "#lib/dataPaths.js";
+import { normalizeIanaTimezone } from "#lib/schedulerTimezone.js";
 
 export class BotProfileError extends Error {
   constructor(
@@ -85,6 +89,7 @@ function resolveGuildId(gateway: BotGateway, guildId?: string): string {
 
 function toProfileResponse(
   summary: Awaited<ReturnType<BotGateway["getBotProfile"]>>,
+  settings: BotGuildSettings,
 ): BotGuildProfileResponse {
   return {
     guildId: summary.guildId,
@@ -98,7 +103,53 @@ function toProfileResponse(
     globalBannerURL: summary.globalBannerUrl,
     serverBannerURL: summary.serverBannerUrl,
     hasServerAvatar: summary.hasServerAvatar,
+    settings,
   };
+}
+
+function mapGuildBotSettings(
+  row: typeof guildSettings.$inferSelect | undefined,
+): BotGuildSettings {
+  return {
+    timezone: normalizeIanaTimezone(row?.botTimezone),
+    locale: parseBotGuildLocale(row?.botLocale),
+  };
+}
+
+async function getGuildBotSettings(guildId: string): Promise<BotGuildSettings> {
+  const row = await one(
+    getDb()
+      .select()
+      .from(guildSettings)
+      .where(eq(guildSettings.guildId, guildId))
+      .limit(1),
+  );
+  return mapGuildBotSettings(row);
+}
+
+async function saveGuildBotSettings(
+  guildId: string,
+  input: UpdateBotGuildProfileRequest,
+): Promise<{ settings: BotGuildSettings; changed: boolean }> {
+  const current = await getGuildBotSettings(guildId);
+  const timezone =
+    input.timezone === undefined
+      ? current.timezone
+      : normalizeIanaTimezone(input.timezone, current.timezone);
+  const locale = input.locale ?? current.locale;
+  const changed = timezone !== current.timezone || locale !== current.locale;
+  if (!changed) return { settings: current, changed: false };
+
+  const now = new Date();
+  const [row] = await getDb()
+    .insert(guildSettings)
+    .values({ guildId, botTimezone: timezone, botLocale: locale, updatedAt: now })
+    .onConflictDoUpdate({
+      target: guildSettings.guildId,
+      set: { botTimezone: timezone, botLocale: locale, updatedAt: now },
+    })
+    .returning();
+  return { settings: mapGuildBotSettings(row), changed: true };
 }
 
 async function fetchProfile(
@@ -106,7 +157,11 @@ async function fetchProfile(
   guildId: string,
 ): Promise<BotGuildProfileResponse> {
   try {
-    return toProfileResponse(await gateway.getBotProfile(guildId));
+    const [summary, settings] = await Promise.all([
+      gateway.getBotProfile(guildId),
+      getGuildBotSettings(guildId),
+    ]);
+    return toProfileResponse(summary, settings);
   } catch (error) {
     if (error instanceof BotGatewayError && error.code === "GUILD_NOT_FOUND") {
       throw new BotProfileError(
@@ -328,6 +383,7 @@ export async function updateGuildBotProfile(
     nickname: false,
     serverAvatar: false,
     serverBanner: false,
+    settings: false,
   };
 
   try {
@@ -352,6 +408,7 @@ export async function updateGuildBotProfile(
 
       const current = before.nickname || null;
       if (current !== nextNick) {
+        await assertFeature(id, "branding");
         await gateway.setBotGuildNickname(id, nextNick);
         changedFlags.nickname = true;
       }
@@ -365,6 +422,7 @@ export async function updateGuildBotProfile(
     });
 
     if (avatarInput !== undefined) {
+      await assertFeature(id, "branding");
       await gateway.setBotGuildAvatar(id, avatarInput);
       changedFlags.serverAvatar = true;
     }
@@ -375,12 +433,16 @@ export async function updateGuildBotProfile(
       urlOrPath: fields.serverBannerUrl,
     });
     if (bannerInput !== undefined) {
+      await assertFeature(id, "branding");
       await gateway.setBotGuildBanner(id, bannerInput);
       changedFlags.serverBanner = true;
     }
   } catch (error: unknown) {
     mapDiscordError(error);
   }
+
+  const savedSettings = await saveGuildBotSettings(id, fields);
+  changedFlags.settings = savedSettings.changed;
 
   const profile = await fetchProfile(gateway, id);
 

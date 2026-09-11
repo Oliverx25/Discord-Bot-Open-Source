@@ -16,6 +16,10 @@ export const guildSettings = pgTable("guild_settings", {
   /** Canal principal de Action Logs (null = sin logs configurados). */
   logChannelId: text(),
   welcomeEnabled: boolean().notNull().default(false),
+  /** Zona IANA predeterminada para las funciones propias del bot. */
+  botTimezone: text().notNull().default("UTC"),
+  /** Idioma preferido para las respuestas nativas del bot en este servidor. */
+  botLocale: text().notNull().default("en"),
   updatedAt: timestamp({ withTimezone: true, mode: "date" })
     .notNull()
     .$defaultFn(() => new Date()),

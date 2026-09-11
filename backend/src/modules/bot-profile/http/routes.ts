@@ -1,7 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
 import type { BotGateway } from "#core/discord/botGateway.js";
-import { requireFeature } from "#core/entitlements/service.js";
 import { guildIdOf } from "#core/http/guildContext.js";
 import { defineRoute } from "#core/http/validate.js";
 import { getGuildBotProfile, updateGuildBotProfile } from "../discord.js";
@@ -41,7 +40,6 @@ export function botProfileRoutes(gateway: BotGateway): Router {
 
   router.post(
     "/",
-    requireFeature("branding"),
     avatarUpload.fields([
       { name: "serverAvatar", maxCount: 1 },
       { name: "serverBanner", maxCount: 1 },
