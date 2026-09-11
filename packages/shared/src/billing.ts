@@ -39,14 +39,26 @@ export const SUBSCRIPTION_STATUS_LABEL: Record<SubscriptionStatus, string> = {
 };
 
 export interface BillingPlanPrice {
-  monthlyEur: number;
+  monthlyUsd: number;
+  /** Visible: `$4.99/mo`. */
   label: string;
 }
 
 export const BILLING_PLAN_PRICES: Record<PaidPlanTier, BillingPlanPrice> = {
-  pro: { monthlyEur: 4.99, label: "4,99€/mes" },
-  business: { monthlyEur: 14.99, label: "14,99€/mes" },
+  pro: { monthlyUsd: 4.99, label: "$4.99/mo" },
+  business: { monthlyUsd: 14.99, label: "$14.99/mo" },
 };
+
+/** Montos de catálogo y calculadora. Locale fijado: el panel es inglés. */
+export function formatUsd(amount: number): string {
+  const hasCents = !Number.isInteger(amount);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
 
 /** Suscripción Stripe que cubre este servidor, si el pagador es el usuario actual. */
 export interface BillingSubscriptionView {

@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   BILLING_PLAN_PRICES,
+  formatUsd,
   guildCoveredByOtherPayer,
   isPaidSubscriptionStatus,
   isSubscriptionStatus,
 } from "./billing.js";
 
 describe("precios Billing", () => {
-  it("ancla 4,99€ / 14,99€", () => {
-    expect(BILLING_PLAN_PRICES.pro.monthlyEur).toBe(4.99);
-    expect(BILLING_PLAN_PRICES.pro.label).toBe("4,99€/mes");
-    expect(BILLING_PLAN_PRICES.business.monthlyEur).toBe(14.99);
-    expect(BILLING_PLAN_PRICES.business.label).toBe("14,99€/mes");
+  it("ancla $4.99 / $14.99", () => {
+    expect(BILLING_PLAN_PRICES.pro.monthlyUsd).toBe(4.99);
+    expect(BILLING_PLAN_PRICES.pro.label).toBe("$4.99/mo");
+    expect(BILLING_PLAN_PRICES.business.monthlyUsd).toBe(14.99);
+    expect(BILLING_PLAN_PRICES.business.label).toBe("$14.99/mo");
+    expect(formatUsd(4.99)).toBe("$4.99");
+    expect(formatUsd(51)).toBe("$51");
   });
 });
 
