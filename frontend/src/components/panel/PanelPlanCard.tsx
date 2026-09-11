@@ -6,7 +6,7 @@ export function PanelPlanCard({ tier }: { tier: PlanTier }) {
 
   return (
     <a
-      href="/dashboard/general/billing"
+      href="/dashboard/billing"
       className="block rounded-md border border-primary bg-[var(--bg-tint-accent)] p-2.5 hover:border-[var(--accent-hover)]"
     >
       {paid ? (
@@ -16,14 +16,14 @@ export function PanelPlanCard({ tier }: { tier: PlanTier }) {
           </Badge>
           <span className="text-[13px] font-semibold">Plan and billing</span>
           <span className="font-mono text-[10px] text-muted-foreground">
-            One plan covers every server
+            This server · {PLAN_TIER_LABEL[tier]}
           </span>
         </div>
       ) : (
         <div className="flex flex-col gap-1">
-          <span className="text-[13px] font-semibold">Upgrade</span>
+          <span className="text-[13px] font-semibold">Upgrade this server</span>
           <span className="font-mono text-[10px] text-[var(--text-secondary)]">
-            One plan covers every server
+            One subscription per community
           </span>
         </div>
       )}

@@ -46,21 +46,3 @@ export async function startBillingPortal(): Promise<BillingPortalResponse> {
   }
   return response.json() as Promise<BillingPortalResponse>;
 }
-
-export async function assignGuildToPlan(): Promise<void> {
-  const response = await apiFetch("/api/billing/assign", { method: "POST" });
-  if (!response.ok) {
-    throw new Error(
-      await readApiError(response, "Couldn't assign this server."),
-    );
-  }
-}
-
-export async function unassignGuildFromPlan(): Promise<void> {
-  const response = await apiFetch("/api/billing/unassign", { method: "POST" });
-  if (!response.ok) {
-    throw new Error(
-      await readApiError(response, "Couldn't remove this server from the plan."),
-    );
-  }
-}

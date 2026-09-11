@@ -1,16 +1,16 @@
 import { useEffect } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Info, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ToastBannerProps {
   message: string | null;
-  variant?: "error" | "success";
+  variant?: "error" | "success" | "info";
   onDismiss: () => void;
   durationMs?: number;
   className?: string;
 }
 
-/** Toast mínimo (éxito / error) sin dependencia extra. */
+/** Toast mínimo sin dependencia extra. */
 export function ToastBanner({
   message,
   variant = "error",
@@ -26,31 +26,34 @@ export function ToastBanner({
 
   if (!message) return null;
 
-  const isError = variant === "error";
-  const Icon = isError ? XCircle : CheckCircle2;
+  const Icon =
+    variant === "success" ? CheckCircle2 : variant === "info" ? Info : XCircle;
 
   return (
     <div
-      role={isError ? "alert" : "status"}
+      role={variant === "error" ? "alert" : "status"}
       className={cn(
-        "fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border bg-card px-4 py-3 shadow-lg",
-        isError ? "border-red-500/40" : "border-emerald-500/40",
+        "fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border bg-[var(--bg-raised)] px-4 py-3 shadow-[var(--shadow-2)]",
+        variant === "error" && "border-[var(--danger-border)]",
+        variant === "success" && "border-[var(--success-border)]",
+        variant === "info" && "border-[var(--info-border)]",
         className,
       )}
     >
-      <div
-        className={cn(
-          "flex items-start gap-2 text-sm",
-          isError
-            ? "text-red-700 dark:text-red-400"
-            : "text-emerald-700 dark:text-emerald-400",
-        )}
-      >
-        <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <p className="min-w-0 flex-1">{message}</p>
+      <div className="flex items-start gap-2 text-sm">
+        <Icon
+          className={cn(
+            "mt-0.5 size-4 shrink-0",
+            variant === "error" && "text-destructive",
+            variant === "success" && "text-[var(--success)]",
+            variant === "info" && "text-[var(--info)]",
+          )}
+          aria-hidden
+        />
+        <p className="min-w-0 flex-1 text-foreground">{message}</p>
         <button
           type="button"
-          className="text-xs text-muted-foreground hover:text-foreground"
+          className="font-mono text-xs text-muted-foreground hover:text-foreground"
           onClick={onDismiss}
         >
           Close

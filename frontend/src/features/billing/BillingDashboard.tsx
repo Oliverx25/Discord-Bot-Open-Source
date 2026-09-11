@@ -1,21 +1,22 @@
-import { queryKeys } from "@/lib/query/keys";
-import { useGuildQuery } from "@/lib/query/useGuildQuery";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BILLING_PLAN_PRICES,
-  formatSeats,
+  formatUsd,
+  isPaidPlanTier,
   isPaidSubscriptionStatus,
   isUnlimited,
+  minTierForFeature,
   PLAN_TIER_LABEL,
-  seatsOverLimit,
   SUBSCRIPTION_STATUS_LABEL,
   TIER_CATALOG,
+  tierHasFeature,
   type BillingStatusResponse,
+  type FeatureKey,
   type PaidPlanTier,
   type PlanTier,
 } from "@adobos/shared";
-import { Check, CreditCard, Loader2 } from "lucide-react";
-import { AlertDialog } from "@/components/ui/alert-dialog";
+import { Loader2, Rocket } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,39 +25,31 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  assignGuildToPlan,
-  fetchBilling,
-  startBillingPortal,
-  startCheckout,
-  unassignGuildFromPlan,
-} from "@/lib/api";
+import { ToastBanner } from "@/components/ui/toast";
+import { fetchBilling, startBillingPortal, startCheckout } from "@/lib/api";
+import { queryKeys } from "@/lib/query/keys";
+import { useGuildQuery } from "@/lib/query/useGuildQuery";
 
 type Feedback =
   | { kind: "idle" }
-  | { kind: "ok"; message: string }
   | { kind: "error"; message: string };
 
-const PLAN_POINTS: Record<PlanTier, string[]> = {
-  free: [
-    "All 18 current modules, complete",
-    "Uncropped welcome canvas",
-    "One server without a paid seat",
-    "14-day logs",
-  ],
-  pro: [
-    "Everything in Free",
-    "Up to 3 covered servers",
-    "90-day logs",
-    "Per-server bot branding",
-  ],
-  business: [
-    "Everything in Pro",
-    "Unlimited servers",
-    "1-year logs",
-    "Outbound webhooks and public API",
-  ],
+type PlanRow = {
+  feature: string;
+  limit: string;
+  access: "included" | PlanTier;
 };
+
+const FEATURE_ROWS: Array<{ feature: string; key: FeatureKey; limit: string }> =
+  [
+    { feature: "Bot branding", key: "branding", limit: "Custom name and avatar" },
+    { feature: "Anti-nuke", key: "antinuke", limit: "Raid rollback" },
+    { feature: "Backups", key: "backups", limit: "Server snapshots" },
+    { feature: "Analytics", key: "analytics", limit: "Exports included" },
+    { feature: "Public API", key: "public-api", limit: "REST access" },
+    { feature: "Outbound webhooks", key: "outbound-webhooks", limit: "Fan-out" },
+    { feature: "Staff roles", key: "staff-roles", limit: "Panel permissions" },
+  ];
 
 function formatDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -65,28 +58,144 @@ function formatDate(iso: string | null): string | null {
   return date.toLocaleDateString("en-US", { dateStyle: "medium" });
 }
 
-export function BillingDashboard() {
-  const [data, setData] = useState<BillingStatusResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+function formatCap(value: number, suffix?: string): string {
+  if (isUnlimited(value)) return "Unlimited";
+  return suffix ? `${value} ${suffix}` : String(value);
+}
+
+function formatStorageMb(mb: number): string {
+  if (isUnlimited(mb)) return "Unlimited";
+  if (mb >= 1024 && mb % 1024 === 0) return `${mb / 1024} GB`;
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+  return `${mb} MB`;
+}
+
+function rowsForTier(tier: PlanTier): PlanRow[] {
+  const limits = TIER_CATALOG[tier].limits;
+  const limitRows: PlanRow[] = [
+    {
+      feature: "Log retention",
+      limit: formatCap(limits.logRetentionDays, "days"),
+      access: "included",
+    },
+    {
+      feature: "Scheduled messages",
+      limit: formatCap(limits.scheduledMessages),
+      access: "included",
+    },
+    {
+      feature: "Auto-replies",
+      limit: formatCap(limits.autoReplies),
+      access: "included",
+    },
+    {
+      feature: "Custom commands",
+      limit: formatCap(limits.customCommands),
+      access: "included",
+    },
+    {
+      feature: "Stream alerts",
+      limit: formatCap(limits.streamAlerts),
+      access: "included",
+    },
+    {
+      feature: "File storage",
+      limit: formatStorageMb(limits.storageMb),
+      access: "included",
+    },
+  ];
+  const featureRows = FEATURE_ROWS.map((row) => ({
+    feature: row.feature,
+    limit: row.limit,
+    access: tierHasFeature(tier, row.key)
+      ? ("included" as const)
+      : minTierForFeature(row.key),
+  }));
+  return [...limitRows, ...featureRows];
+}
+
+function readCheckoutFlag(): "success" | "canceled" | null {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("checkout");
+  if (value === "success") return "success";
+  if (value === "canceled") return "canceled";
+  return null;
+}
+
+function badgeTone(tier: PlanTier): "free" | "pro" {
+  return tier === "free" ? "free" : "pro";
+}
+
+function Stat({
+  value,
+  label,
+}: {
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="font-mono text-xl font-semibold tracking-tight sm:text-2xl">
+        {value}
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+export function BillingDashboard({
+  guildName = null,
+}: {
+  guildName?: string | null;
+}) {
+  const checkoutBanner = useMemo(() => readCheckoutFlag(), []);
+  const waitingSince = useRef(Date.now());
+  const announcedPaid = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>({ kind: "idle" });
-  const [confirmUnassign, setConfirmUnassign] = useState(false);
+  const [toast, setToast] = useState<{
+    variant: "info" | "success" | "error";
+    message: string;
+  } | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
 
-  const checkoutBanner = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const value = new URLSearchParams(window.location.search).get("checkout");
-    if (value === "success") return "success" as const;
-    if (value === "canceled") return "canceled" as const;
-    return null;
-  }, []);
-
-  const query = useGuildQuery(queryKeys.billing, fetchBilling);
+  const query = useGuildQuery(queryKeys.billing, fetchBilling, {
+    refetchInterval: (current) => {
+      if (checkoutBanner !== "success") return false;
+      const data = current.state.data as BillingStatusResponse | undefined;
+      if (data?.guild.coveredByUser) return false;
+      if (Date.now() - waitingSince.current > 15_000) return false;
+      return 1500;
+    },
+  });
 
   useEffect(() => {
-    if (!query.data) return;
-    setData(query.data);
-    setLoading(false);
-  }, [query.data]);
+    if (!checkoutBanner || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("checkout")) return;
+    url.searchParams.delete("checkout");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, [checkoutBanner]);
+
+  useEffect(() => {
+    if (checkoutBanner === "canceled") {
+      setToast({
+        variant: "info",
+        message: "Checkout canceled. Nothing was charged.",
+      });
+    }
+  }, [checkoutBanner]);
+
+  useEffect(() => {
+    if (checkoutBanner !== "success") return;
+    if (!query.data?.guild.coveredByUser) return;
+    if (announcedPaid.current) return;
+    announcedPaid.current = true;
+    setToast({
+      variant: "success",
+      message: "This server is on the paid plan.",
+    });
+  }, [checkoutBanner, query.data?.guild.coveredByUser]);
 
   useEffect(() => {
     if (query.isError) {
@@ -97,56 +206,8 @@ export function BillingDashboard() {
             ? query.error.message
             : "Couldn't load billing",
       });
-      setLoading(false);
     }
   }, [query.isError, query.error]);
-
-  async function reload(): Promise<BillingStatusResponse> {
-    const result = await query.refetch();
-    if (result.data) {
-      setData(result.data);
-      return result.data;
-    }
-    const next = await fetchBilling();
-    setData(next);
-    return next;
-  }
-
-  useEffect(() => {
-    if (!checkoutBanner || typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("checkout");
-    window.history.replaceState({}, "", url.pathname + url.search);
-  }, [checkoutBanner]);
-
-  useEffect(() => {
-    if (checkoutBanner !== "success") return;
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 8;
-
-    const tick = async (): Promise<void> => {
-      if (cancelled) return;
-      attempts += 1;
-      try {
-        const next = await fetchBilling();
-        if (cancelled) return;
-        setData(next);
-        setLoading(false);
-        if (next.guild.coveredByUser) return;
-      } catch {
-        // El GET inicial ya reporta el error de carga.
-      }
-      if (!cancelled && attempts < maxAttempts) {
-        window.setTimeout(() => void tick(), 1500);
-      }
-    };
-
-    void tick();
-    return () => {
-      cancelled = true;
-    };
-  }, [checkoutBanner]);
 
   async function onCheckout(tier: PaidPlanTier): Promise<void> {
     setBusy(`checkout-${tier}`);
@@ -182,54 +243,7 @@ export function BillingDashboard() {
     }
   }
 
-  async function onAssign(): Promise<void> {
-    setBusy("assign");
-    setFeedback({ kind: "idle" });
-    try {
-      await assignGuildToPlan();
-      await reload();
-      setFeedback({
-        kind: "ok",
-        message: "This server already uses your paid plan.",
-      });
-    } catch (error: unknown) {
-      setFeedback({
-        kind: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Couldn't assign the server.",
-      });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function onUnassign(): Promise<void> {
-    setBusy("unassign");
-    setFeedback({ kind: "idle" });
-    try {
-      await unassignGuildFromPlan();
-      await reload();
-      setConfirmUnassign(false);
-      setFeedback({
-        kind: "ok",
-        message: "This server went back to the Free plan.",
-      });
-    } catch (error: unknown) {
-      setFeedback({
-        kind: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Couldn't remove the server.",
-      });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  if (loading) {
+  if (query.isLoading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -238,209 +252,224 @@ export function BillingDashboard() {
     );
   }
 
-  const sub = data?.subscription;
-  const paid = Boolean(sub && isPaidSubscriptionStatus(sub.status));
+  const data = query.data;
+  const sub = data?.subscription ?? null;
   const guildTier = data?.guild.tier ?? "free";
+  const paidHere = Boolean(sub && isPaidSubscriptionStatus(sub.status));
+  const coveredByOther = Boolean(data?.guild.coveredByOther);
+  const canCheckout =
+    Boolean(data?.configured && data.pricesConfigured) &&
+    !paidHere &&
+    !coveredByOther;
+  const canPortal = Boolean(data?.configured && data.hasCustomer);
+  const serverLabel = guildName?.trim() || "this server";
+  const activating =
+    checkoutBanner === "success" && !data?.guild.coveredByUser;
+  const pastDue = sub?.status === "past_due";
+  const rows = rowsForTier(guildTier);
+  const priceLabel = isPaidPlanTier(guildTier)
+    ? formatUsd(BILLING_PLAN_PRICES[guildTier].monthlyUsd)
+    : null;
+
+  const invoiceAmount = paidHere && priceLabel ? priceLabel : "None";
+  const invoiceDate = sub?.cancelAt
+    ? formatDate(sub.cancelAt)
+    : formatDate(sub?.currentPeriodEnd);
+  const invoiceDateLabel = sub?.cancelAt
+    ? "Cancels"
+    : paidHere
+      ? "Renews"
+      : "Next charge";
+  const invoiceDateValue = coveredByOther
+    ? "Other account"
+    : invoiceDate ?? "None";
 
   return (
-    <div className="space-y-6">
-      {checkoutBanner === "success" && (
-        <p className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm">
-          Payment received. Activating the plan… reload if you still see Free
-          after a few seconds.
+    <div className="flex flex-col gap-8">
+      <header className="flex flex-col gap-2">
+        <h2 className="font-display text-3xl font-extrabold tracking-tight">
+          Billing
+        </h2>
+        <p className="max-w-[54ch] text-sm text-muted-foreground">
+          Plan, invoices and limits for {serverLabel}. Receipts and cards live
+          in Stripe.
+        </p>
+      </header>
+
+      {activating && (
+        <p className="rounded-md border border-primary bg-[var(--bg-tint-accent)] px-4 py-3 text-sm">
+          Payment received. Activating this server…
         </p>
       )}
-      {checkoutBanner === "canceled" && (
-        <p className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Checkout canceled. Nothing was charged.
+      {pastDue && (
+        <p className="rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-destructive">
+          The last payment for this server failed. Update the card in Stripe to
+          keep the paid plan.
         </p>
       )}
       {feedback.kind === "error" && (
-        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {feedback.message}
-        </p>
-      )}
-      {feedback.kind === "ok" && (
-        <p className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm">
+        <p className="rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-destructive">
           {feedback.message}
         </p>
       )}
 
-      <section className="rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm sm:p-6">
-        <p className="font-display text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-          This server
-        </p>
-        <h2 className="mt-2 font-display text-2xl font-semibold">
-          Plan {PLAN_TIER_LABEL[guildTier]}
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Feature access is decided by this server, not Stripe in real time.
-          One subscription covers multiple servers (seats).
-        </p>
-        {sub && (
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="text-muted-foreground">Subscription</dt>
-              <dd className="font-medium">
-                {PLAN_TIER_LABEL[sub.tier]} ·{" "}
-                {SUBSCRIPTION_STATUS_LABEL[sub.status]}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Seats</dt>
-              <dd className="font-medium">
-                {formatSeats(sub.seatsUsed, sub.seatsMax)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Period</dt>
-              <dd className="font-medium">
-                {sub.cancelAt
-                  ? `Cancels on ${formatDate(sub.cancelAt)}`
-                  : (formatDate(sub.currentPeriodEnd) ?? "—")}
-              </dd>
-            </div>
-          </dl>
-        )}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {data?.hasCustomer && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={Boolean(busy) || !data.configured}
-              onClick={() => void onPortal()}
-            >
-              {busy === "portal" ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
+      <section className="flex flex-col gap-3">
+        <h3 className="font-display text-base font-semibold">Overview</h3>
+        <div className="grid items-stretch gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Current plan</CardTitle>
+              <CardDescription>
+                {coveredByOther
+                  ? "Another account already pays for this community."
+                  : "One Stripe subscription, this community only."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex min-w-0 flex-col gap-2">
+                <Badge tone={badgeTone(guildTier)} className="w-fit">
+                  {PLAN_TIER_LABEL[guildTier]}
+                </Badge>
+                <p className="font-mono text-3xl font-semibold tracking-tight">
+                  {priceLabel ? (
+                    <>
+                      {priceLabel}
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">
+                        /month
+                      </span>
+                    </>
+                  ) : (
+                    "Free"
+                  )}
+                </p>
+                {sub ? (
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {SUBSCRIPTION_STATUS_LABEL[sub.status]}
+                  </p>
+                ) : null}
+                {data && !data.configured ? (
+                  <p className="max-w-[36ch] text-sm text-muted-foreground">
+                    Stripe isn't configured in this environment. Checkout
+                    activates with <code>STRIPE_SECRET_KEY</code> and the price
+                    ids.
+                  </p>
+                ) : null}
+              </div>
+
+              {coveredByOther ? null : paidHere ? (
+                <Button
+                  type="button"
+                  disabled={Boolean(busy) || !canPortal}
+                  onClick={() => void onPortal()}
+                >
+                  {busy === "portal" ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Manage billing
+                </Button>
               ) : (
-                <CreditCard className="size-4" aria-hidden />
-              )}
-              Manage subscription
-            </Button>
-          )}
-          {paid && !data?.guild.coveredByUser && !data?.guild.coveredByOther && (
-            <Button
-              type="button"
-              disabled={Boolean(busy)}
-              onClick={() => void onAssign()}
-            >
-              {busy === "assign" && (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              )}
-              Use the paid plan on this server
-            </Button>
-          )}
-          {data?.guild.coveredByUser && (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={Boolean(busy)}
-              onClick={() => setConfirmUnassign(true)}
-            >
-              Remove this server from the plan
-            </Button>
-          )}
-        </div>
-        {sub && seatsOverLimit(sub.seatsUsed, sub.seatsMax) ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            This subscription covers more servers than the plan cap (
-            {formatSeats(sub.seatsUsed, sub.seatsMax)}). Seats aren't reduced
-            when downgrading; you won't be able to assign more until you're
-            within the limit.
-          </p>
-        ) : null}
-        {data?.guild.coveredByOther ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            This server is already covered by another subscription.
-          </p>
-        ) : null}
-        {data && !data.configured && (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Stripe isn't configured in this environment. You can view the plans;
-            checkout activates with <code>STRIPE_SECRET_KEY</code> and the
-            price ids.
-          </p>
-        )}
-      </section>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        {(["free", "pro", "business"] as const).map((tier) => {
-          const current = guildTier === tier;
-          const paidTier = tier === "free" ? null : tier;
-          const price =
-            paidTier && BILLING_PLAN_PRICES[paidTier]
-              ? BILLING_PLAN_PRICES[paidTier].label
-              : "$0";
-          const covered = TIER_CATALOG[tier].limits.coveredGuilds;
-          return (
-            <Card
-              key={tier}
-              className={current ? "border-primary/50 shadow-md" : undefined}
-            >
-              <CardHeader>
-                <CardTitle>{PLAN_TIER_LABEL[tier]}</CardTitle>
-                <CardDescription>
-                  {tier === "free"
-                    ? "Free · one server without a seat"
-                    : isUnlimited(covered)
-                      ? `${price} · unlimited servers`
-                      : `${price} · up to ${covered} servers`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ul className="space-y-2 text-sm">
-                  {PLAN_POINTS[tier].map((point) => (
-                    <li key={point} className="flex gap-2">
-                      <Check
-                        className="mt-0.5 size-4 shrink-0 text-primary"
-                        aria-hidden
-                      />
-                      <span>{point}</span>
-                    </li>
-                  ))}
-                </ul>
-                {paidTier ? (
+                <div className="flex flex-col items-start gap-2">
                   <Button
                     type="button"
-                    className="w-full"
-                    variant={current ? "outline" : "default"}
-                    disabled={
-                      Boolean(busy) ||
-                      !data?.configured ||
-                      !data.pricesConfigured ||
-                      paid
-                    }
-                    onClick={() => void onCheckout(paidTier)}
+                    disabled={Boolean(busy) || !canCheckout}
+                    aria-label="Upgrade this server"
+                    onClick={() => void onCheckout("pro")}
                   >
-                    {busy === `checkout-${paidTier}` && (
+                    {busy === "checkout-pro" ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <Rocket className="size-4" aria-hidden />
                     )}
-                    {paid
-                      ? "Change plan in the portal"
-                      : `Upgrade to ${PLAN_TIER_LABEL[tier]}`}
+                    Upgrade
                   </Button>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Default plan if the server doesn't use a paid seat.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-primary disabled:opacity-40"
+                    disabled={Boolean(busy) || !canCheckout}
+                    onClick={() => void onCheckout("business")}
+                  >
+                    Business · {BILLING_PLAN_PRICES.business.label}
+                  </button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-      <AlertDialog
-        open={confirmUnassign}
-        title="Remove this server from the plan"
-        description="The server will return to Free immediately. Paid features will stop being available here."
-        confirmLabel="Remove from plan"
-        tone="destructive"
-        confirming={busy === "unassign"}
-        onCancel={() => {
-          if (busy !== "unassign") setConfirmUnassign(false);
-        }}
-        onConfirm={() => void onUnassign()}
+          <Card>
+            <CardHeader>
+              <CardTitle>Next invoice</CardTitle>
+              <CardDescription>
+                {coveredByOther
+                  ? "Billing for this server stays with the other account."
+                  : "The next charge for this community. Invoices stay in Stripe."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-6">
+                <Stat value={invoiceAmount} label="Amount" />
+                <Stat value={invoiceDateValue} label={invoiceDateLabel} />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h3 className="font-display text-base font-semibold">
+            Limits on this server
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            What the {PLAN_TIER_LABEL[guildTier]} plan includes for{" "}
+            {serverLabel}.
+          </p>
+        </div>
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <table className="w-full border-collapse text-sm">
+            <thead className="border-b border-border bg-muted/40">
+              <tr>
+                <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Feature
+                </th>
+                <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  On this plan
+                </th>
+                <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Access
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.feature}
+                  className="border-b border-border/70 last:border-0"
+                >
+                  <td className="px-5 py-2.5">{row.feature}</td>
+                  <td className="px-5 py-2.5 font-mono text-xs text-muted-foreground">
+                    {row.limit}
+                  </td>
+                  <td className="px-5 py-2.5">
+                    {row.access === "included" ? (
+                      <span className="font-mono text-xs text-[var(--success)]">
+                        Included
+                      </span>
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {PLAN_TIER_LABEL[row.access]}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <ToastBanner
+        message={toast?.message ?? null}
+        variant={toast?.variant ?? "info"}
+        onDismiss={dismissToast}
       />
     </div>
   );

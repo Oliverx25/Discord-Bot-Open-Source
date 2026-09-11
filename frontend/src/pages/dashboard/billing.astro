@@ -1,0 +1,14 @@
+---
+export const prerender = false;
+import DashboardLayout from "../../layouts/DashboardLayout.astro";
+import { BillingIsland } from "../../components/providers/islands";
+
+const guild = Astro.locals.panel?.selectedGuild ?? null;
+---
+
+<DashboardLayout
+  title="Plan and billing"
+  description="The plan for this server. One Stripe subscription per community."
+>
+  <BillingIsland client:load guildName={guild?.name ?? null} />
+</DashboardLayout>

@@ -1,9 +1,12 @@
 ---
+import { BILLING_PLAN_PRICES } from "@adobos/shared";
 import { Badge } from "@/components/ui/badge";
 import { PRICING_ROWS } from "@/content/landing";
 import CtaLink from "./CtaLink.astro";
 import Overline from "./Overline.astro";
 import { PricingCalculator } from "./PricingCalculator";
+
+const proPrice = BILLING_PLAN_PRICES.pro.label.replace("/mo", "");
 ---
 
 <section id="pricing" class="scroll-mt-24 border-b border-border py-20">
@@ -18,13 +21,13 @@ import { PricingCalculator } from "./PricingCalculator";
       <h2
         class="mt-4 font-display text-3xl font-extrabold tracking-tight sm:text-4xl"
       >
-        Per account.
+        Per server.
         <br />
-        Not per server.
+        Not per account.
       </h2>
       <p class="mt-5 max-w-[42ch] text-base text-muted-foreground">
-        Everyone else charges you again for the same bot. Move the slider and
-        watch what that stack actually costs.
+        Upgrade the communities that need it. The rest stay free. Move the
+        slider and compare a typical bot stack against Pro on each server.
       </p>
       <PricingCalculator client:visible />
     </div>
@@ -43,7 +46,7 @@ import { PricingCalculator } from "./PricingCalculator";
         >
           <Badge className="border-primary text-primary">Pro</Badge>
           <p class="mt-2 font-mono text-2xl">
-            $6
+            {proPrice}
             <span class="text-xs text-muted-foreground">/mo</span>
           </p>
         </div>

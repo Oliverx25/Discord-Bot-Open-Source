@@ -44,7 +44,7 @@ export function AccountMenu({
       <div className="flex flex-col" role="menu">
         {children?.(close)}
         <a
-          href="/dashboard/general/billing"
+          href="/dashboard/billing"
           role="menuitem"
           className={itemClass}
           onClick={close}

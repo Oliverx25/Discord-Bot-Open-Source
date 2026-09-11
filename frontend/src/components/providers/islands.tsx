@@ -76,8 +76,8 @@ export function AutoRoleIsland() {
   return wrap(AutoRoleBuilder, {});
 }
 
-export function BillingIsland() {
-  return wrap(BillingDashboard, {});
+export function BillingIsland(props: { guildName?: string | null }) {
+  return wrap(BillingDashboard, props);
 }
 
 export function BotProfileIsland() {

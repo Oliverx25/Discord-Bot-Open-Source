@@ -59,9 +59,9 @@ export const MODULES: Array<{
 
 export const PRICING_ROWS: Array<{ label: string; free: string; pro: string }> = [
   { label: "Modules included", free: "15 of 18", pro: "All 18" },
-  { label: "Servers per subscription", free: "Unlimited", pro: "Unlimited" },
-  { label: "Log retention", free: "7 days", pro: "90 days" },
-  { label: "Scheduled messages", free: "10", pro: "Unlimited" },
+  { label: "Billing", free: "Free forever", pro: "Per server" },
+  { label: "Log retention", free: "14 days", pro: "90 days" },
+  { label: "Scheduled messages", free: "25", pro: "500" },
   { label: "Auto-mod filters", free: "—", pro: "With escalation" },
   { label: "Economy and casino", free: "—", pro: "Included" },
   { label: "Pokémon plugin", free: "—", pro: "Included" },
@@ -72,12 +72,12 @@ export const FAQ: Array<{ title: string; content: string }> = [
   {
     title: "Is the free tier a trial?",
     content:
-      "No. Fifteen modules stay free with no time limit and no per-server charge. Pro adds three heavier modules, longer log retention, and a priority queue.",
+      "No. Fifteen modules stay free with no time limit. Pro is billed per server for the communities that need the heavier modules, longer logs, and a priority queue.",
   },
   {
     title: "What happens if I stop paying?",
     content:
-      "Pro modules switch off. Your configuration stays. Nothing is deleted and nothing is held hostage.",
+      "Pro modules switch off on that server. Your configuration stays. Nothing is deleted and nothing is held hostage.",
   },
   {
     title: "Can I self-host it?",
@@ -85,9 +85,9 @@ export const FAQ: Array<{ title: string; content: string }> = [
       "Yes. One Node process holds the gateway socket and serves the dashboard. The hosted plan exists so you don't have to.",
   },
   {
-    title: "Does one subscription really cover every server I run?",
+    title: "Does one subscription cover every server I run?",
     content:
-      "Yes — every server on your account. Three communities, one invoice. That's the whole idea.",
+      "No. Each community has its own subscription. Upgrade the servers that need Pro; the rest stay free. Cancel one without touching the others.",
   },
 ];
 
@@ -101,7 +101,6 @@ export const TAGS = [
 ] as const;
 
 export const RIVAL_COST_PER_SERVER = 17;
-export const PRO_PRICE_USD = 6;
 
 export const AUTH_ERRORS: Record<string, string> = {
   oauth_denied: "You canceled the sign-in or Discord rejected it.",

@@ -86,9 +86,9 @@ export const dashboardNav: NavCategoryConfig[] = [
       },
       {
         label: "Plan & Billing",
-        href: "/dashboard/general/billing",
+        href: "/dashboard/billing",
         icon: CreditCard,
-        blurb: "Free, Pro and Business plans. Stripe checkout and portal.",
+        blurb: "This server's plan. Checkout and Stripe portal.",
       },
       {
         label: "Bot Profile",

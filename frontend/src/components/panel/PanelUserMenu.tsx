@@ -35,7 +35,7 @@ function AccountMenuItems({
   return (
     <div className="flex flex-col" role="menu">
       <a
-        href="/dashboard/general/billing"
+        href="/dashboard/billing"
         role="menuitem"
         className={cn(itemClass, "justify-between gap-2")}
         aria-label={tier ? `Billing, ${PLAN_TIER_LABEL[tier]} plan` : undefined}
