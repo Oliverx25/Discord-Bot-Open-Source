@@ -1,0 +1,20 @@
+---
+export const prerender = false;
+import DashboardLayout from "../../layouts/DashboardLayout.astro";
+import { BotProfileIsland } from "../../components/providers/islands";
+
+const panel = Astro.locals.panel;
+const selectedGuild = panel?.selectedGuild ?? null;
+---
+
+<DashboardLayout
+  title="Bot configuration"
+  description="Configure how tobot appears and operates in this server."
+>
+  <BotProfileIsland
+    client:load
+    botPresent={selectedGuild?.botPresent ?? false}
+    guildId={selectedGuild?.id ?? null}
+    guildName={selectedGuild?.name ?? null}
+  />
+</DashboardLayout>

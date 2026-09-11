@@ -80,8 +80,12 @@ export function BillingIsland(props: { guildName?: string | null }) {
   return wrap(BillingDashboard, props);
 }
 
-export function BotProfileIsland() {
-  return wrap(BotProfileBuilder, {});
+export function BotProfileIsland(props: {
+  botPresent: boolean;
+  guildId?: string | null;
+  guildName?: string | null;
+}) {
+  return wrap(BotProfileBuilder, props);
 }
 
 export function BanIsland() {

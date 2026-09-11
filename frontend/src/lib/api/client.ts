@@ -2,7 +2,11 @@
 import type { ApiErrorBody } from "@adobos/shared";
 import { getSelectedGuildId } from "@/stores/guild";
 
-export { getSelectedGuildId, setSelectedGuildId, clearSelectedGuildId } from "@/stores/guild";
+export {
+  clearSelectedGuildId,
+  getSelectedGuildId,
+  setSelectedGuildId,
+} from "@/stores/guild";
 
 export const API_BASE = import.meta.env.PUBLIC_API_BASE ?? "";
 
@@ -48,7 +52,11 @@ export async function apiFetch(
 
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
-  if (guildId && shouldAttachGuild(url.pathname) && !headers.has("X-Guild-Id")) {
+  if (
+    guildId &&
+    shouldAttachGuild(url.pathname) &&
+    !headers.has("X-Guild-Id")
+  ) {
     headers.set("X-Guild-Id", guildId);
   }
 
@@ -57,13 +65,6 @@ export async function apiFetch(
     headers,
     credentials: "include",
   });
-
-  if (response.status === 401 && typeof window !== "undefined") {
-    const here = window.location.pathname;
-    if (here !== "/" && !here.startsWith("/auth/")) {
-      window.location.assign("/");
-    }
-  }
 
   return response;
 }

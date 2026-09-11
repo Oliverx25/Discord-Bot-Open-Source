@@ -109,7 +109,6 @@ export default defineConfig({
   }),
   integrations: [react()],
   prefetch: {
-    prefetchAll: true,
     defaultStrategy: "hover",
   },
   env: {

@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import {
   Card,
@@ -13,20 +12,23 @@ export interface BotProfilePreviewProps {
   username: string;
   tag?: string;
   avatarUrl: string;
+  bannerUrl?: string | null;
   usingGlobalAvatar: boolean;
   guildName?: string;
 }
 
-/** Simulación del popout de miembro de Discord (perfil en este servidor). */
+/** Vista compacta del perfil de Discord con los assets reales del bot. */
 export function BotProfilePreview({
   displayName,
   username,
   tag,
   avatarUrl,
+  bannerUrl,
   usingGlobalAvatar,
   guildName,
 }: BotProfilePreviewProps) {
   const name = displayName.trim() || username.trim() || "Bot";
+  const handle = username.trim() || name;
 
   return (
     <Card>
@@ -40,12 +42,15 @@ export function BotProfilePreview({
       <CardContent>
         <div className="overflow-hidden rounded-xl border border-border/80 bg-[#111214] shadow-lg">
           <div
-            className="h-16 w-full bg-gradient-to-r from-[#5865f2]/80 to-[#eb459e]/60 sm:h-20"
-            aria-hidden
+            className="relative h-20 w-full bg-[#626263] bg-cover bg-center sm:h-24"
+            style={
+              bannerUrl ? { backgroundImage: `url("${bannerUrl}")` } : undefined
+            }
+            aria-hidden="true"
           />
 
-          <div className="relative px-4 pb-4 pt-0">
-            <div className="-mt-10 inline-block">
+          <div className="relative px-4 pb-4 pt-[50px]">
+            <div className="absolute left-4 top-0 -translate-y-1/2">
               <div className="relative">
                 <UserAvatar
                   src={avatarUrl}
@@ -55,37 +60,38 @@ export function BotProfilePreview({
                 />
                 <span
                   className="absolute bottom-1 right-1 size-4 rounded-full border-[3px] border-[#111214] bg-[#23a55a]"
-                  title="online"
-                  aria-label="Status: online"
+                  title="Online"
+                  aria-hidden
                 />
+                <span className="sr-only">Status: online</span>
               </div>
             </div>
 
-            <div className="mt-3 space-y-3 rounded-lg bg-[#232428] px-3 py-3">
+            <div className="space-y-3 rounded-lg bg-[#232428] px-3 py-3 font-[gg_sans,ui-sans-serif,system-ui,sans-serif]">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-display text-lg font-semibold leading-none text-white">
+                  <p className="text-lg font-bold leading-none text-[#f2f3f5]">
                     {name}
                   </p>
-                  <Badge className="border-transparent bg-[#5865f2] px-1.5 py-0 text-[10px] font-bold uppercase tracking-wide text-white">
-                    Bot
-                  </Badge>
+                  <span className="rounded-[3px] bg-[#5865f2] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-white">
+                    App
+                  </span>
                 </div>
                 <p className="mt-1.5 text-xs text-[#b5bac1]">
-                  {tag || `@${username}`}
+                  {tag || `@${handle}`}
                 </p>
               </div>
 
               <div className="border-t border-white/10 pt-3">
-                {usingGlobalAvatar ? (
-                  <Badge className="border-white/10 bg-white/5 text-[10px] font-medium normal-case tracking-normal text-[#b5bac1]">
-                    Default global avatar
-                  </Badge>
-                ) : (
-                  <Badge className="border-emerald-500/30 bg-emerald-500/10 text-[10px] font-medium normal-case tracking-normal text-emerald-300">
-                    This server's avatar
-                  </Badge>
-                )}
+                <span
+                  className={
+                    usingGlobalAvatar
+                      ? "inline-flex rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-[#b5bac1]"
+                      : "inline-flex rounded-md bg-[#1f5f49] px-2 py-1 text-[10px] font-medium text-[#b7f0d5]"
+                  }
+                >
+                  {usingGlobalAvatar ? "Global avatar" : "Server avatar"}
+                </span>
               </div>
             </div>
           </div>

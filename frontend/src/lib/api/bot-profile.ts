@@ -28,6 +28,9 @@ export interface SaveBotGuildProfileInput {
   clearServerAvatar?: boolean;
   /** Archivo multipart (alternativa a URL). */
   serverAvatarFile?: File | null;
+  serverBannerUrl?: string | null;
+  clearServerBanner?: boolean;
+  serverBannerFile?: File | null;
 }
 
 export async function saveBotGuildProfile(
@@ -43,6 +46,10 @@ export async function saveBotGuildProfile(
   if (input.serverAvatarFile) {
     body.set("serverAvatar", input.serverAvatarFile);
   }
+  if (input.clearServerBanner) body.set("clearServerBanner", "true");
+  if (input.serverBannerUrl?.trim())
+    body.set("serverBannerUrl", input.serverBannerUrl.trim());
+  if (input.serverBannerFile) body.set("serverBanner", input.serverBannerFile);
 
   const response = await apiFetch(`/api/bot/guild-profile`, {
     method: "POST",

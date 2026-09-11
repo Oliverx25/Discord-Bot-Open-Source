@@ -91,10 +91,10 @@ export const dashboardNav: NavCategoryConfig[] = [
         blurb: "This server's plan. Checkout and Stripe portal.",
       },
       {
-        label: "Bot Profile",
-        href: "/dashboard/general/bot-profile",
+        label: "Bot Configuration",
+        href: "/dashboard/bot-config",
         icon: Bot,
-        blurb: "The bot's nickname and avatar on this server.",
+        blurb: "Configure how the bot appears and operates in this server.",
       },
       {
         label: "System Commands",

@@ -1,6 +1,7 @@
 # Feature: bot-profile
 
-UI de **Bot Profile**: apodo y avatar del bot como miembro de este servidor.
+UI de **Bot Configuration**: identidad local, estado y avatar del bot como
+miembro de este servidor.
 
 GET es gratis. Guardar requiere plan Pro (`branding`). No cambia username ni avatar de la aplicación. No hay editor de presencia (Playing es global al bot).
 
@@ -14,7 +15,7 @@ GET es gratis. Guardar requiere plan Pro (`branding`). No cambia username ni ava
 
 ## Ruta Astro
 
-`/dashboard/general/bot-profile`
+`/dashboard/bot-config`
 
 ## API
 

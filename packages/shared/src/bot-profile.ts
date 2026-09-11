@@ -56,6 +56,9 @@ export interface BotGuildProfileResponse {
   serverAvatarURL: string | null;
   /** Avatar de la cuenta del bot. */
   globalAvatarURL: string;
+  /** Banner global del bot en Discord; null cuando la cuenta no tiene uno. */
+  globalBannerURL: string | null;
+  serverBannerURL: string | null;
   hasServerAvatar: boolean;
 }
 
@@ -69,6 +72,8 @@ export interface UpdateBotGuildProfileRequest {
    */
   serverAvatarUrl?: string | null;
   clearServerAvatar?: boolean;
+  serverBannerUrl?: string | null;
+  clearServerBanner?: boolean;
 }
 
 export interface UpdateBotGuildProfileResponse {
@@ -78,6 +83,7 @@ export interface UpdateBotGuildProfileResponse {
   changed: {
     nickname: boolean;
     serverAvatar: boolean;
+    serverBanner: boolean;
   };
 }
 
