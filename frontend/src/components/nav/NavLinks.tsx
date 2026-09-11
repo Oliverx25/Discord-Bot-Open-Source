@@ -12,7 +12,7 @@ export function NavLinks({
 }) {
   return (
     <nav
-      className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-2.5 py-3"
+      className="tobot-scroll flex flex-1 flex-col gap-3.5 overflow-y-auto px-2.5 py-3"
       aria-label="Dashboard navigation"
     >
       {visibleDashboardNav().map((category) => (
