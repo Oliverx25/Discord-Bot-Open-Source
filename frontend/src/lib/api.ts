@@ -34,6 +34,7 @@ export {
 } from "./api/canvas-events";
 export { uploadBackgroundFile, uploadImageFile } from "./api/uploads";
 export {
+  BotProfileApiError,
   fetchBotGuildProfile,
   fetchBotProfile,
   saveBotGuildProfile,

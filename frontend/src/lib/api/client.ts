@@ -23,6 +23,28 @@ export async function readApiError(
   return fallback;
 }
 
+export interface ApiErrorDetails {
+  message: string;
+  code?: string;
+  field?: string;
+}
+
+export async function readApiErrorDetails(
+  response: Response,
+  fallback: string,
+): Promise<ApiErrorDetails> {
+  try {
+    const body = (await response.json()) as ApiErrorBody;
+    return {
+      message: body.error || fallback,
+      code: body.code,
+      field: body.field,
+    };
+  } catch {
+    return { message: fallback };
+  }
+}
+
 function resolveUrl(path: string): URL {
   const href = path.startsWith("http") ? path : `${API_BASE}${path}`;
   const origin =

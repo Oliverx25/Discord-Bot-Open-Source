@@ -4,12 +4,15 @@ import {
 } from "@adobos/shared";
 import {
   Activity,
+  ArrowUpRight,
   CheckCircle2,
+  Crown,
+  Fingerprint,
+  Globe2,
   Loader2,
   RotateCcw,
   Save,
   Server,
-  ShieldCheck,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -28,9 +31,21 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ToastBanner } from "@/components/ui/toast";
 import { useEntitlements } from "@/features/entitlements/useEntitlements";
-import { fetchBotGuildProfile, saveBotGuildProfile } from "@/lib/api";
+import { TimezoneCombobox } from "@/features/scheduled-messages/TimezoneCombobox";
+import {
+  BotProfileApiError,
+  fetchBotGuildProfile,
+  saveBotGuildProfile,
+} from "@/lib/api";
 import { resolvePublicAssetUrl } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { useGuildQuery } from "@/lib/query/useGuildQuery";
@@ -55,7 +70,49 @@ function resolvePreviewSrc(value: HybridImageValue): string | null {
   return null;
 }
 
-function StatusRow({
+function formatMemberSince(value: string | null): string {
+  if (!value) return "Unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function imageValueChanged(
+  value: HybridImageValue,
+  savedValue: string | null,
+  hasSavedValue = Boolean(savedValue),
+): boolean {
+  if (value instanceof File) return true;
+  if (value === null) return hasSavedValue;
+  return value.trim() !== (savedValue ?? "");
+}
+
+const SAVE_ERROR_FIELDS: Record<string, string> = {
+  nickname: "Server nickname",
+  serverAvatar: "Server avatar",
+  serverBanner: "Profile banner",
+  settings: "Bot defaults",
+  timezone: "Timezone",
+  locale: "Language",
+  profile: "Bot configuration",
+};
+
+function saveErrorMessage(error: unknown): string {
+  if (error instanceof BotProfileApiError) {
+    const field = error.field
+      ? (SAVE_ERROR_FIELDS[error.field] ?? error.field)
+      : null;
+    return field ? `${field}: ${error.message}` : error.message;
+  }
+  return error instanceof Error
+    ? error.message
+    : "Couldn't save the server profile";
+}
+
+function StatusChip({
   label,
   value,
   tone = "success",
@@ -65,18 +122,19 @@ function StatusRow({
   tone?: "success" | "warning";
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-3 last:border-0 last:pb-0">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd
+    <div className="flex min-w-[9.5rem] items-center gap-2 rounded-md border border-border/60 bg-background/30 px-3 py-2">
+      <span
         className={
           tone === "success"
-            ? "inline-flex items-center gap-1.5 text-right text-sm font-medium text-[var(--success)]"
-            : "inline-flex items-center gap-1.5 text-right text-sm font-medium text-[var(--warning)]"
+            ? "size-1.5 shrink-0 rounded-full bg-[var(--success)]"
+            : "size-1.5 shrink-0 rounded-full bg-[var(--warning)]"
         }
-      >
-        <span className="size-1.5 rounded-full bg-current" aria-hidden />
+        aria-hidden
+      />
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="ml-auto text-xs font-medium text-foreground">
         {value}
-      </dd>
+      </span>
     </div>
   );
 }
@@ -100,6 +158,8 @@ export function BotProfileBuilder({
   const [nickname, setNickname] = useState("");
   const [avatarValue, setAvatarValue] = useState<HybridImageValue>(null);
   const [bannerValue, setBannerValue] = useState<HybridImageValue>(null);
+  const [timezone, setTimezone] = useState("UTC");
+  const [locale, setLocale] = useState<"en" | "es">("en");
   const [objectPreview, setObjectPreview] = useState<string | null>(null);
 
   const query = useGuildQuery(queryKeys.botProfile, fetchBotGuildProfile, {
@@ -123,6 +183,8 @@ export function BotProfileBuilder({
     setNickname(query.data.nickname);
     setBannerValue(query.data.serverBannerURL);
     setAvatarValue(query.data.serverAvatarURL);
+    setTimezone(query.data.settings.timezone);
+    setLocale(query.data.settings.locale);
     setLoading(false);
     setFeedback({ kind: "idle" });
   }, [query.data]);
@@ -167,38 +229,72 @@ export function BotProfileBuilder({
 
   const previewDisplayName = nickname.trim() || profile?.username || "Bot";
 
+  const nicknameChanged = profile
+    ? nickname.trim() !== profile.nickname
+    : false;
+  const avatarChanged = profile
+    ? imageValueChanged(
+        avatarValue,
+        profile.serverAvatarURL,
+        profile.hasServerAvatar,
+      )
+    : false;
+  const bannerChanged = profile
+    ? imageValueChanged(bannerValue, profile.serverBannerURL)
+    : false;
+  const settingsChanged = profile
+    ? timezone !== profile.settings.timezone || locale !== profile.settings.locale
+    : false;
+  const hasUnsavedChanges =
+    nicknameChanged || avatarChanged || bannerChanged || settingsChanged;
+
+  function discardChanges(): void {
+    if (!profile) return;
+    setNickname(profile.nickname);
+    setAvatarValue(profile.serverAvatarURL);
+    setBannerValue(profile.serverBannerURL);
+    setTimezone(profile.settings.timezone);
+    setLocale(profile.settings.locale);
+    setFeedback({ kind: "idle" });
+    setSaveToast(null);
+  }
+
   async function onSubmit(event: FormEvent): Promise<void> {
     event.preventDefault();
-    if (!brandingUnlocked) return;
+    if (!profile || !hasUnsavedChanges) return;
     setFeedback({ kind: "loading" });
     try {
       const trimmedNick = nickname.trim();
-      const payload: Parameters<typeof saveBotGuildProfile>[0] = {
-        nickname: trimmedNick,
-        clearNickname: trimmedNick.length === 0,
-      };
+      const payload: Parameters<typeof saveBotGuildProfile>[0] = {};
 
-      if (avatarValue instanceof File) {
+      if (nicknameChanged) {
+        payload.nickname = trimmedNick;
+        payload.clearNickname = trimmedNick.length === 0;
+      }
+
+      if (avatarChanged && avatarValue instanceof File) {
         payload.serverAvatarFile = avatarValue;
-      } else if (
+      } else if (avatarChanged && (
         avatarValue === null ||
         (typeof avatarValue === "string" && !avatarValue.trim())
-      ) {
-        if (profile?.hasServerAvatar) payload.clearServerAvatar = true;
-      } else if (typeof avatarValue === "string") {
+      )) {
+        payload.clearServerAvatar = true;
+      } else if (avatarChanged && typeof avatarValue === "string") {
         const nextUrl = avatarValue.trim();
-        if (nextUrl !== (profile?.serverAvatarURL ?? "")) {
-          payload.serverAvatarUrl = nextUrl;
-        }
+        payload.serverAvatarUrl = nextUrl;
       }
-      if (bannerValue instanceof File) payload.serverBannerFile = bannerValue;
-      else if (bannerValue === null && profile?.serverBannerURL)
+
+      if (bannerChanged && bannerValue instanceof File)
+        payload.serverBannerFile = bannerValue;
+      else if (bannerChanged && bannerValue === null)
         payload.clearServerBanner = true;
-      else if (
-        typeof bannerValue === "string" &&
-        bannerValue.trim() !== (profile?.serverBannerURL ?? "")
-      )
+      else if (bannerChanged && typeof bannerValue === "string")
         payload.serverBannerUrl = bannerValue.trim();
+
+      if (settingsChanged) {
+        if (timezone !== profile.settings.timezone) payload.timezone = timezone;
+        if (locale !== profile.settings.locale) payload.locale = locale;
+      }
 
       const result = await saveBotGuildProfile(payload);
 
@@ -206,6 +302,8 @@ export function BotProfileBuilder({
       setNickname(result.profile.nickname);
       setAvatarValue(result.profile.serverAvatarURL);
       setBannerValue(result.profile.serverBannerURL);
+      setTimezone(result.profile.settings.timezone);
+      setLocale(result.profile.settings.locale);
       setFeedback({
         kind: "ok",
         message: result.message || "Bot profile updated for this server",
@@ -215,10 +313,7 @@ export function BotProfileBuilder({
         message: result.message || "Bot profile updated for this server",
       });
     } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Couldn't save the server profile";
+      const message = saveErrorMessage(error);
       setFeedback({
         kind: "error",
         message,
@@ -320,38 +415,65 @@ export function BotProfileBuilder({
             this page are scoped to the selected server.
           </p>
         </div>
-        <Button
-          type="submit"
-          disabled={isSubmitting || !brandingUnlocked}
-          className="self-start lg:self-auto"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
-              Applying…
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 size-4" aria-hidden />
-              Save changes
-            </>
-          )}
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start lg:self-auto">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting || !hasUnsavedChanges}
+            onClick={discardChanges}
+          >
+            <RotateCcw className="size-4" aria-hidden />
+            Discard changes
+          </Button>
+          <Button type="submit" disabled={isSubmitting || !hasUnsavedChanges}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                Applying…
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 size-4" aria-hidden />
+                Save changes
+              </>
+            )}
+          </Button>
+        </div>
       </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/55 p-2.5">
+        <div className="flex items-center gap-2 px-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <Activity className="size-3.5 text-primary" aria-hidden />
+          Bot health
+        </div>
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
+          <StatusChip label="Installed" value="Ready" />
+          <StatusChip label="Discord" value="Connected" />
+          <StatusChip
+            label="Member since"
+            value={formatMemberSince(profile.joinedAt)}
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1.5">
-                  <CardTitle>Identity and appearance</CardTitle>
-                  <CardDescription>
-                    Local nickname and avatar for this server only.
-                  </CardDescription>
+                <div className="flex items-start gap-3">
+                  <div className="grid size-9 shrink-0 place-items-center rounded-md border border-primary/30 bg-primary/5 text-primary">
+                    <Fingerprint className="size-4" aria-hidden />
+                  </div>
+                  <div className="space-y-1.5">
+                    <CardTitle>Identity and appearance</CardTitle>
+                    <CardDescription>
+                      Local nickname and avatar for this server only.
+                    </CardDescription>
+                  </div>
                 </div>
                 <span className="rounded-sm border border-border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  This server
+                  Server-scoped
                 </span>
               </div>
               <p className="max-w-[62ch] pt-2 text-sm text-muted-foreground">
@@ -361,10 +483,36 @@ export function BotProfileBuilder({
             </CardHeader>
             <CardContent className="space-y-6">
               {!brandingUnlocked && !entitlementsLoading ? (
-                <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-                  Per-server branding (nickname and avatar) is part of the Pro
-                  plan.
-                </p>
+                <div className="relative overflow-hidden rounded-lg border border-primary bg-primary p-4 text-primary-foreground shadow-[0_3px_0_var(--shadow-color)]">
+                  <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-md bg-black/15">
+                        <Crown className="size-4" strokeWidth={2} aria-hidden />
+                      </span>
+                      <div className="min-w-0 space-y-1">
+                        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] opacity-80">
+                          Pro feature
+                        </p>
+                        <h3 className="font-display text-base font-bold leading-tight">
+                          Unlock server branding
+                        </h3>
+                        <p className="max-w-[48ch] text-xs leading-relaxed opacity-85">
+                          Customize the bot&apos;s nickname, avatar, and server
+                          banner for this server.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      href="/dashboard/billing"
+                      variant="secondary"
+                      size="sm"
+                      className="shrink-0 border-black bg-black text-white hover:border-black hover:bg-black/85 hover:text-white"
+                    >
+                      View Pro plan
+                      <ArrowUpRight className="size-3.5" aria-hidden />
+                    </Button>
+                  </div>
+                </div>
               ) : null}
               <div className="space-y-2">
                 <Label htmlFor="bot-guild-nickname">Server Nickname</Label>
@@ -462,41 +610,51 @@ export function BotProfileBuilder({
             <CardHeader>
               <div className="flex items-start gap-3">
                 <div className="grid size-9 shrink-0 place-items-center rounded-md border border-primary/30 bg-primary/5 text-primary">
-                  <Activity className="size-4" aria-hidden />
+                  <Globe2 className="size-4" aria-hidden />
                 </div>
                 <div className="space-y-1.5">
-                  <CardTitle>Access and status</CardTitle>
+                  <CardTitle>Bot defaults</CardTitle>
                   <CardDescription>
-                    Operational checks for this server configuration.
+                    Shared preferences for tobot in this server, independent of
+                    individual modules.
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <dl className="space-y-3">
-                <StatusRow label="Installed in this server" value="Ready" />
-                <StatusRow label="Discord connection" value="Connected" />
-                <StatusRow
-                  label="Per-server branding"
-                  value={
-                    entitlementsLoading
-                      ? "Checking"
-                      : brandingUnlocked
-                        ? "Available"
-                        : "Pro plan required"
-                  }
-                  tone={
-                    brandingUnlocked || entitlementsLoading
-                      ? "success"
-                      : "warning"
-                  }
+            <CardContent className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <TimezoneCombobox
+                  id="bot-default-timezone"
+                  label="Timezone"
+                  value={timezone}
+                  onChange={setTimezone}
+                  disabled={isSubmitting}
                 />
-              </dl>
-              <p className="border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">
-                Nickname and avatar permissions are verified by Discord when you
-                save. If Discord rejects a change, the exact reason appears
-                here.
-              </p>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  The default timezone for native bot features. Module-specific
+                  schedules can still override it when needed.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bot-locale">Language</Label>
+                <Select
+                  value={locale}
+                  disabled={isSubmitting}
+                  onValueChange={(value) => setLocale(value as "en" | "es")}
+                >
+                  <SelectTrigger id="bot-locale">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">Español</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  The preferred language for native bot responses in this
+                  server. Dashboard language stays unchanged.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
@@ -536,34 +694,6 @@ export function BotProfileBuilder({
             usingGlobalAvatar={usingGlobalAvatar}
             guildName={profile?.guildName}
           />
-          <Card>
-            <CardHeader>
-              <div className="flex items-start gap-3">
-                <div className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-muted text-muted-foreground">
-                  <ShieldCheck className="size-4" aria-hidden />
-                </div>
-                <div className="space-y-1.5">
-                  <CardTitle>Configuration scope</CardTitle>
-                  <CardDescription>
-                    Know what this page changes.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-              <p>
-                Nickname and avatar changes apply only to{" "}
-                <strong className="font-medium text-foreground">
-                  {profile.guildName}
-                </strong>
-                .
-              </p>
-              <p>
-                Global bot identity and future presence controls affect every
-                server and are kept separate.
-              </p>
-            </CardContent>
-          </Card>
         </aside>
       </div>
       <ToastBanner
