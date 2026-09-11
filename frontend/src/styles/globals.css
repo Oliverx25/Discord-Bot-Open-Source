@@ -411,6 +411,25 @@ button.tobot-glass[data-open] {
   --physical-plate: var(--border-default);
 }
 
+/* Las caras outline necesitan una superficie opaca en light: el recorte físico
+   no debe convertir el fondo transparente en una placa negra. */
+[data-theme="light"]
+  .tobot-physical--neutral
+  > *:not(.tobot-physical__plate) {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+[data-theme="light"]
+  .tobot-physical--neutral:hover
+  > *:not(.tobot-physical__plate) {
+  /* bg-hover es translúcido y deja reaparecer la máscara física negra. */
+  background: var(--bg-surface);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
 /* Card física: la sombra permanece fija y solo se desplaza la cara. */
 .tobot-plan-card {
   --plan-card-shadow: var(--accent-shadow);
