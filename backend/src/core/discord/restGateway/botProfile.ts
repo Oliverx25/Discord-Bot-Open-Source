@@ -7,6 +7,7 @@ import {
   displayName,
   type RestGatewayCore,
   userAvatarUrl,
+  userBannerUrl,
 } from "./core.js";
 
 /** El único método de `GuildReadsMixin` del que depende este mixin. */
@@ -29,9 +30,10 @@ export function BotProfileMixin<
         discordCacheKey.botProfile(guildId),
         DISCORD_CACHE_TTL.botProfile,
         async () => {
-          const [guild, me] = await Promise.all([
+          const [guild, me, botUser] = await Promise.all([
             this.getGuild(guildId),
             this.rawMember(guildId, "@me"),
+            this.currentUser().catch(() => null),
           ]);
           if (!guild || !me) {
             throw Object.assign(new Error("Bot not in guild"), {
@@ -52,6 +54,8 @@ export function BotProfileMixin<
               ? cdn.guildMemberAvatar(guildId, me.user.id, me.avatar, AVATAR)
               : null,
             globalAvatarUrl: userAvatarUrl(me.user),
+            globalBannerUrl: userBannerUrl(botUser ?? me.user),
+            serverBannerUrl: null,
             hasServerAvatar: Boolean(me.avatar),
           };
         },

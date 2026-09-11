@@ -95,6 +95,8 @@ function toProfileResponse(
     tag: summary.tag,
     serverAvatarURL: summary.serverAvatarUrl,
     globalAvatarURL: summary.globalAvatarUrl,
+    globalBannerURL: summary.globalBannerUrl,
+    serverBannerURL: summary.serverBannerUrl,
     hasServerAvatar: summary.hasServerAvatar,
   };
 }
@@ -302,6 +304,7 @@ async function resolveServerAvatarInput(options: {
 export interface UpdateGuildBotProfileOptions {
   fields: UpdateBotGuildProfileRequest;
   avatarBuffer?: Buffer;
+  bannerBuffer?: Buffer;
   guildId?: string;
 }
 
@@ -311,11 +314,12 @@ export async function updateGuildBotProfile(
 ): Promise<UpdateBotGuildProfileResponse> {
   const id = resolveGuildId(gateway, options.guildId);
   const before = await fetchProfile(gateway, id);
-  const { fields, avatarBuffer } = options;
+  const { fields, avatarBuffer, bannerBuffer } = options;
 
   const changedFlags = {
     nickname: false,
     serverAvatar: false,
+    serverBanner: false,
   };
 
   try {
@@ -355,6 +359,16 @@ export async function updateGuildBotProfile(
     if (avatarInput !== undefined) {
       await gateway.setBotGuildAvatar(id, avatarInput);
       changedFlags.serverAvatar = true;
+    }
+    const bannerInput = await resolveServerAvatarInput({
+      guildId: id,
+      clear: fields.clearServerBanner === true,
+      fileBuffer: bannerBuffer,
+      urlOrPath: fields.serverBannerUrl,
+    });
+    if (bannerInput !== undefined) {
+      await gateway.setBotGuildBanner(id, bannerInput);
+      changedFlags.serverBanner = true;
     }
   } catch (error: unknown) {
     mapDiscordError(error);

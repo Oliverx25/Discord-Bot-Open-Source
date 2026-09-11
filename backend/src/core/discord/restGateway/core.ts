@@ -14,6 +14,7 @@ export interface APIUser {
   global_name?: string | null;
   discriminator?: string;
   avatar?: string | null;
+  banner?: string | null;
   bot?: boolean;
 }
 
@@ -70,6 +71,12 @@ export function userAvatarUrl(user: APIUser): string {
     ? Number(user.discriminator) % 5
     : Number((BigInt(user.id) >> 22n) % 6n);
   return cdn.defaultAvatar(index);
+}
+
+export function userBannerUrl(user: APIUser): string | null {
+  if (!user.banner) return null;
+  const ext = user.banner.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/banners/${user.id}/${user.banner}.${ext}?size=480`;
 }
 
 export function memberAvatarUrl(guildId: string, member: APIMember): string {
@@ -138,6 +145,10 @@ export class RestGatewayCore extends BaseGateway {
     } catch {
       return null;
     }
+  }
+
+  async currentUser(): Promise<APIUser> {
+    return (await this.restClient().get(Routes.user("@me"))) as APIUser;
   }
 
   async channelInGuild(

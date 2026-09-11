@@ -19,7 +19,7 @@ const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_AVATAR_BYTES, files: 1 },
+  limits: { fileSize: MAX_AVATAR_BYTES, files: 2 },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_MIME.has(file.mimetype)) {
       cb(new Error("Avatar: only PNG, JPG, GIF or WEBP (max 8MB)."));
@@ -42,13 +42,21 @@ export function botProfileRoutes(gateway: BotGateway): Router {
   router.post(
     "/",
     requireFeature("branding"),
-    avatarUpload.single("serverAvatar"),
+    avatarUpload.fields([
+      { name: "serverAvatar", maxCount: 1 },
+      { name: "serverBanner", maxCount: 1 },
+    ]),
     defineRoute(
       { body: updateBotGuildProfileSchema },
       async (req, res, valid) => {
         const result = await updateGuildBotProfile(gateway, {
           fields: valid.body,
-          avatarBuffer: req.file?.buffer,
+          avatarBuffer: (
+            req.files as Record<string, Express.Multer.File[]> | undefined
+          )?.serverAvatar?.[0]?.buffer,
+          bannerBuffer: (
+            req.files as Record<string, Express.Multer.File[]> | undefined
+          )?.serverBanner?.[0]?.buffer,
           guildId: guildIdOf(req),
         });
         res.json(result);

@@ -61,5 +61,19 @@ export function BotProfileMixin<TBase extends Constructor<RestClientCore>>(
       });
       bustDiscordCache(discordCacheKey.botProfile(guildId));
     }
+
+    async setBotGuildBanner(
+      guildId: string,
+      banner: Buffer | string | null,
+    ): Promise<void> {
+      const body =
+        banner === null
+          ? { banner: null }
+          : { banner: await toImageDataUri(banner) };
+      await this.restClient().patch(Routes.guildMember(guildId, "@me"), {
+        body,
+      });
+      bustDiscordCache(discordCacheKey.botProfile(guildId));
+    }
   };
 }

@@ -7,4 +7,6 @@ export const updateBotGuildProfileSchema = z.object({
   clearNickname: boolish.optional(),
   serverAvatarUrl: z.string().nullable().optional(),
   clearServerAvatar: boolish.optional(),
+  serverBannerUrl: z.string().nullable().optional(),
+  clearServerBanner: boolish.optional(),
 });

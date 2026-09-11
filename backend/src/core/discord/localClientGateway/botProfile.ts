@@ -29,6 +29,9 @@ export function BotProfileMixin<
     async getBotProfile(guildId: string): Promise<BotProfileSummary> {
       const guild = this.#guildOrThrow(guildId);
       const me = await guild.members.fetchMe({ force: true });
+      const botUser = await guild.client.users
+        .fetch(me.id, { force: true })
+        .catch(() => me.user);
       return {
         guildId: guild.id,
         guildName: guild.name,
@@ -38,6 +41,9 @@ export function BotProfileMixin<
         tag: me.user.tag,
         serverAvatarUrl: me.avatarURL(AVATAR_OPTS) ?? null,
         globalAvatarUrl: me.user.displayAvatarURL(AVATAR_OPTS),
+        globalBannerUrl:
+          botUser.bannerURL({ extension: "png", size: 480 }) ?? null,
+        serverBannerUrl: null,
         hasServerAvatar: Boolean(me.avatar),
       };
     }

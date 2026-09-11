@@ -8,6 +8,8 @@ export interface BotProfileSummary {
   tag: string;
   serverAvatarUrl: string | null;
   globalAvatarUrl: string;
+  globalBannerUrl: string | null;
+  serverBannerUrl: string | null;
   hasServerAvatar: boolean;
 }
 
@@ -20,5 +22,9 @@ export interface BotProfileGateway {
   setBotGuildAvatar(
     guildId: string,
     avatar: Buffer | string | null,
+  ): Promise<void>;
+  setBotGuildBanner(
+    guildId: string,
+    banner: Buffer | string | null,
   ): Promise<void>;
 }
