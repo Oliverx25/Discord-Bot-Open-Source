@@ -1,6 +1,7 @@
 import { CDN } from "@discordjs/rest";
 import { Routes } from "discord.js";
 import { cache } from "#core/cache/store.js";
+import { env } from "#core/env.js";
 import { BaseGateway } from "../baseGateway.js";
 import { DISCORD_CACHE_TTL, discordCacheKey } from "../discordCache.js";
 
@@ -125,9 +126,14 @@ export class RestGatewayCore extends BaseGateway {
   }
 
   async rawMember(guildId: string, userId: string): Promise<APIMember | null> {
+    // GET /guilds/:guildId/members/:userId no acepta "@me". Ese alias solo
+    // existe en endpoints específicos de "current member" (por ejemplo PATCH).
+    // En el rol API no hay Client vivo, así que el Client ID de la aplicación
+    // —que Discord asigna también al usuario bot— es la identidad estable.
+    const resolvedUserId = userId === "@me" ? env().DISCORD_CLIENT_ID : userId;
     try {
       return (await this.restClient().get(
-        Routes.guildMember(guildId, userId),
+        Routes.guildMember(guildId, resolvedUserId),
       )) as APIMember;
     } catch {
       return null;

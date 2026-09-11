@@ -177,7 +177,7 @@ export function createApp(options: CreateAppOptions): Express {
   }
   app.use(express.json({ limit: "1mb" }));
 
-  app.use("/auth", authRateLimiter(), authRouter());
+  app.use("/auth", authRateLimiter(), authRouter(options.botGateway));
   app.use("/api/health", healthRouter(options.botGateway));
   app.use("/metrics", metricsRouter());
 

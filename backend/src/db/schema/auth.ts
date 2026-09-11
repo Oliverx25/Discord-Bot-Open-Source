@@ -42,7 +42,10 @@ export const panelSessions = pgTable(
 /** State OAuth de un solo uso (anti-CSRF + PKCE verifier). */
 export const oauthStates = pgTable("oauth_states", {
   state: text().primaryKey(),
+  flow: text().notNull().default("login"),
   codeVerifier: text().notNull(),
+  sessionIdHash: text(),
+  requestedGuildId: text(),
   expiresAt: timestamp({
     withTimezone: true,
     mode: "date",

@@ -100,4 +100,17 @@ describe("cache warmer", () => {
 
     expect(gw.listChannels).not.toHaveBeenCalled();
   });
+
+  it("GuildCreate invalida la lista de guilds del bot", async () => {
+    const client = Object.assign(new EventEmitter(), {
+      isReady: () => false,
+    }) as unknown as import("discord.js").Client;
+    installCacheWarmer(client, fakeGateway());
+    await cache().set(discordCacheKey.botGuildIds(), ["old-guild"], 60_000);
+
+    client.emit(Events.GuildCreate, { id: "g1" });
+    await flush();
+
+    expect(await cache().get(discordCacheKey.botGuildIds())).toBeUndefined();
+  });
 });

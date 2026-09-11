@@ -1,18 +1,26 @@
 import { createHash, randomBytes } from "node:crypto";
-import { buildBotInviteUrl, SIGNED_IN_HINT_COOKIE } from "@adobos/shared";
+import {
+  BOT_INVITE_PERMISSIONS,
+  buildBotInviteUrl,
+  SIGNED_IN_HINT_COOKIE,
+} from "@adobos/shared";
 import {
   type CookieOptions,
   type Request,
   type Response,
   Router,
 } from "express";
+import { cache } from "../cache/store.js";
 import type { BotGateway } from "../discord/botGateway.js";
+import { discordCacheKey } from "../discord/discordCache.js";
 import { DiscordHttpError } from "../discord/discordHttpError.js";
 import { logger } from "../log.js";
 import { hashSessionId } from "./crypto.js";
 import { listManagedGuilds } from "./discordGuilds.js";
 import {
+  consumeBotInstallState,
   consumeOauthState,
+  createBotInstallState,
   createOauthState,
   createSession,
   deleteSession,
@@ -39,6 +47,10 @@ function publicAppUrl(): string {
 
 function redirectUri(): string {
   return `${publicAppUrl()}/auth/discord/callback`;
+}
+
+function botInstallRedirectUri(): string {
+  return `${publicAppUrl()}/auth/invite/callback`;
 }
 
 function clientId(): string {
@@ -103,7 +115,36 @@ function sessionIdFrom(req: Request): string | undefined {
   return undefined;
 }
 
-export function authRouter(): Router {
+function guildIdFromQuery(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const guildId = value.trim();
+  return /^\d{17,20}$/.test(guildId) ? guildId : null;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForBotGuild(
+  gateway: BotGateway,
+  guildId: string,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (await gateway.getGuild(guildId)) return true;
+    if (attempt < 5) await wait(500);
+  }
+  return false;
+}
+
+async function invalidateBotGuildIdsCache(): Promise<void> {
+  await cache()
+    .del(discordCacheKey.botGuildIds())
+    .catch((error: unknown) => {
+      logger.warn({ err: error }, "Could not invalidate bot guild cache:");
+    });
+}
+
+export function authRouter(gateway: BotGateway): Router {
   const router = Router();
 
   router.get("/discord", async (_req, res) => {
@@ -128,20 +169,166 @@ export function authRouter(): Router {
   });
 
   /**
-   * Invite del bot (scope bot + applications.commands).
-   * No inicia sesión: Discord pide servidor y permisos, como MEE6.
+   * Instalación del bot. Desde el landing conserva el flujo callback-less;
+   * desde el panel usa OAuth con state + PKCE para volver al servidor correcto.
    */
-  router.get("/invite", (req, res) => {
+  router.get("/invite", async (req, res) => {
     try {
-      const raw = req.query.guildId;
-      const guildId =
-        typeof raw === "string" && /^\d{17,20}$/.test(raw.trim())
-          ? raw.trim()
-          : undefined;
-      res.redirect(buildBotInviteUrl({ clientId: clientId(), guildId }));
+      const guildId = guildIdFromQuery(req.query.guildId);
+      const rawSessionId = sessionIdFrom(req);
+
+      // Desde el landing todavía permitimos el enlace simple de instalación.
+      // El retorno automático solo se habilita dentro de una sesión del panel.
+      if (!rawSessionId) {
+        res.redirect(
+          buildBotInviteUrl({
+            clientId: clientId(),
+            guildId: guildId ?? undefined,
+          }),
+        );
+        return;
+      }
+
+      const { verifier, challenge } = pkcePair();
+      const state = await createBotInstallState({
+        codeVerifier: verifier,
+        sessionIdHash: hashSessionId(rawSessionId),
+        requestedGuildId: guildId,
+      });
+      const params = new URLSearchParams({
+        client_id: clientId(),
+        redirect_uri: botInstallRedirectUri(),
+        response_type: "code",
+        permissions: BOT_INVITE_PERMISSIONS,
+        scope: "identify bot applications.commands",
+        state,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        integration_type: "0",
+        prompt: "consent",
+      });
+      if (guildId) {
+        params.set("guild_id", guildId);
+        params.set("disable_guild_select", "true");
+      }
+      res.redirect(`${DISCORD_AUTHORIZE}?${params.toString()}`);
     } catch (error: unknown) {
       logger.error({ err: error }, "OAuth invite failed:");
       res.redirect("/?error=oauth_config");
+    }
+  });
+
+  router.get("/invite/callback", async (req, res) => {
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    const oauthError =
+      typeof req.query.error === "string" ? req.query.error : "";
+    const pending = state ? await consumeBotInstallState(state) : null;
+
+    if (!pending) {
+      res.redirect("/?error=oauth_state");
+      return;
+    }
+
+    if (oauthError || !code) {
+      res.redirect("/dashboard/bot-config?install=cancelled");
+      return;
+    }
+
+    const rawSessionId = sessionIdFrom(req);
+    if (
+      !rawSessionId ||
+      hashSessionId(rawSessionId) !== pending.sessionIdHash
+    ) {
+      res.redirect("/?error=oauth_state");
+      return;
+    }
+
+    const session = await getSession(rawSessionId);
+    if (!session || session.id !== pending.sessionIdHash) {
+      res.redirect("/?error=oauth_state");
+      return;
+    }
+
+    try {
+      const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId(),
+          client_secret: clientSecret(),
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: botInstallRedirectUri(),
+          code_verifier: pending.codeVerifier,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        logger.error(
+          { status: tokenRes.status },
+          "Discord bot install token error:",
+        );
+        res.redirect("/dashboard/bot-config?install=error");
+        return;
+      }
+
+      const tokenJson = (await tokenRes.json()) as { access_token?: string };
+      if (!tokenJson.access_token) {
+        res.redirect("/dashboard/bot-config?install=error");
+        return;
+      }
+
+      const meRes = await fetch(`${DISCORD_API}/users/@me`, {
+        headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+      });
+      if (!meRes.ok) {
+        res.redirect("/dashboard/bot-config?install=error");
+        return;
+      }
+      const me = (await meRes.json()) as { id?: string };
+      if (!me.id || me.id !== session.userId) {
+        res.redirect("/?error=oauth_state");
+        return;
+      }
+
+      const installedGuildId =
+        guildIdFromQuery(req.query.guild_id) ?? pending.requestedGuildId;
+      if (
+        !installedGuildId ||
+        (pending.requestedGuildId &&
+          installedGuildId !== pending.requestedGuildId)
+      ) {
+        res.redirect("/dashboard/bot-config?install=error");
+        return;
+      }
+
+      if (!(await waitForBotGuild(gateway, installedGuildId))) {
+        logger.warn(
+          { guildId: installedGuildId },
+          "Discord install callback completed before the bot became visible:",
+        );
+        res.redirect("/dashboard/bot-config?install=pending");
+        return;
+      }
+
+      // /api/me deriva botPresent de esta clave; invalidarla aquí evita que el
+      // primer render posterior al callback vea el estado anterior hasta el TTL.
+      await invalidateBotGuildIdsCache();
+
+      res.cookie("tobot_guild", installedGuildId, {
+        httpOnly: false,
+        secure: cookieSecure(),
+        sameSite: "lax",
+        path: "/",
+        maxAge: 365 * 24 * 60 * 60 * 1000,
+      });
+      res.redirect(
+        `/dashboard/bot-config?install=success&guildId=${encodeURIComponent(installedGuildId)}`,
+      );
+    } catch (error: unknown) {
+      logger.error({ err: error }, "OAuth bot install callback failed:");
+      res.redirect("/dashboard/bot-config?install=error");
     }
   });
 
@@ -183,9 +370,7 @@ export function authRouter(): Router {
         );
         const isClient =
           tokenRes.status === 401 || detail.includes("invalid_client");
-        res.redirect(
-          `/?error=${isClient ? "oauth_client" : "oauth_token"}`,
-        );
+        res.redirect(`/?error=${isClient ? "oauth_client" : "oauth_token"}`);
         return;
       }
       const tokenJson = (await tokenRes.json()) as {

@@ -11,7 +11,7 @@ const restCalls = {
 let token: string | undefined = "tok-123";
 
 vi.mock("#core/env.js", () => ({
-  env: () => ({ DISCORD_TOKEN: token }),
+  env: () => ({ DISCORD_TOKEN: token, DISCORD_CLIENT_ID: "bot-123" }),
 }));
 
 vi.mock("./rest.js", () => ({
@@ -74,6 +74,34 @@ describe("BaseGateway — escrituras REST", () => {
 });
 
 describe("RestGateway — caché read-through + invalidación", () => {
+  it("resuelve @me al ID del bot al leer su perfil en un guild", async () => {
+    restCalls.get.mockImplementation(async (route: string) => {
+      if (route.includes("/members/")) {
+        return {
+          user: {
+            id: "bot-123",
+            username: "tobot",
+            discriminator: "0",
+            avatar: null,
+          },
+          roles: [],
+          joined_at: "2026-01-01T00:00:00.000Z",
+        };
+      }
+      if (route.endsWith("/roles")) return [];
+      return { id: "g1", name: "Guild One", icon: null };
+    });
+
+    const gw = new RestGateway();
+    await expect(gw.getBotProfile("g1")).resolves.toMatchObject({
+      guildId: "g1",
+      username: "tobot",
+    });
+    expect(restCalls.get).toHaveBeenCalledWith(
+      expect.stringContaining("/guilds/g1/members/bot-123"),
+    );
+  });
+
   it("listChannels cachea: la 2ª llamada no vuelve a pegar a REST", async () => {
     restCalls.get.mockResolvedValue([
       { id: "c1", name: "general", type: 0, position: 1 },

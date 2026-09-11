@@ -47,6 +47,8 @@ export function installCacheWarmer(client: Client, gateway: BotGateway): void {
 
   client.on(Events.GuildCreate, (guild) => {
     // El bot se unió a un guild nuevo (no el burst de arranque).
+    // La lista usada por /api/me también puede estar cacheada en el rol api.
+    drop(discordCacheKey.botGuildIds());
     if (client.isReady()) warmGuildCore(guild.id);
   });
 
