@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ToastBanner } from "@/components/ui/toast";
 import { useEntitlements } from "@/features/entitlements/useEntitlements";
 import { fetchBotGuildProfile, saveBotGuildProfile } from "@/lib/api";
 import { resolvePublicAssetUrl } from "@/lib/api/client";
@@ -40,6 +41,11 @@ type Feedback =
   | { kind: "loading" }
   | { kind: "ok"; message: string }
   | { kind: "error"; message: string };
+
+type SaveToast = {
+  message: string;
+  variant: "error" | "success";
+};
 
 function resolvePreviewSrc(value: HybridImageValue): string | null {
   if (value instanceof File) return null;
@@ -88,6 +94,7 @@ export function BotProfileBuilder({
   const brandingUnlocked = can("branding");
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<Feedback>({ kind: "idle" });
+  const [saveToast, setSaveToast] = useState<SaveToast | null>(null);
   const [profile, setProfile] = useState<BotGuildProfileResponse | null>(null);
 
   const [nickname, setNickname] = useState("");
@@ -203,14 +210,20 @@ export function BotProfileBuilder({
         kind: "ok",
         message: result.message || "Bot profile updated for this server",
       });
+      setSaveToast({
+        variant: "success",
+        message: result.message || "Bot profile updated for this server",
+      });
     } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Couldn't save the server profile";
       setFeedback({
         kind: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Couldn't save the server profile",
+        message,
       });
+      setSaveToast({ variant: "error", message });
     }
   }
 
@@ -553,6 +566,11 @@ export function BotProfileBuilder({
           </Card>
         </aside>
       </div>
+      <ToastBanner
+        message={saveToast?.message ?? ""}
+        variant={saveToast?.variant ?? "info"}
+        onDismiss={() => setSaveToast(null)}
+      />
     </form>
   );
 }
