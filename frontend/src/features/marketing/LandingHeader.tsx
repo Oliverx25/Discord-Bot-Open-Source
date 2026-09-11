@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { LandingAvatarMenu } from "@/components/panel/PanelUserMenu";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS: Array<[string, string, LucideIcon]> = [
@@ -69,22 +70,12 @@ function AuthSlot({ user }: { user: PanelMeUser | null }) {
           <DiscordLoginButton compact />
         </div>
       </div>
-      <a
-        href="/dashboard"
-        data-astro-reload
-        className="landing-auth-user items-center gap-2"
-      >
-        {user?.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt=""
-            width={38}
-            height={38}
-            className="hidden size-[38px] shrink-0 rounded-md object-cover md:block"
-          />
-        ) : null}
-        <Button as="span">Open dashboard</Button>
-      </a>
+      <div className="landing-auth-user flex items-center gap-2">
+        {user ? <LandingAvatarMenu user={user} /> : null}
+        <Button href="/dashboard" reload>
+          Open dashboard
+        </Button>
+      </div>
     </>
   );
 }

@@ -11,6 +11,7 @@ import {
 import { useEffect, useId, useRef, useState } from "react";
 import { NAV_LINKS, type NavIcon } from "@/content/landing";
 import { Button } from "@/components/ui/button";
+import { LandingAvatarMenu } from "@/components/panel/PanelUserMenu";
 import { cn } from "@/lib/utils";
 
 const NAV_ICONS: Record<NavIcon, LucideIcon> = {
@@ -62,22 +63,12 @@ function DiscordLoginButton({ compact }: { compact?: boolean }) {
 function AuthSlot({ user }: { user: PanelMeUser | null }) {
   if (user) {
     return (
-      <a
-        href="/dashboard"
-        data-astro-reload
-        className="inline-flex items-center gap-2"
-      >
-        {user.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt=""
-            width={38}
-            height={38}
-            className="hidden size-[38px] shrink-0 rounded-md object-cover md:block"
-          />
-        ) : null}
-        <Button as="span">Open dashboard</Button>
-      </a>
+      <div className="flex items-center gap-2">
+        <LandingAvatarMenu user={user} />
+        <Button href="/dashboard" reload>
+          Open dashboard
+        </Button>
+      </div>
     );
   }
 

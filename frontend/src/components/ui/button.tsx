@@ -53,6 +53,8 @@ export interface ButtonProps
   as?: "button" | "a" | "span";
   /** View-transition: recarga completa al navegar (Astro). */
   reload?: boolean;
+  /** Placa plantada custom (p. ej. la misma foto blurred). Si va, no se usa ::before. */
+  plate?: React.ReactNode;
 }
 
 export const Button = React.forwardRef<HTMLElement, ButtonProps>(
@@ -66,6 +68,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       href,
       as,
       reload,
+      plate,
       type = "button",
       ...props
     },
@@ -78,9 +81,16 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       ? cn("tobot-physical", `tobot-physical--${tone}`, className)
       : cn(buttonVariants({ variant, size }), className);
     const content = physical ? (
-      <span className={cn(buttonVariants({ variant, size }), className)}>
-        {children}
-      </span>
+      <>
+        {plate ? (
+          <span className="tobot-physical__plate" aria-hidden>
+            {plate}
+          </span>
+        ) : null}
+        <span className={cn(buttonVariants({ variant, size }), className)}>
+          {children}
+        </span>
+      </>
     ) : (
       children
     );
