@@ -136,6 +136,120 @@ function StatusChip({
   );
 }
 
+function SkeletonBlock({ className }: { className: string }) {
+  return (
+    <div
+      className={`motion-safe:animate-pulse rounded-sm bg-muted/70 ${className}`}
+      aria-hidden="true"
+    />
+  );
+}
+
+function BotProfileSkeleton() {
+  return (
+    <div
+      className="space-y-8"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading bot configuration"
+    >
+      <span className="sr-only">Loading bot configuration…</span>
+
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0 space-y-3">
+          <SkeletonBlock className="h-3 w-28" />
+          <SkeletonBlock className="h-9 w-64 max-w-full" />
+          <SkeletonBlock className="h-4 w-full max-w-[38rem]" />
+          <SkeletonBlock className="h-4 w-3/4 max-w-[30rem]" />
+        </div>
+        <div className="flex gap-2">
+          <SkeletonBlock className="h-10 w-36" />
+          <SkeletonBlock className="h-10 w-32" />
+        </div>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/55 p-3">
+        <SkeletonBlock className="h-4 w-24" />
+        <div className="flex flex-wrap justify-end gap-2">
+          <SkeletonBlock className="h-9 w-28" />
+          <SkeletonBlock className="h-9 w-32" />
+          <SkeletonBlock className="h-9 w-36" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6">
+          <div className="rounded-lg border border-border/70 bg-card p-6">
+            <div className="flex items-start gap-3">
+              <SkeletonBlock className="size-9 shrink-0 rounded-md" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <SkeletonBlock className="h-5 w-56 max-w-full" />
+                <SkeletonBlock className="h-4 w-full max-w-[28rem]" />
+              </div>
+              <SkeletonBlock className="hidden h-6 w-24 sm:block" />
+            </div>
+            <SkeletonBlock className="mt-5 h-4 w-full max-w-[40rem]" />
+
+            <div className="mt-6 space-y-6">
+              <div className="space-y-2">
+                <SkeletonBlock className="h-4 w-32" />
+                <SkeletonBlock className="h-10 w-full" />
+                <SkeletonBlock className="h-3 w-full max-w-[34rem]" />
+                <SkeletonBlock className="h-8 w-32" />
+              </div>
+              <div className="space-y-3 border-t border-border/70 pt-6">
+                <SkeletonBlock className="h-4 w-28" />
+                <SkeletonBlock className="h-24 w-full" />
+                <SkeletonBlock className="h-3 w-full max-w-[32rem]" />
+                <SkeletonBlock className="h-8 w-40" />
+              </div>
+              <div className="space-y-3 border-t border-border/70 pt-6">
+                <SkeletonBlock className="h-4 w-28" />
+                <SkeletonBlock className="h-24 w-full" />
+                <SkeletonBlock className="h-3 w-full max-w-[32rem]" />
+                <SkeletonBlock className="h-8 w-40" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border/70 bg-card p-6">
+            <div className="flex items-start gap-3">
+              <SkeletonBlock className="size-9 shrink-0 rounded-md" />
+              <div className="space-y-2">
+                <SkeletonBlock className="h-5 w-32" />
+                <SkeletonBlock className="h-4 w-72 max-w-[70vw]" />
+              </div>
+            </div>
+            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <SkeletonBlock className="h-4 w-20" />
+                <SkeletonBlock className="h-10 w-full" />
+                <SkeletonBlock className="h-3 w-full" />
+                <SkeletonBlock className="h-3 w-4/5" />
+              </div>
+              <div className="space-y-2">
+                <SkeletonBlock className="h-4 w-20" />
+                <SkeletonBlock className="h-10 w-full" />
+                <SkeletonBlock className="h-3 w-full" />
+                <SkeletonBlock className="h-3 w-4/5" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+          <div className="rounded-lg border border-border/70 bg-card p-4">
+            <SkeletonBlock className="h-5 w-24" />
+            <SkeletonBlock className="mt-2 h-4 w-48" />
+            <SkeletonBlock className="mt-5 h-44 w-full rounded-md" />
+            <SkeletonBlock className="mt-4 h-16 w-3/4" />
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
 export function BotProfileBuilder({
   botPresent,
   guildId,
@@ -325,23 +439,7 @@ export function BotProfileBuilder({
   }
 
   if (loading) {
-    return (
-      <div className="space-y-6" aria-busy="true" aria-live="polite">
-        <div className="space-y-3">
-          <div className="h-3 w-28 animate-pulse rounded-sm bg-muted" />
-          <div className="h-9 w-64 animate-pulse rounded-sm bg-muted" />
-          <div className="h-4 w-full max-w-lg animate-pulse rounded-sm bg-muted" />
-        </div>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="h-80 animate-pulse rounded-lg border border-border bg-card" />
-          <div className="h-72 animate-pulse rounded-lg border border-border bg-card" />
-        </div>
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
-          Loading bot configuration…
-        </p>
-      </div>
-    );
+    return <BotProfileSkeleton />;
   }
 
   if (!profile) {
