@@ -52,6 +52,7 @@ export interface APIMember {
   user: APIUser;
   nick?: string | null;
   avatar?: string | null;
+  banner?: string | null;
   roles: string[];
   joined_at: string;
   communication_disabled_until?: string | null;
@@ -89,6 +90,16 @@ export function memberAvatarUrl(guildId: string, member: APIMember): string {
     );
   }
   return userAvatarUrl(member.user);
+}
+
+/** URL del banner específico de un miembro dentro de un servidor. */
+export function memberBannerUrl(
+  guildId: string,
+  member: APIMember,
+): string | null {
+  if (!member.banner) return null;
+  const ext = member.banner.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/guilds/${guildId}/users/${member.user.id}/banners/${member.banner}.${ext}?size=480`;
 }
 
 /**

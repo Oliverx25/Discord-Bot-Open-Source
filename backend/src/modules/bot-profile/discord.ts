@@ -219,6 +219,14 @@ function mapDiscordError(error: unknown): never {
 
   if (error instanceof DiscordAPIError) {
     const msg = String(error.message ?? "");
+    if (/BANNER_RATE_LIMIT|changing your profile banner too fast/i.test(msg)) {
+      throw new BotProfileError(
+        "Discord limits how often a server profile banner can change. Please try again in a few minutes.",
+        429,
+        "BANNER_RATE_LIMIT",
+      );
+    }
+
     if (
       error.code === 50013 ||
       error.status === 403 ||

@@ -5,6 +5,7 @@ import {
   AVATAR,
   cdn,
   displayName,
+  memberBannerUrl,
   type RestGatewayCore,
   userAvatarUrl,
   userBannerUrl,
@@ -55,7 +56,7 @@ export function BotProfileMixin<
               : null,
             globalAvatarUrl: userAvatarUrl(me.user),
             globalBannerUrl: userBannerUrl(botUser ?? me.user),
-            serverBannerUrl: null,
+            serverBannerUrl: memberBannerUrl(guildId, me),
             hasServerAvatar: Boolean(me.avatar),
           };
         },

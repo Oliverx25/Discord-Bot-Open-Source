@@ -43,7 +43,7 @@ export function BotProfileMixin<
         globalAvatarUrl: me.user.displayAvatarURL(AVATAR_OPTS),
         globalBannerUrl:
           botUser.bannerURL({ extension: "png", size: 480 }) ?? null,
-        serverBannerUrl: null,
+        serverBannerUrl: me.bannerURL({ extension: "png", size: 480 }) ?? null,
         hasServerAvatar: Boolean(me.avatar),
       };
     }
