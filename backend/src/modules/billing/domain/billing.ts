@@ -512,8 +512,8 @@ export async function createCheckoutSession(input: {
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${base}/dashboard/general/billing?checkout=success`,
-    cancel_url: `${base}/dashboard/general/billing?checkout=canceled`,
+    success_url: `${base}/dashboard/billing?checkout=success`,
+    cancel_url: `${base}/dashboard/billing?checkout=canceled`,
     client_reference_id: input.userId,
     allow_promotion_codes: true,
     metadata: {
@@ -555,7 +555,7 @@ export async function createPortalSession(input: {
 
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
-    return_url: `${publicAppUrl()}/dashboard/general/billing`,
+    return_url: `${publicAppUrl()}/dashboard/billing`,
   });
   return { url: session.url };
 }
