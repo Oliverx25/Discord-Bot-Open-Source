@@ -61,6 +61,7 @@ export interface MappedHttpError {
     feature?: string;
     limit?: string;
     tier?: string;
+    field?: string;
   };
   log: boolean;
 }
@@ -161,7 +162,11 @@ export function mapHttpError(error: unknown): MappedHttpError {
     const clientError = error.status < 500;
     return {
       status: error.status,
-      body: { error: error.message, code: error.code },
+      body: {
+        error: error.message,
+        code: error.code,
+        field: (error as AppHttpError & { field?: string }).field,
+      },
       log: !clientError,
     };
   }

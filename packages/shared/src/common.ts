@@ -104,6 +104,8 @@ export interface ApiErrorBody {
   feature?: string;
   limit?: string;
   tier?: string;
+  /** Campo funcional que originó el error, cuando aplica. */
+  field?: string;
 }
 
 export interface GuildChannelAsset {

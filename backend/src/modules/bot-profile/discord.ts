@@ -40,6 +40,14 @@ export class BotProfileError extends Error {
     message: string,
     readonly status: number,
     readonly code: string,
+    readonly field:
+      | "nickname"
+      | "serverAvatar"
+      | "serverBanner"
+      | "timezone"
+      | "locale"
+      | "settings"
+      | "profile" = "profile",
   ) {
     super(message);
     this.name = "BotProfileError";
@@ -270,8 +278,24 @@ export async function getBotProfile(
   return await getGuildBotProfile(gateway, guildId);
 }
 
-function mapDiscordError(error: unknown): never {
+function mapDiscordError(
+  error: unknown,
+  field: BotProfileError["field"] = "profile",
+): never {
   if (error instanceof BotProfileError) throw error;
+
+  if (error instanceof Error && error.name === "EntitlementError") {
+    const entitlement = error as Error & {
+      status?: number;
+      code?: string;
+    };
+    throw new BotProfileError(
+      entitlement.message,
+      entitlement.status ?? 403,
+      entitlement.code ?? "FEATURE_LOCKED",
+      field,
+    );
+  }
 
   if (error instanceof DiscordAPIError) {
     const msg = String(error.message ?? "");
@@ -280,6 +304,7 @@ function mapDiscordError(error: unknown): never {
         "Discord limits how often a server profile banner can change. Please try again in a few minutes.",
         429,
         "BANNER_RATE_LIMIT",
+        "serverBanner",
       );
     }
 
@@ -292,6 +317,7 @@ function mapDiscordError(error: unknown): never {
         "The bot lacks sufficient permissions in this server to change its nickname or avatar.",
         403,
         "MISSING_PERMISSIONS",
+        field,
       );
     }
 
@@ -300,6 +326,7 @@ function mapDiscordError(error: unknown): never {
         msg || "Discord rejected the server profile data.",
         400,
         "DISCORD_INVALID",
+        field,
       );
     }
 
@@ -309,6 +336,7 @@ function mapDiscordError(error: unknown): never {
         ? error.status
         : 502,
       "DISCORD_API_ERROR",
+      field,
     );
   }
 
@@ -320,6 +348,8 @@ function mapDiscordError(error: unknown): never {
  */
 async function resolveServerAvatarInput(options: {
   guildId: string;
+  field: "serverAvatar" | "serverBanner";
+  label: "server avatar" | "server banner";
   clear?: boolean;
   fileBuffer?: Buffer;
   urlOrPath?: string | null;
@@ -338,17 +368,19 @@ async function resolveServerAvatarInput(options: {
     // upload ya existente del guild B.
     if (!uploadBelongsToGuild(raw, options.guildId)) {
       throw new BotProfileError(
-        "The uploaded avatar image was not found.",
+        `The uploaded ${options.label} image was not found.`,
         400,
         "AVATAR_FILE_MISSING",
+        options.field,
       );
     }
     const absolute = resolvePublicUploadPath(raw);
     if (!absolute || !fs.existsSync(absolute)) {
       throw new BotProfileError(
-        "The uploaded avatar image was not found.",
+        `The uploaded ${options.label} image was not found.`,
         400,
         "AVATAR_FILE_MISSING",
+        options.field,
       );
     }
     return fs.readFileSync(absolute);
@@ -359,9 +391,10 @@ async function resolveServerAvatarInput(options: {
   }
 
   throw new BotProfileError(
-    "serverAvatarUrl must be http(s) or a /uploads/… path",
+    `${options.field}Url must be http(s) or a /uploads/… path`,
     400,
     "INVALID_AVATAR_URL",
+    options.field,
   );
 }
 
@@ -387,6 +420,8 @@ export async function updateGuildBotProfile(
     settings: false,
   };
 
+  let activeField: BotProfileError["field"] = "profile";
+
   try {
     const clearNickname = fields.clearNickname === true;
     const nicknameRaw = fields.nickname;
@@ -404,11 +439,13 @@ export async function updateGuildBotProfile(
           `The nickname must be at most ${BOT_GUILD_NICKNAME_MAX} characters.`,
           400,
           "INVALID_NICKNAME",
+          "nickname",
         );
       }
 
       const current = before.nickname || null;
       if (current !== nextNick) {
+        activeField = "nickname";
         await assertFeature(id, "branding");
         await gateway.setBotGuildNickname(id, nextNick);
         changedFlags.nickname = true;
@@ -417,32 +454,48 @@ export async function updateGuildBotProfile(
 
     const avatarInput = await resolveServerAvatarInput({
       guildId: id,
+      field: "serverAvatar",
+      label: "server avatar",
       clear: fields.clearServerAvatar === true,
       fileBuffer: avatarBuffer,
       urlOrPath: fields.serverAvatarUrl,
     });
 
     if (avatarInput !== undefined) {
+      activeField = "serverAvatar";
       await assertFeature(id, "branding");
       await gateway.setBotGuildAvatar(id, avatarInput);
       changedFlags.serverAvatar = true;
     }
     const bannerInput = await resolveServerAvatarInput({
       guildId: id,
+      field: "serverBanner",
+      label: "server banner",
       clear: fields.clearServerBanner === true,
       fileBuffer: bannerBuffer,
       urlOrPath: fields.serverBannerUrl,
     });
     if (bannerInput !== undefined) {
+      activeField = "serverBanner";
       await assertFeature(id, "branding");
       await gateway.setBotGuildBanner(id, bannerInput);
       changedFlags.serverBanner = true;
     }
   } catch (error: unknown) {
-    mapDiscordError(error);
+    mapDiscordError(error, activeField);
   }
 
-  const savedSettings = await saveGuildBotSettings(id, fields);
+  let savedSettings: Awaited<ReturnType<typeof saveGuildBotSettings>>;
+  try {
+    savedSettings = await saveGuildBotSettings(id, fields);
+  } catch (error: unknown) {
+    throw new BotProfileError(
+      "The bot defaults could not be saved.",
+      500,
+      "SETTINGS_SAVE_FAILED",
+      "settings",
+    );
+  }
   changedFlags.settings = savedSettings.changed;
 
   const profile = await fetchProfile(gateway, id);
