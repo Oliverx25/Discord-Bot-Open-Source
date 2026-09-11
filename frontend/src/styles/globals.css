@@ -656,6 +656,43 @@ html[data-signed-in] .landing-cta-user {
   }
 }
 
+@keyframes tobot-toast-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes tobot-toast-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.98);
+  }
+}
+
+.tobot-toast[data-state="entering"] {
+  animation: tobot-toast-enter 180ms var(--ease-standard) both;
+}
+
+.tobot-toast[data-state="leaving"] {
+  animation: tobot-toast-exit 160ms var(--ease-standard) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tobot-toast[data-state="entering"],
+  .tobot-toast[data-state="leaving"] {
+    animation: none;
+  }
+}
+
 .discord-md p {
   margin: 0.25rem 0;
 }

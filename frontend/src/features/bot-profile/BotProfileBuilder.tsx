@@ -5,7 +5,6 @@ import {
 import {
   Activity,
   ArrowUpRight,
-  CheckCircle2,
   Crown,
   Fingerprint,
   Globe2,
@@ -14,7 +13,6 @@ import {
   Save,
   Server,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
@@ -54,7 +52,6 @@ import { BotProfilePreview } from "./BotProfilePreview";
 type Feedback =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ok"; message: string }
   | { kind: "error"; message: string };
 
 type SaveToast = {
@@ -304,10 +301,7 @@ export function BotProfileBuilder({
       setBannerValue(result.profile.serverBannerURL);
       setTimezone(result.profile.settings.timezone);
       setLocale(result.profile.settings.locale);
-      setFeedback({
-        kind: "ok",
-        message: result.message || "Bot profile updated for this server",
-      });
+      setFeedback({ kind: "idle" });
       setSaveToast({
         variant: "success",
         message: result.message || "Bot profile updated for this server",
@@ -658,26 +652,6 @@ export function BotProfileBuilder({
             </CardContent>
           </Card>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {feedback.kind === "ok" ? (
-              <p
-                className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
-                role="status"
-              >
-                <CheckCircle2 className="size-4 shrink-0" aria-hidden />
-                {feedback.message}
-              </p>
-            ) : null}
-            {feedback.kind === "error" ? (
-              <p
-                className="flex items-center gap-1.5 text-sm text-red-700 dark:text-red-400"
-                role="alert"
-              >
-                <XCircle className="size-4 shrink-0" aria-hidden />
-                {feedback.message}
-              </p>
-            ) : null}
-          </div>
         </div>
 
         <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
