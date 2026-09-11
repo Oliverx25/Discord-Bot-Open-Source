@@ -3,6 +3,13 @@
 /** Tope de Discord para apodo de miembro. */
 export const BOT_GUILD_NICKNAME_MAX = 32;
 
+/** Idiomas actualmente disponibles para mensajes nativos del bot. */
+export type BotGuildLocale = "en" | "es";
+
+export function parseBotGuildLocale(raw: string | null | undefined): BotGuildLocale {
+  return raw === "es" ? "es" : "en";
+}
+
 export type BotPresenceStatus = "online" | "idle" | "dnd" | "invisible";
 export type BotActivityTypeName =
   | "Playing"
@@ -60,6 +67,13 @@ export interface BotGuildProfileResponse {
   globalBannerURL: string | null;
   serverBannerURL: string | null;
   hasServerAvatar: boolean;
+  settings: BotGuildSettings;
+}
+
+/** Preferencias globales del bot dentro de un servidor, nunca de un módulo. */
+export interface BotGuildSettings {
+  timezone: string;
+  locale: BotGuildLocale;
 }
 
 export interface UpdateBotGuildProfileRequest {
@@ -74,6 +88,10 @@ export interface UpdateBotGuildProfileRequest {
   clearServerAvatar?: boolean;
   serverBannerUrl?: string | null;
   clearServerBanner?: boolean;
+  /** Zona IANA predeterminada para las funciones nativas del bot. */
+  timezone?: string;
+  /** Idioma preferido para las respuestas nativas del bot. */
+  locale?: BotGuildLocale;
 }
 
 export interface UpdateBotGuildProfileResponse {
@@ -84,6 +102,7 @@ export interface UpdateBotGuildProfileResponse {
     nickname: boolean;
     serverAvatar: boolean;
     serverBanner: boolean;
+    settings: boolean;
   };
 }
 
