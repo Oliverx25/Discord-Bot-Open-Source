@@ -23,6 +23,7 @@ export const BOT_INVITE_PERMISSIONS = (
   (1n << 18n) | // USE_EXTERNAL_EMOJIS
   (1n << 20n) | // CONNECT (XP en voz + Voice Rooms)
   (1n << 24n) | // MOVE_MEMBERS (mover del hub a la sala)
+  (1n << 26n) | // CHANGE_NICKNAME (Bot Configuration)
   (1n << 28n) | // MANAGE_ROLES (autoroles, overwrite de lock)
   // MODERATE_MEMBERS (timeout)
   (1n << 40n) |
