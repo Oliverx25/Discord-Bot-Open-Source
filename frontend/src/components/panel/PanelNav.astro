@@ -1,13 +1,7 @@
 ---
-import { ChevronDown } from "lucide-react";
 import { NavItem } from "@/components/nav/NavItem";
 import { visibleDashboardNav } from "@/lib/nav";
-import {
-  isNavActive,
-  normalizePath,
-  resolveOpenCategoryId,
-  STATIC_CATEGORY_ID,
-} from "@/lib/navPath";
+import { isNavActive, normalizePath } from "@/lib/navPath";
 
 interface Props {
   currentPath: string;
@@ -15,63 +9,55 @@ interface Props {
 
 const { currentPath } = Astro.props;
 const path = normalizePath(currentPath);
-const openCategoryId = resolveOpenCategoryId(path);
 ---
 
 <nav
-  class="flex flex-1 flex-col gap-4 overflow-y-auto px-2.5 py-3"
+  id="tobot-sidebar-nav"
+  class="flex flex-1 flex-col gap-3.5 overflow-y-auto px-2.5 py-3"
   aria-label="Dashboard navigation"
 >
   {
-    visibleDashboardNav().map((category) => {
-      const Icon = category.icon;
-      const isStatic = category.id === STATIC_CATEGORY_ID;
-      const isOpen = isStatic || openCategoryId === category.id;
-      const items = category.items.map((item) => (
-        <NavItem
-          label={item.label}
-          href={item.href}
-          icon={item.icon}
-          soon={item.soon}
-          active={isNavActive(item.href, path)}
-        />
-      ));
-
-      if (isStatic) {
-        return (
-          <div class="space-y-1" data-nav-category={category.id}>
-            <div class="flex w-full items-center gap-2 px-2 py-1.5 text-muted-foreground">
-              <Icon className="size-3.5 shrink-0 text-primary/80" aria-hidden />
-              <span class="flex-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
-                {category.label}
-              </span>
-            </div>
-            <ul class="space-y-0.5">{items}</ul>
-          </div>
-        );
-      }
-
-      return (
-        <details
-          class="group space-y-1 open:[&_.nav-cat-chevron]:rotate-0"
-          data-nav-category={category.id}
-          open={isOpen}
+    visibleDashboardNav().map((category) => (
+      <section data-nav-category={category.id} aria-labelledby={`${category.id}-label`}>
+        <h2
+          id={`${category.id}-label`}
+          class="px-2.5 pb-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]"
         >
-          <summary
-            class="flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-muted-foreground hover:bg-[var(--bg-hover)] hover:text-foreground [&::-webkit-details-marker]:hidden"
-          >
-            <Icon className="size-3.5 shrink-0 text-primary/80" aria-hidden />
-            <span class="flex-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
-              {category.label}
-            </span>
-            <ChevronDown
-              className="nav-cat-chevron size-3.5 shrink-0 -rotate-90 transition-transform duration-[var(--dur-base)] ease-[var(--ease-standard)]"
-              aria-hidden
+          {category.label}
+        </h2>
+        <ul class="space-y-0.5">
+          {category.items.map((item) => (
+            <NavItem
+              label={item.label}
+              href={item.href}
+              icon={item.icon}
+              soon={item.soon}
+              active={isNavActive(item.href, path)}
             />
-          </summary>
-          <ul class="space-y-0.5">{items}</ul>
-        </details>
-      );
-    })
+          ))}
+        </ul>
+      </section>
+    ))
   }
 </nav>
+
+<script is:inline>
+  (function () {
+    var nav = document.getElementById("tobot-sidebar-nav");
+    if (!nav) return;
+    var key = "tobot.sidebar-nav-scroll";
+    try {
+      var y = sessionStorage.getItem(key);
+      if (y) nav.scrollTop = Number(y);
+    } catch (e) {}
+    nav.addEventListener(
+      "scroll",
+      function () {
+        try {
+          sessionStorage.setItem(key, String(nav.scrollTop));
+        } catch (e) {}
+      },
+      { passive: true },
+    );
+  })();
+</script>

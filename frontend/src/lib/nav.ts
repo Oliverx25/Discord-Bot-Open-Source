@@ -55,21 +55,22 @@ export interface NavItemConfig {
 export interface NavCategoryConfig {
   id: string;
   label: string;
-  /** Category icon (group header). */
+  /** Icono de grupo (home / futuros usos). El sidebar solo pinta overline. */
   icon: LucideIcon;
   /**
-   * @deprecated The sidebar accordion opens the category of the active route;
-   * `general` stays open. Ignored at runtime.
+   * @deprecated El sidebar muestra todos los grupos abiertos.
+   * Ignorado en runtime.
    */
   defaultCollapsed?: boolean;
   items: NavItemConfig[];
 }
 
 /**
- * Single source of truth for the dashboard menu.
- * `href` values mirror the category structure: each item lives at
- * `pages/dashboard/<category id>/…`. Renamed routes keep a redirect stub at
- * their previous path so old links don't break.
+ * Catálogo del panel: una entrada por módulo.
+ * Añadir un módulo = un item (y una categoría nueva si no encaja en ninguna).
+ * `href` sigue la carpeta `pages/dashboard/<id>/…`. Rutas viejas dejan redirect.
+ * El sidebar lista todo lo que no lleva `soon` — no se filtra por plan ni por
+ * “activado”: es el mapa del producto.
  */
 export const dashboardNav: NavCategoryConfig[] = [
   {
@@ -105,7 +106,7 @@ export const dashboardNav: NavCategoryConfig[] = [
   },
   {
     id: "messages",
-    label: "Messages & Announcements",
+    label: "Messages",
     icon: Megaphone,
     items: [
       {
@@ -208,7 +209,7 @@ export const dashboardNav: NavCategoryConfig[] = [
     icon: ShieldBan,
     items: [
       {
-        label: "Anti-Raid & Anti-Nuke",
+        label: "Anti-raid",
         href: "/dashboard/security/anti-raid",
         icon: ShieldBan,
         blurb: "Join floods, lockdown and anti-nuke limits.",
@@ -236,7 +237,7 @@ export const dashboardNav: NavCategoryConfig[] = [
   },
   {
     id: "community",
-    label: "Community & Engagement",
+    label: "Community",
     icon: Users,
     items: [
       {
@@ -304,7 +305,7 @@ export const dashboardNav: NavCategoryConfig[] = [
   },
   {
     id: "support",
-    label: "Support & Tickets",
+    label: "Support",
     icon: LifeBuoy,
     items: [
       {
@@ -357,6 +358,7 @@ export const dashboardNav: NavCategoryConfig[] = [
 
 export const brandIcon = Hammer;
 
+/** Items listos. `soon` no entra al sidebar; el plan o el switch del módulo no filtran. */
 export function visibleDashboardNav(
   nav: NavCategoryConfig[] = dashboardNav,
 ): NavCategoryConfig[] {
