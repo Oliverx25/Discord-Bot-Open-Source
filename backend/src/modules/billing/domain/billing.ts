@@ -6,15 +6,10 @@ import {
   type PaidPlanTier,
   type PlanTier,
   type SubscriptionStatus,
-  seatsAtCapacity,
-  seatsMaxForTier,
 } from "@adobos/shared";
-import { desc, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
-  assertSeatsAvailable,
-  clearGuildEntitlement,
-  EntitlementError,
   getGuildEntitlementRow,
   getGuildTier,
   listGuildIdsForSubscription,
@@ -177,15 +172,16 @@ export async function getSubscriptionById(
   );
 }
 
-export async function getLatestSubscriptionForUser(
-  userId: string,
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string }).code === "23505";
+}
+
+async function coveringSubscriptionForGuild(
+  guildId: string,
 ): Promise<SubscriptionRow | undefined> {
-  const rows = await getDb()
-    .select()
-    .from(subscriptions)
-    .where(eq(subscriptions.userId, userId))
-    .orderBy(desc(subscriptions.updatedAt));
-  return rows.find((row) => isPaidSubscriptionStatus(row.status)) ?? rows[0];
+  const entitlement = await getGuildEntitlementRow(guildId);
+  if (!entitlement?.subscriptionId) return undefined;
+  return getSubscriptionById(entitlement.subscriptionId);
 }
 
 async function upsertSubscriptionRow(input: {
@@ -243,65 +239,61 @@ async function upsertSubscriptionRow(input: {
   return created;
 }
 
+/** Bind 1:1 webhook: esta sub Stripe cubre este guild, o no cubre ninguno. */
 export async function assignGuildToSubscription(input: {
   guildId: string;
   subscriptionId: number;
   tier: PlanTier;
   userId: string;
 }): Promise<void> {
-  // BILL-01 (asientos): sin esto, dos guilds distintos compitiendo por el
-  // último asiento de la MISMA suscripción pueden pasar ambos el check de
-  // `assertSeatsAvailable` (SELECT) antes de que ninguno haga el upsert
-  // (INSERT) — no hay unique constraint que lo detecte, cada fila tiene un
-  // guildId distinto. El advisory lock serializa por `subscriptionId`: la
-  // segunda llamada espera a que la primera transacción entera termine antes
-  // de poder siquiera leer el conteo de asientos.
-  await getDb().transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(${input.subscriptionId})`,
-    );
-
-    const existing = await getGuildEntitlementRow(input.guildId);
-    if (
-      existing?.subscriptionId &&
-      existing.subscriptionId !== input.subscriptionId
-    ) {
-      const other = await getSubscriptionById(existing.subscriptionId);
-      if (other && isPaidSubscriptionStatus(other.status)) {
-        throw new HttpError(
-          "This server is already covered by another subscription.",
-          409,
-          "GUILD_ALREADY_COVERED",
-        );
-      }
+  const existing = await getGuildEntitlementRow(input.guildId);
+  if (
+    existing?.subscriptionId &&
+    existing.subscriptionId !== input.subscriptionId
+  ) {
+    const other = await getSubscriptionById(existing.subscriptionId);
+    if (other && isPaidSubscriptionStatus(other.status)) {
+      throw new HttpError(
+        "This server is already covered by another subscription.",
+        409,
+        "GUILD_ALREADY_COVERED",
+      );
     }
+  }
 
-    const paidTier =
-      isPlanTier(input.tier) && input.tier !== "free" ? input.tier : "pro";
-    await assertSeatsAvailable(input.subscriptionId, paidTier, input.guildId);
+  const bound = await listGuildIdsForSubscription(input.subscriptionId);
+  const otherGuild = bound.find((id) => id !== input.guildId);
+  if (otherGuild) {
+    logger.warn(
+      {
+        guildId: input.guildId,
+        boundGuildId: otherGuild,
+        subscriptionId: input.subscriptionId,
+        userId: input.userId,
+      },
+      "Subscription already covers another server; not rebinding",
+    );
+    return;
+  }
+
+  const paidTier =
+    isPlanTier(input.tier) && input.tier !== "free" ? input.tier : "pro";
+  try {
     await upsertGuildEntitlement({
       guildId: input.guildId,
       tier: paidTier,
       subscriptionId: input.subscriptionId,
     });
-  });
-}
-
-export async function unassignGuildFromUser(
-  guildId: string,
-  userId: string,
-): Promise<void> {
-  const existing = await getGuildEntitlementRow(guildId);
-  if (!existing?.subscriptionId) return;
-  const sub = await getSubscriptionById(existing.subscriptionId);
-  if (!sub || sub.userId !== userId) {
-    throw new HttpError(
-      "This server is not covered by your subscription.",
-      403,
-      "GUILD_NOT_OWNED",
-    );
+  } catch (error: unknown) {
+    if (isUniqueViolation(error)) {
+      logger.warn(
+        { guildId: input.guildId, subscriptionId: input.subscriptionId },
+        "Unique subscription_id race; leaving existing bind",
+      );
+      return;
+    }
+    throw error;
   }
-  await clearGuildEntitlement(guildId);
 }
 
 async function resolveUserIdForStripe(input: {
@@ -378,16 +370,6 @@ export async function applyStripeSubscription(
       });
     } catch (error: unknown) {
       if (
-        error instanceof EntitlementError &&
-        error.code === "SEATS_EXCEEDED"
-      ) {
-        logger.warn(
-          { guildId, subscriptionId: row.id },
-          "No seats to assign the checkout server",
-        );
-        return row;
-      }
-      if (
         error instanceof HttpError &&
         error.code === "GUILD_ALREADY_COVERED"
       ) {
@@ -449,31 +431,31 @@ export async function getBillingStatus(input: {
   guildId: string;
 }) {
   const guildTier = await getGuildTier(input.guildId);
-  const entitlement = await getGuildEntitlementRow(input.guildId);
-  const sub = await getLatestSubscriptionForUser(input.userId);
+  const covering = await coveringSubscriptionForGuild(input.guildId);
   const customerId = await getBillingCustomer(input.userId);
-  const coveredByUser = Boolean(sub && entitlement?.subscriptionId === sub.id);
+  const paidCovering =
+    covering && isPaidSubscriptionStatus(covering.status) ? covering : null;
+  const coveredByUser = Boolean(
+    paidCovering && paidCovering.userId === input.userId,
+  );
   const coveredByOther = Boolean(
-    entitlement?.subscriptionId &&
-      (!sub || entitlement.subscriptionId !== sub.id),
+    paidCovering && paidCovering.userId !== input.userId,
   );
 
-  let subscriptionView = null;
-  if (sub && isSubscriptionStatus(sub.status) && isPlanTier(sub.tier)) {
-    const coveredGuildIds = await listGuildIdsForSubscription(sub.id);
-    const seatsMax = seatsMaxForTier(sub.tier);
-    subscriptionView = {
-      id: sub.id,
-      tier: sub.tier,
-      status: sub.status,
-      currentPeriodEnd: sub.currentPeriodEnd?.toISOString() ?? null,
-      cancelAt: sub.cancelAt?.toISOString() ?? null,
-      seatsUsed: coveredGuildIds.length,
-      seatsMax,
-      coveredGuildIds,
-      owner: sub.userId === input.userId,
-    };
-  }
+  const subscriptionView =
+    coveredByUser &&
+    covering &&
+    isSubscriptionStatus(covering.status) &&
+    isPlanTier(covering.tier)
+      ? {
+          id: covering.id,
+          tier: covering.tier,
+          status: covering.status,
+          currentPeriodEnd: covering.currentPeriodEnd?.toISOString() ?? null,
+          cancelAt: covering.cancelAt?.toISOString() ?? null,
+          owner: true,
+        }
+      : null;
 
   return {
     configured: stripeReady(),
@@ -489,35 +471,29 @@ export async function getBillingStatus(input: {
   };
 }
 
-async function assertGuildFreeForCheckout(
+async function assertGuildAvailableForCheckout(
   userId: string,
   guildId: string,
-  tier: PaidPlanTier,
 ): Promise<void> {
-  const entitlement = await getGuildEntitlementRow(guildId);
-  if (entitlement?.subscriptionId) {
-    const covering = await getSubscriptionById(entitlement.subscriptionId);
-    if (
-      covering &&
-      guildCoveredByOtherPayer(userId, {
-        userId: covering.userId,
-        status: covering.status,
-      })
-    ) {
-      throw new HttpError(
-        "This server is already covered by another subscription.",
-        409,
-        "GUILD_ALREADY_COVERED",
-      );
-    }
-  }
-  if (seatsAtCapacity(0, seatsMaxForTier(tier), false)) {
+  const covering = await coveringSubscriptionForGuild(guildId);
+  if (!covering || !isPaidSubscriptionStatus(covering.status)) return;
+  if (
+    guildCoveredByOtherPayer(userId, {
+      userId: covering.userId,
+      status: covering.status,
+    })
+  ) {
     throw new HttpError(
-      "This plan has no seats to cover a server.",
+      "This server is already covered by another subscription.",
       409,
-      "SEATS_EXCEEDED",
+      "GUILD_ALREADY_COVERED",
     );
   }
+  throw new HttpError(
+    "This server already has an active subscription. Use the portal to change plans.",
+    409,
+    "ALREADY_SUBSCRIBED",
+  );
 }
 
 export async function createCheckoutSession(input: {
@@ -527,16 +503,7 @@ export async function createCheckoutSession(input: {
 }): Promise<{ url: string }> {
   const stripe = requireStripe();
   const priceId = priceIdForTier(input.tier);
-  const existing = await getLatestSubscriptionForUser(input.userId);
-  if (existing && isPaidSubscriptionStatus(existing.status)) {
-    throw new HttpError(
-      "You already have an active subscription. Use the portal to change plans.",
-      409,
-      "ALREADY_SUBSCRIBED",
-    );
-  }
-
-  await assertGuildFreeForCheckout(input.userId, input.guildId, input.tier);
+  await assertGuildAvailableForCheckout(input.userId, input.guildId);
 
   const customerId = await getOrCreateStripeCustomer(input.userId);
 
@@ -585,30 +552,10 @@ export async function createPortalSession(input: {
       "STRIPE_CUSTOMER_MISSING",
     );
   }
+
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     return_url: `${publicAppUrl()}/dashboard/general/billing`,
   });
   return { url: session.url };
-}
-
-export async function assignCurrentGuild(input: {
-  userId: string;
-  guildId: string;
-}): Promise<void> {
-  const sub = await getLatestSubscriptionForUser(input.userId);
-  if (!sub || !isPaidSubscriptionStatus(sub.status) || !isPlanTier(sub.tier)) {
-    throw new HttpError(
-      "You don't have an active subscription.",
-      400,
-      "NO_ACTIVE_SUBSCRIPTION",
-    );
-  }
-  const tier = paidTierOrPro(sub.tier);
-  await assignGuildToSubscription({
-    guildId: input.guildId,
-    subscriptionId: sub.id,
-    tier,
-    userId: input.userId,
-  });
 }

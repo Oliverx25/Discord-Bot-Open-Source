@@ -1,4 +1,4 @@
-import { guildCoveredByOtherPayer, seatsAtCapacity } from "@adobos/shared";
+import { guildCoveredByOtherPayer } from "@adobos/shared";
 import { describe, expect, it } from "vitest";
 import {
   invoiceSubscriptionId,
@@ -121,11 +121,5 @@ describe("checkout 409", () => {
       }),
     ).toBe(false);
     expect(guildCoveredByOtherPayer("buyer", null)).toBe(false);
-  });
-
-  it("seats: 3/3 blocks a new one; unlimited does not", () => {
-    expect(seatsAtCapacity(3, 3, false)).toBe(true);
-    expect(seatsAtCapacity(3, 3, true)).toBe(false);
-    expect(seatsAtCapacity(5, -1, false)).toBe(false);
   });
 });

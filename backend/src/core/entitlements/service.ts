@@ -118,16 +118,6 @@ export async function clearGuildEntitlement(guildId: string): Promise<void> {
   invalidateGuildEntitlement(guildId);
 }
 
-export async function countSubscriptionSeats(
-  subscriptionId: number,
-): Promise<number> {
-  const rows = await getDb()
-    .select({ guildId: guildEntitlements.guildId })
-    .from(guildEntitlements)
-    .where(eq(guildEntitlements.subscriptionId, subscriptionId));
-  return rows.length;
-}
-
 export async function getGuildEntitlementRow(guildId: string) {
   return one(
     getDb()
@@ -159,27 +149,6 @@ export async function setTierForSubscriptionGuilds(
     .set({ tier })
     .where(eq(guildEntitlements.subscriptionId, subscriptionId));
   for (const id of ids) invalidateGuildEntitlement(id);
-}
-
-/** Plazas contra el plan de pago de la suscripción, no el tier actual del guild. */
-export async function assertSeatsAvailable(
-  subscriptionId: number,
-  paidTier: PlanTier,
-  guildId: string,
-): Promise<void> {
-  const max = tierLimit(paidTier, "coveredGuilds");
-  if (isUnlimited(max)) return;
-  const ids = await listGuildIdsForSubscription(subscriptionId);
-  if (ids.includes(guildId)) return;
-  if (ids.length >= max) {
-    throw new EntitlementError(
-      limitExceededMessage(paidTier, "coveredGuilds", max),
-      403,
-      "SEATS_EXCEEDED",
-      undefined,
-      "coveredGuilds",
-    );
-  }
 }
 
 export function requireFeature(feature: FeatureKey): RequestHandler {
@@ -237,7 +206,7 @@ export async function assertWithinLimit(
     throw new EntitlementError(
       limitExceededMessage(tier, key, max),
       403,
-      key === "coveredGuilds" ? "SEATS_EXCEEDED" : "LIMIT_EXCEEDED",
+      "LIMIT_EXCEEDED",
       undefined,
       key,
     );

@@ -169,6 +169,20 @@
       "when": 1788582472967,
       "tag": "0023_flimsy_deadpool",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789113362140,
+      "tag": "0024_detach_extra_guild_seats",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789113381441,
+      "tag": "0025_guild_entitlement_subscription_unique",
+      "breakpoints": true
     }
   ]
 }

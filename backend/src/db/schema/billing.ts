@@ -1,4 +1,11 @@
-import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
 
 /**
  * Usuario Discord ↔ customer de Stripe. El portal y checkout reutilizan este id.
@@ -19,7 +26,7 @@ export const billingCustomers = pgTable("billing_customers", {
 });
 
 /**
- * Suscripción de un usuario Discord. Stripe (webhook) rellena status/periodo.
+ * Suscripción Stripe de un usuario. 1:1 con un guild vía `guild_entitlements`.
  * `can(guildId, feature)` no consulta esta tabla: lee `guild_entitlements`.
  */
 export const subscriptions = pgTable(
@@ -52,7 +59,8 @@ export const subscriptions = pgTable(
 
 /**
  * Plan efectivo por servidor. Fuente de verdad de `can()` / `limit()`.
- * Sin fila = free. Stripe (0.12) actualiza esta tabla, nunca se consulta en caliente.
+ * Sin fila = free. Unique en `subscription_id`: una sub Stripe cubre un guild.
+ * Varios NULL (guilds free) son legales en Postgres.
  */
 export const guildEntitlements = pgTable(
   "guild_entitlements",
@@ -67,7 +75,9 @@ export const guildEntitlements = pgTable(
       .$defaultFn(() => new Date()),
   },
   (table) => [
-    index("idx_guild_entitlements_subscription").on(table.subscriptionId),
+    unique("guild_entitlements_subscription_id_unique").on(
+      table.subscriptionId,
+    ),
   ],
 );
 

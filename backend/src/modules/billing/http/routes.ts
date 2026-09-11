@@ -3,11 +3,9 @@ import { guildIdOf } from "#core/http/guildContext.js";
 import { HttpError } from "#core/http/httpError.js";
 import { defineRoute } from "#core/http/validate.js";
 import {
-  assignCurrentGuild,
   createCheckoutSession,
   createPortalSession,
   getBillingStatus,
-  unassignGuildFromUser,
 } from "../domain/billing.js";
 import { billingCheckoutSchema } from "./schema.js";
 
@@ -51,25 +49,6 @@ export function billingRoutes(): Router {
     "/portal",
     defineRoute({}, async (req, res) => {
       res.json(await createPortalSession({ userId: userIdOf(req) }));
-    }),
-  );
-
-  router.post(
-    "/assign",
-    defineRoute({}, async (req, res) => {
-      await assignCurrentGuild({
-        userId: userIdOf(req),
-        guildId: guildIdOf(req),
-      });
-      res.json({ ok: true });
-    }),
-  );
-
-  router.post(
-    "/unassign",
-    defineRoute({}, async (req, res) => {
-      await unassignGuildFromUser(guildIdOf(req), userIdOf(req));
-      res.json({ ok: true });
     }),
   );
 
