@@ -65,7 +65,7 @@ export function PanelGuildSwitcher({
       onOpenChange={setOpen}
       portalled
       rootClassName="relative max-w-full"
-      className="w-72 rounded-md border-[var(--border-default)] bg-[var(--bg-raised)] p-1 shadow-[var(--shadow-2)]"
+      className="w-72 rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--bg-raised)] p-1 shadow-[var(--shadow-2)]"
       trigger={
         <Button
           type="button"

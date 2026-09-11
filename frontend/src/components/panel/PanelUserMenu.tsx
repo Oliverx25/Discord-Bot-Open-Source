@@ -13,7 +13,7 @@ const itemClass =
   "flex w-full items-center rounded-sm px-[9px] py-[7px] text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-foreground";
 
 const menuClass =
-  "w-[200px] rounded-md border border-[var(--border-default)] bg-[var(--bg-raised)] p-1 text-[var(--text-secondary)] shadow-[var(--shadow-2)]";
+  "w-[200px] rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--bg-raised)] p-1 text-[var(--text-secondary)] shadow-[var(--shadow-2)]";
 
 function AccountMenuItems({
   onClose,

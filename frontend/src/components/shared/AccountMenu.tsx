@@ -38,7 +38,7 @@ export function AccountMenu({
       portalled
       align="end"
       contentWidth={200}
-      className="w-[200px] rounded-md border border-[var(--border-default)] bg-[var(--bg-raised)] p-1 text-[var(--text-secondary)] shadow-[var(--shadow-2)]"
+      className="w-[200px] rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--bg-raised)] p-1 text-[var(--text-secondary)] shadow-[var(--shadow-2)]"
       trigger={trigger}
     >
       <div className="flex flex-col" role="menu">
