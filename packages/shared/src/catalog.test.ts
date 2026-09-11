@@ -11,9 +11,7 @@ import {
   MODULE_FEATURE,
   MODULE_IDS,
   normalizeScheduledTimezone,
-  seatsMaxForTier,
   tierHasFeature,
-  UNLIMITED,
   xpToAdvanceFromLevel,
 } from "./index.js";
 
@@ -57,7 +55,7 @@ describe("kernel error codes", () => {
   });
 });
 
-describe("entitlements and seats", () => {
+describe("entitlements", () => {
   it("free includes voice-rooms and no branding", () => {
     expect(tierHasFeature("free", "voice-rooms")).toBe(true);
     expect(tierHasFeature("free", "reminders")).toBe(true);
@@ -71,12 +69,6 @@ describe("entitlements and seats", () => {
     expect(tierHasFeature("pro", "antinuke")).toBe(true);
     expect(tierHasFeature("free", "branding")).toBe(false);
     expect(tierHasFeature("pro", "branding")).toBe(true);
-  });
-
-  it("maximum seats per plan", () => {
-    expect(seatsMaxForTier("free")).toBe(3);
-    expect(seatsMaxForTier("pro")).toBe(3);
-    expect(seatsMaxForTier("business")).toBe(UNLIMITED);
   });
 });
 

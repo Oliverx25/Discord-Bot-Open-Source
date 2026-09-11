@@ -53,8 +53,7 @@ export type LimitKey =
   | "scheduledMessages"
   | "customCommands"
   | "autoReplies"
-  | "storageMb"
-  | "coveredGuilds";
+  | "storageMb";
 
 export interface TierLimits {
   logRetentionDays: number;
@@ -63,7 +62,6 @@ export interface TierLimits {
   customCommands: number;
   autoReplies: number;
   storageMb: number;
-  coveredGuilds: number;
 }
 
 export interface TierDefinition {
@@ -124,7 +122,6 @@ export const TIER_CATALOG: Record<PlanTier, TierDefinition> = {
       customCommands: 25,
       autoReplies: 25,
       storageMb: 100,
-      coveredGuilds: 3,
     },
   },
   pro: {
@@ -136,7 +133,6 @@ export const TIER_CATALOG: Record<PlanTier, TierDefinition> = {
       customCommands: 100,
       autoReplies: 500,
       storageMb: 2048,
-      coveredGuilds: 3,
     },
   },
   business: {
@@ -148,7 +144,6 @@ export const TIER_CATALOG: Record<PlanTier, TierDefinition> = {
       customCommands: 100,
       autoReplies: UNLIMITED,
       storageMb: 10240,
-      coveredGuilds: UNLIMITED,
     },
   },
 };
@@ -219,9 +214,6 @@ export function limitExceededMessage(
   }
   if (key === "logRetentionDays") {
     return `The ${current} plan keeps logs for up to ${max} days.`;
-  }
-  if (key === "coveredGuilds") {
-    return `The ${current} plan covers at most ${max} servers.`;
   }
   if (key === "streamAlerts") {
     return `You've reached the ${current} plan limit of ${max} Stream Alerts.`;

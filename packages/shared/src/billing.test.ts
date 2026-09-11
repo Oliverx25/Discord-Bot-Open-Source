@@ -4,8 +4,6 @@ import {
   guildCoveredByOtherPayer,
   isPaidSubscriptionStatus,
   isSubscriptionStatus,
-  seatsAtCapacity,
-  seatsOverLimit,
 } from "./billing.js";
 
 describe("precios Billing", () => {
@@ -25,18 +23,17 @@ describe("paused sigue pagado", () => {
   });
 });
 
-describe("plazas", () => {
-  it("capacity and overage after downgrade", () => {
-    expect(seatsAtCapacity(3, 3, false)).toBe(true);
-    expect(seatsAtCapacity(2, 3, false)).toBe(false);
-    expect(seatsOverLimit(5, 3)).toBe(true);
-    expect(seatsOverLimit(3, 3)).toBe(false);
-    expect(seatsOverLimit(10, -1)).toBe(false);
-  });
-
+describe("otro pagador", () => {
   it("409 if another payer covers the guild", () => {
     expect(
       guildCoveredByOtherPayer("u1", { userId: "u2", status: "paused" }),
     ).toBe(true);
+    expect(
+      guildCoveredByOtherPayer("u1", { userId: "u1", status: "active" }),
+    ).toBe(false);
+    expect(
+      guildCoveredByOtherPayer("u1", { userId: "u2", status: "canceled" }),
+    ).toBe(false);
+    expect(guildCoveredByOtherPayer("u1", null)).toBe(false);
   });
 });

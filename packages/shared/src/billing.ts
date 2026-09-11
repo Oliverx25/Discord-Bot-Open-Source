@@ -1,6 +1,6 @@
-/** Tipos de facturación (Fase 4 / 0.12). Stripe rellena filas; `can()` lee entitlements. */
+/** Tipos de facturación. Stripe rellena filas; `can()` lee entitlements. */
 
-import { isUnlimited, type PlanTier, tierLimit } from "./entitlements.js";
+import type { PlanTier } from "./entitlements.js";
 
 export type PaidPlanTier = "pro" | "business";
 
@@ -48,15 +48,13 @@ export const BILLING_PLAN_PRICES: Record<PaidPlanTier, BillingPlanPrice> = {
   business: { monthlyEur: 14.99, label: "14,99€/mes" },
 };
 
+/** Suscripción Stripe que cubre este servidor, si el pagador es el usuario actual. */
 export interface BillingSubscriptionView {
   id: number;
   tier: PlanTier;
   status: SubscriptionStatus;
   currentPeriodEnd: string | null;
   cancelAt: string | null;
-  seatsUsed: number;
-  seatsMax: number;
-  coveredGuildIds: string[];
   owner: boolean;
 }
 
@@ -104,31 +102,6 @@ export function isPaidPlanTier(value: unknown): value is PaidPlanTier {
 
 export function isPaidSubscriptionStatus(status: string): boolean {
   return (PAID_SUBSCRIPTION_STATUSES as readonly string[]).includes(status);
-}
-
-export function seatsMaxForTier(tier: PlanTier): number {
-  return tierLimit(tier, "coveredGuilds");
-}
-
-export function formatSeats(used: number, max: number): string {
-  if (isUnlimited(max)) return `${used} / ilimitados`;
-  return `${used} / ${max}`;
-}
-
-/** True si asignar un guild nuevo superaría el tope. Ilimitado o ya cubierto = no. */
-export function seatsAtCapacity(
-  used: number,
-  max: number,
-  guildAlreadyCovered: boolean,
-): boolean {
-  if (guildAlreadyCovered) return false;
-  if (isUnlimited(max)) return false;
-  return used >= max;
-}
-
-export function seatsOverLimit(used: number, max: number): boolean {
-  if (isUnlimited(max)) return false;
-  return used > max;
 }
 
 /** Otra suscripción de pago cubre este guild; el comprador no es el dueño. */
