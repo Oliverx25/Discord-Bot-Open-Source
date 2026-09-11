@@ -221,6 +221,12 @@
   --radius-4xl: 10px;
 }
 
+/* Billing usa texto auxiliar en superficies oscuras; el muted global queda
+   corto para AA en texto normal, así que se eleva solo en esta página. */
+.billing-page .text-muted-foreground {
+  color: var(--text-secondary);
+}
+
 @layer base {
   * {
     @apply border-border;

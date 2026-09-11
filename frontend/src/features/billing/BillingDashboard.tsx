@@ -15,7 +15,7 @@ import {
   type PaidPlanTier,
   type PlanTier,
 } from "@adobos/shared";
-import { Loader2, Rocket } from "lucide-react";
+import { ExternalLink, Loader2, Rocket, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,9 +30,7 @@ import { fetchBilling, startBillingPortal, startCheckout } from "@/lib/api";
 import { queryKeys } from "@/lib/query/keys";
 import { useGuildQuery } from "@/lib/query/useGuildQuery";
 
-type Feedback =
-  | { kind: "idle" }
-  | { kind: "error"; message: string };
+type Feedback = { kind: "idle" } | { kind: "error"; message: string };
 
 type PlanRow = {
   feature: string;
@@ -42,12 +40,20 @@ type PlanRow = {
 
 const FEATURE_ROWS: Array<{ feature: string; key: FeatureKey; limit: string }> =
   [
-    { feature: "Bot branding", key: "branding", limit: "Custom name and avatar" },
+    {
+      feature: "Bot branding",
+      key: "branding",
+      limit: "Custom name and avatar",
+    },
     { feature: "Anti-nuke", key: "antinuke", limit: "Raid rollback" },
     { feature: "Backups", key: "backups", limit: "Server snapshots" },
     { feature: "Analytics", key: "analytics", limit: "Exports included" },
     { feature: "Public API", key: "public-api", limit: "REST access" },
-    { feature: "Outbound webhooks", key: "outbound-webhooks", limit: "Fan-out" },
+    {
+      feature: "Outbound webhooks",
+      key: "outbound-webhooks",
+      limit: "Fan-out",
+    },
     { feature: "Staff roles", key: "staff-roles", limit: "Panel permissions" },
   ];
 
@@ -126,13 +132,7 @@ function badgeTone(tier: PlanTier): "free" | "pro" {
   return tier === "free" ? "free" : "pro";
 }
 
-function Stat({
-  value,
-  label,
-}: {
-  value: string;
-  label: string;
-}) {
+function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="min-w-0">
       <p className="font-mono text-xl font-semibold tracking-tight sm:text-2xl">
@@ -140,6 +140,55 @@ function Stat({
       </p>
       <p className="mt-1 text-xs text-muted-foreground">{label}</p>
     </div>
+  );
+}
+
+function BillingFooter() {
+  return (
+    <footer className="border-t border-border/70 pt-5 text-xs">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <ShieldCheck
+            className="mt-0.5 size-4 shrink-0 text-primary"
+            strokeWidth={1.75}
+            aria-hidden
+          />
+          <div className="min-w-0">
+            <p className="font-medium text-foreground">
+              Payments processed securely by Stripe.
+            </p>
+            <p className="mt-1 max-w-[52ch] leading-relaxed text-[var(--text-secondary)]">
+              Card details stay with Stripe. Manage, update, or cancel your
+              subscription from the Stripe customer portal.
+            </p>
+          </div>
+        </div>
+
+        <nav
+          aria-label="Billing legal resources"
+          className="flex shrink-0 flex-wrap gap-x-4 gap-y-2 font-medium"
+        >
+          <a
+            href="https://stripe.com/privacy"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-6 items-center gap-1 text-[var(--text-secondary)] underline-offset-4 hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          >
+            Stripe privacy
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
+          <a
+            href="https://stripe.com/legal/consumer"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-6 items-center gap-1 text-[var(--text-secondary)] underline-offset-4 hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          >
+            Stripe terms
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
+        </nav>
+      </div>
+    </footer>
   );
 }
 
@@ -219,7 +268,9 @@ export function BillingDashboard({
       setFeedback({
         kind: "error",
         message:
-          error instanceof Error ? error.message : "Couldn't start the payment.",
+          error instanceof Error
+            ? error.message
+            : "Couldn't start the payment.",
       });
       setBusy(null);
     }
@@ -235,9 +286,7 @@ export function BillingDashboard({
       setFeedback({
         kind: "error",
         message:
-          error instanceof Error
-            ? error.message
-            : "Couldn't open the portal.",
+          error instanceof Error ? error.message : "Couldn't open the portal.",
       });
       setBusy(null);
     }
@@ -263,8 +312,7 @@ export function BillingDashboard({
     !coveredByOther;
   const canPortal = Boolean(data?.configured && data.hasCustomer);
   const serverLabel = guildName?.trim() || "this server";
-  const activating =
-    checkoutBanner === "success" && !data?.guild.coveredByUser;
+  const activating = checkoutBanner === "success" && !data?.guild.coveredByUser;
   const pastDue = sub?.status === "past_due";
   const rows = rowsForTier(guildTier);
   const priceLabel = isPaidPlanTier(guildTier)
@@ -282,10 +330,10 @@ export function BillingDashboard({
       : "Next charge";
   const invoiceDateValue = coveredByOther
     ? "Other account"
-    : invoiceDate ?? "None";
+    : (invoiceDate ?? "None");
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="billing-page flex flex-col gap-8">
       <header className="flex flex-col gap-2">
         <h2 className="font-display text-3xl font-extrabold tracking-tight">
           Billing
@@ -429,7 +477,7 @@ export function BillingDashboard({
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Feature
+                  Module
                 </th>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   On this plan
@@ -466,6 +514,7 @@ export function BillingDashboard({
           </table>
         </div>
       </section>
+      <BillingFooter />
       <ToastBanner
         message={toast?.message ?? null}
         variant={toast?.variant ?? "info"}
