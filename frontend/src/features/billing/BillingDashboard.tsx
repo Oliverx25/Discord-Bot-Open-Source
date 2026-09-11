@@ -15,7 +15,13 @@ import {
   type PaidPlanTier,
   type PlanTier,
 } from "@adobos/shared";
-import { ExternalLink, Loader2, Rocket, ShieldCheck } from "lucide-react";
+import {
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  Rocket,
+  ShieldCheck,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -143,10 +149,81 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
+function BillingSkeleton() {
+  const block = (className: string) => (
+    <div
+      className={`motion-safe:animate-pulse rounded-sm bg-muted/70 ${className}`}
+      aria-hidden="true"
+    />
+  );
+
+  return (
+    <div
+      className="billing-page flex flex-col gap-8"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading billing"
+    >
+      <span className="sr-only">Loading billing…</span>
+      <header className="space-y-3">
+        {block("h-3 w-28")}
+        {block("h-9 w-48")}
+        {block("h-4 w-full max-w-[34rem]")}
+        {block("h-4 w-3/4 max-w-[26rem]")}
+      </header>
+
+      <section className="flex flex-col gap-3">
+        {block("h-5 w-24")}
+        <div className="rounded-lg border border-border/70 bg-card">
+          <div className="p-5">
+            <div className="flex items-start gap-3">
+              {block("size-9 rounded-md")}
+              <div className="flex-1 space-y-2">
+                {block("h-5 w-32")}
+                {block("h-4 w-full max-w-[22rem]")}
+              </div>
+            </div>
+            <div className="mt-6 space-y-3">
+              {block("h-6 w-20")}
+              {block("h-10 w-32")}
+              {block("h-4 w-24")}
+            </div>
+            <div className="mt-6 flex justify-end">
+              {block("h-10 w-32")}
+            </div>
+          </div>
+          <div className="border-t border-border/70 p-5">
+            <div className="grid grid-cols-2 gap-6">
+              {block("h-10 w-24")}
+              {block("h-10 w-28")}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        {block("h-5 w-44")}
+        {block("h-4 w-full max-w-[32rem]")}
+        <div className="overflow-hidden rounded-lg border border-border bg-card p-5">
+          <div className="space-y-4">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="grid grid-cols-3 gap-4">
+                {block("h-4 w-4/5")}
+                {block("h-4 w-3/5")}
+                {block("h-4 w-2/5")}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function BillingFooter() {
   return (
-    <footer className="border-t border-border/70 pt-5 text-xs">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <footer className="flex flex-col rounded-lg border border-border/70 bg-card/45 p-5 text-xs">
+      <div className="flex justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2.5">
           <ShieldCheck
             className="mt-0.5 size-4 shrink-0 text-primary"
@@ -163,10 +240,9 @@ function BillingFooter() {
             </p>
           </div>
         </div>
-
         <nav
           aria-label="Billing legal resources"
-          className="flex shrink-0 flex-wrap gap-x-4 gap-y-2 font-medium"
+          className="flex flex-wrap justify-end gap-x-4 gap-y-2 font-medium mt-auto"
         >
           <a
             href="https://stripe.com/privacy"
@@ -265,12 +341,10 @@ export function BillingDashboard({
       const { url } = await startCheckout(tier);
       window.location.assign(url);
     } catch (error: unknown) {
-      setFeedback({
-        kind: "error",
+      setToast({
+        variant: "error",
         message:
-          error instanceof Error
-            ? error.message
-            : "Couldn't start the payment.",
+          error instanceof Error ? error.message : "Couldn't start the payment.",
       });
       setBusy(null);
     }
@@ -283,8 +357,8 @@ export function BillingDashboard({
       const { url } = await startBillingPortal();
       window.location.assign(url);
     } catch (error: unknown) {
-      setFeedback({
-        kind: "error",
+      setToast({
+        variant: "error",
         message:
           error instanceof Error ? error.message : "Couldn't open the portal.",
       });
@@ -293,12 +367,7 @@ export function BillingDashboard({
   }
 
   if (query.isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" aria-hidden />
-        Loading billing…
-      </div>
-    );
+    return <BillingSkeleton />;
   }
 
   const data = query.data;
@@ -334,14 +403,23 @@ export function BillingDashboard({
 
   return (
     <div className="billing-page flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h2 className="font-display text-3xl font-extrabold tracking-tight">
-          Billing
-        </h2>
-        <p className="max-w-[54ch] text-sm text-muted-foreground">
-          Plan, invoices and limits for {serverLabel}. Receipts and cards live
-          in Stripe.
-        </p>
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
+            General / Billing
+          </p>
+          <h2 className="mt-2 font-display text-3xl font-extrabold tracking-tight">
+            Plan & Billing
+          </h2>
+          <p className="mt-2 max-w-[54ch] text-sm leading-relaxed text-muted-foreground">
+            Plan, invoices and limits for {serverLabel}. Receipts and cards live
+            in Stripe.
+          </p>
+        </div>
+        <div className="hidden shrink-0 items-center gap-2 rounded-md border border-border/70 bg-card/50 px-3 py-2 text-xs text-muted-foreground lg:flex">
+          <ShieldCheck className="size-4 text-primary" aria-hidden />
+          Secure payments by Stripe
+        </div>
       </header>
 
       {activating && (
@@ -363,99 +441,119 @@ export function BillingDashboard({
 
       <section className="flex flex-col gap-3">
         <h3 className="font-display text-base font-semibold">Overview</h3>
-        <div className="grid items-stretch gap-4 md:grid-cols-2">
+        <div>
           <Card>
             <CardHeader>
-              <CardTitle>Current plan</CardTitle>
-              <CardDescription>
-                {coveredByOther
-                  ? "Another account already pays for this community."
-                  : "One Stripe subscription, this community only."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex min-w-0 flex-col gap-2">
-                <Badge tone={badgeTone(guildTier)} className="w-fit">
-                  {PLAN_TIER_LABEL[guildTier]}
-                </Badge>
-                <p className="font-mono text-3xl font-semibold tracking-tight">
-                  {priceLabel ? (
-                    <>
-                      {priceLabel}
-                      <span className="ml-1 text-xs font-normal text-muted-foreground">
-                        /month
-                      </span>
-                    </>
-                  ) : (
-                    "Free"
-                  )}
-                </p>
-                {sub ? (
-                  <p className="font-mono text-[11px] text-muted-foreground">
-                    {SUBSCRIPTION_STATUS_LABEL[sub.status]}
-                  </p>
-                ) : null}
-                {data && !data.configured ? (
-                  <p className="max-w-[36ch] text-sm text-muted-foreground">
-                    Stripe isn't configured in this environment. Checkout
-                    activates with <code>STRIPE_SECRET_KEY</code> and the price
-                    ids.
-                  </p>
-                ) : null}
+              <div className="flex items-start gap-3">
+                <div className="grid size-9 shrink-0 place-items-center rounded-md border border-primary/30 bg-primary/5 text-primary">
+                  <CreditCard className="size-4" aria-hidden />
+                </div>
+                <div className="space-y-1.5">
+                  <CardTitle>Current plan</CardTitle>
+                  <CardDescription>
+                    {coveredByOther
+                      ? "Another account already pays for this community."
+                      : "One Stripe subscription, this community only."}
+                  </CardDescription>
+                </div>
               </div>
-
-              {coveredByOther ? null : paidHere ? (
-                <Button
-                  type="button"
-                  disabled={Boolean(busy) || !canPortal}
-                  onClick={() => void onPortal()}
-                >
-                  {busy === "portal" ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
+            </CardHeader>
+            <CardContent className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,0.7fr)] sm:items-end">
+              <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex min-w-0 flex-col gap-2">
+                  <Badge tone={badgeTone(guildTier)} className="w-fit">
+                    {PLAN_TIER_LABEL[guildTier]}
+                  </Badge>
+                  <p className="font-mono text-3xl font-semibold tracking-tight">
+                    {priceLabel ? (
+                      <>
+                        {priceLabel}
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          /month
+                        </span>
+                      </>
+                    ) : (
+                      "Free"
+                    )}
+                  </p>
+                  {sub ? (
+                    <p className="w-fit rounded-sm border border-border/70 bg-muted/30 px-2 py-1 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+                      {SUBSCRIPTION_STATUS_LABEL[sub.status]}
+                    </p>
                   ) : null}
-                  Manage billing
-                </Button>
-              ) : (
-                <div className="flex flex-col items-start gap-2">
+                  {data && !data.configured ? (
+                    <p className="max-w-[36ch] text-sm text-muted-foreground">
+                      Stripe isn't configured in this environment. Checkout
+                      activates with <code>STRIPE_SECRET_KEY</code> and the price
+                      ids.
+                    </p>
+                  ) : null}
+                </div>
+
+                {coveredByOther ? null : paidHere ? (
                   <Button
                     type="button"
-                    disabled={Boolean(busy) || !canCheckout}
-                    aria-label="Upgrade this server"
-                    onClick={() => void onCheckout("pro")}
+                    className="w-fit shrink-0"
+                    disabled={Boolean(busy) || !canPortal}
+                    onClick={() => void onPortal()}
                   >
-                    {busy === "checkout-pro" ? (
+                    {busy === "portal" ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden />
-                    ) : (
-                      <Rocket className="size-4" aria-hidden />
-                    )}
-                    Upgrade
+                    ) : null}
+                    Manage billing
                   </Button>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:text-primary disabled:opacity-40"
-                    disabled={Boolean(busy) || !canCheckout}
-                    onClick={() => void onCheckout("business")}
-                  >
-                    Business · {BILLING_PLAN_PRICES.business.label}
-                  </button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Next invoice</CardTitle>
-              <CardDescription>
-                {coveredByOther
-                  ? "Billing for this server stays with the other account."
-                  : "The next charge for this community. Invoices stay in Stripe."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-6">
-                <Stat value={invoiceAmount} label="Amount" />
-                <Stat value={invoiceDateValue} label={invoiceDateLabel} />
+                ) : (
+                  <div className="flex shrink-0 flex-col items-start gap-2">
+                    <Button
+                      type="button"
+                      className="w-fit"
+                      disabled={Boolean(busy) || !canCheckout}
+                      aria-label="Upgrade this server"
+                      onClick={() => void onCheckout("pro")}
+                    >
+                      {busy === "checkout-pro" ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Rocket className="size-4" aria-hidden />
+                      )}
+                      Upgrade
+                    </Button>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-primary disabled:opacity-40"
+                      disabled={Boolean(busy) || !canCheckout}
+                      onClick={() => void onCheckout("business")}
+                    >
+                      Business · {BILLING_PLAN_PRICES.business.label}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-border/70 pt-5 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  Billing details
+                </p>
+                <dl className="mt-4 grid grid-cols-2 gap-5">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Amount</dt>
+                    <dd className="mt-1 font-mono text-lg font-semibold tracking-tight">
+                      {invoiceAmount}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">
+                      {invoiceDateLabel}
+                    </dt>
+                    <dd className="mt-1 font-mono text-sm font-semibold tracking-tight">
+                      {invoiceDateValue}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+                  {coveredByOther
+                    ? "Billing for this server stays with the other account."
+                    : "Invoices and payment methods are managed in Stripe."}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -472,8 +570,8 @@ export function BillingDashboard({
             {serverLabel}.
           </p>
         </div>
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full border-collapse text-sm">
+        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+          <table className="w-full min-w-[38rem] border-collapse text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -491,19 +589,19 @@ export function BillingDashboard({
               {rows.map((row) => (
                 <tr
                   key={row.feature}
-                  className="border-b border-border/70 last:border-0"
+                  className="border-b border-border/70 transition-colors last:border-0 hover:bg-muted/20"
                 >
-                  <td className="px-5 py-2.5">{row.feature}</td>
+                  <td className="px-5 py-3 font-medium">{row.feature}</td>
                   <td className="px-5 py-2.5 font-mono text-xs text-muted-foreground">
                     {row.limit}
                   </td>
                   <td className="px-5 py-2.5">
                     {row.access === "included" ? (
-                      <span className="font-mono text-xs text-[var(--success)]">
+                      <span className="inline-flex rounded-sm border border-[var(--success-border)] bg-[var(--success-bg)] px-2 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--success)]">
                         Included
                       </span>
                     ) : (
-                      <span className="font-mono text-xs text-muted-foreground">
+                      <span className="inline-flex rounded-sm border border-border/70 bg-muted/30 px-2 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                         {PLAN_TIER_LABEL[row.access]}
                       </span>
                     )}
