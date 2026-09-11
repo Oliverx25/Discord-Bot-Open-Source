@@ -108,9 +108,6 @@ export default defineConfig({
     configPath: "./wrangler.jsonc",
   }),
   integrations: [react()],
-  prefetch: {
-    defaultStrategy: "hover",
-  },
   env: {
     schema: {
       PUBLIC_API_BASE: envField.string({
