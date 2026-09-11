@@ -15,7 +15,15 @@ const itemClass =
 const menuClass =
   "w-[200px] rounded-md border border-[var(--border-default)] bg-[var(--bg-raised)] p-1 text-[var(--text-secondary)] shadow-[var(--shadow-2)]";
 
-function AccountMenuItems({ onClose }: { onClose: () => void }) {
+function AccountMenuItems({
+  onClose,
+  tier,
+}: {
+  onClose: () => void;
+  tier?: PlanTier;
+}) {
+  const paid = Boolean(tier && tier !== "free");
+
   function signOut(): void {
     onClose();
     void logout().finally(() => {
@@ -29,10 +37,16 @@ function AccountMenuItems({ onClose }: { onClose: () => void }) {
       <a
         href="/dashboard/general/billing"
         role="menuitem"
-        className={itemClass}
+        className={cn(itemClass, "justify-between gap-2")}
+        aria-label={tier ? `Billing, ${PLAN_TIER_LABEL[tier]} plan` : undefined}
         onClick={onClose}
       >
         Billing
+        {tier ? (
+          <Badge className="shrink-0" tone={paid ? "pro" : "free"} size="sm">
+            {PLAN_TIER_LABEL[tier]}
+          </Badge>
+        ) : null}
       </a>
       <div className="my-1 h-px bg-[var(--border-subtle)]" />
       <button
@@ -111,7 +125,6 @@ export function PanelUserMenu({
   tier: PlanTier;
 }) {
   const [open, setOpen] = useState(false);
-  const paid = tier !== "free";
   const url = user?.avatarUrl ?? null;
   const label = user?.globalName || user?.username || "Account";
 
@@ -148,11 +161,8 @@ export function PanelUserMenu({
               {user ? initialsFromName(label) : "—"}
             </span>
           )}
-          <span className="hidden min-w-0 flex-1 items-center gap-2 px-2.5 sm:flex">
-            <span className="max-w-[9rem] truncate text-[13px] font-semibold leading-none tracking-tight">
-              {user?.username ?? ""}
-            </span>
-            <Badge tone={paid ? "pro" : "free"}>{PLAN_TIER_LABEL[tier]}</Badge>
+          <span className="hidden min-w-0 flex-1 truncate px-2.5 text-[13px] font-semibold leading-none tracking-tight sm:block">
+            {user?.username ?? ""}
           </span>
           <ChevronDown
             className={cn(
@@ -164,7 +174,7 @@ export function PanelUserMenu({
         </Button>
       }
     >
-      <AccountMenuItems onClose={() => setOpen(false)} />
+      <AccountMenuItems onClose={() => setOpen(false)} tier={tier} />
     </Popover>
   );
 }
