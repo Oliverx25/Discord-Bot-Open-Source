@@ -320,14 +320,18 @@ button.tobot-glass[data-open] {
   background: rgb(255 255 255 / 0.06);
 }
 
-/* Placa de sombra plantada: no se transforma. Solo se mueve la cara. */
+/* Placa plantada + recorte: la cara transparente deja ver el fondo de la página,
+   no la sombra. ::before es la losa; ::after recorta el hueco de la cara. */
 .tobot-physical {
+  --physical-plate: var(--accent-shadow);
   position: relative;
   display: inline-flex;
+  isolation: isolate;
   max-width: 100%;
   margin: 0 var(--press-offset-full) var(--press-offset-full) 0;
   padding: 0 !important;
   border: 0 !important;
+  border-radius: var(--radius-md);
   background: transparent !important;
   color: inherit;
   font: inherit;
@@ -339,15 +343,26 @@ button.tobot-glass[data-open] {
   -webkit-tap-highlight-color: transparent;
 }
 
-.tobot-physical::before {
+.tobot-physical::before,
+.tobot-physical::after {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
-  border-radius: var(--radius-md);
+  border-radius: inherit;
   pointer-events: none;
-  background: var(--physical-plate, var(--accent-shadow));
+}
+
+.tobot-physical::before {
+  z-index: 0;
+  background: var(--physical-plate);
   transform: translate(var(--press-offset-full), var(--press-offset-full));
+}
+
+.tobot-physical::after {
+  z-index: 0;
+  background: #000;
+  mix-blend-mode: destination-out;
+  transition: transform var(--dur-fast) var(--ease-snap);
 }
 
 .tobot-physical--accent {
@@ -373,6 +388,7 @@ button.tobot-glass[data-open] {
 .tobot-physical > * {
   position: relative;
   z-index: 1;
+  isolation: isolate;
   box-sizing: border-box;
   overflow: hidden;
   transition: transform var(--dur-fast) var(--ease-snap);
@@ -382,6 +398,7 @@ button.tobot-glass[data-open] {
   position: absolute;
   inset: 0;
   z-index: 0;
+  isolation: auto;
   overflow: hidden;
   border-radius: var(--radius-md);
   pointer-events: none;
@@ -389,7 +406,8 @@ button.tobot-glass[data-open] {
   transition: none;
 }
 
-.tobot-physical:has(> .tobot-physical__plate)::before {
+.tobot-physical:has(> .tobot-physical__plate)::before,
+.tobot-physical:has(> .tobot-physical__plate)::after {
   content: none;
 }
 
@@ -412,11 +430,13 @@ button.tobot-glass[data-open] {
   width: 100%;
 }
 
+.tobot-physical:hover:not(:disabled):not([aria-disabled="true"])::after,
 .tobot-physical:hover:not(:disabled):not([aria-disabled="true"])
   > *:not(.tobot-physical__plate) {
   transform: translate(var(--press-offset), var(--press-offset));
 }
 
+.tobot-physical:active:not(:disabled):not([aria-disabled="true"])::after,
 .tobot-physical:active:not(:disabled):not([aria-disabled="true"])
   > *:not(.tobot-physical__plate) {
   transform: translate(var(--press-offset-full), var(--press-offset-full));
@@ -429,7 +449,9 @@ button.tobot-glass[data-open] {
 }
 
 .tobot-physical:disabled::before,
-.tobot-physical[aria-disabled="true"]::before {
+.tobot-physical:disabled::after,
+.tobot-physical[aria-disabled="true"]::before,
+.tobot-physical[aria-disabled="true"]::after {
   content: none;
 }
 
@@ -439,10 +461,13 @@ button.tobot-glass[data-open] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tobot-physical::after,
   .tobot-physical > * {
     transition: none;
   }
 
+  .tobot-physical:hover::after,
+  .tobot-physical:active::after,
   .tobot-physical:hover > *:not(.tobot-physical__plate),
   .tobot-physical:active > *:not(.tobot-physical__plate) {
     transform: none;
