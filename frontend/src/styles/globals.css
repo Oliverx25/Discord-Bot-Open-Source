@@ -432,12 +432,22 @@ button.tobot-glass[data-open] {
 
 .tobot-physical:hover:not(:disabled):not([aria-disabled="true"])::after,
 .tobot-physical:hover:not(:disabled):not([aria-disabled="true"])
+  > *:not(.tobot-physical__plate),
+.group\/physical:hover
+  .tobot-physical:not(:disabled):not([aria-disabled="true"])::after,
+.group\/physical:hover
+  .tobot-physical:not(:disabled):not([aria-disabled="true"])
   > *:not(.tobot-physical__plate) {
   transform: translate(var(--press-offset), var(--press-offset));
 }
 
 .tobot-physical:active:not(:disabled):not([aria-disabled="true"])::after,
 .tobot-physical:active:not(:disabled):not([aria-disabled="true"])
+  > *:not(.tobot-physical__plate),
+.group\/physical:active
+  .tobot-physical:not(:disabled):not([aria-disabled="true"])::after,
+.group\/physical:active
+  .tobot-physical:not(:disabled):not([aria-disabled="true"])
   > *:not(.tobot-physical__plate) {
   transform: translate(var(--press-offset-full), var(--press-offset-full));
 }

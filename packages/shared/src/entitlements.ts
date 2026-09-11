@@ -5,7 +5,7 @@ export type PlanTier = "free" | "pro" | "business";
 export const PLAN_TIERS = ["free", "pro", "business"] as const;
 
 export const PLAN_TIER_LABEL: Record<PlanTier, string> = {
-  free: "Gratis",
+  free: "Free",
   pro: "Pro",
   business: "Business",
 };

@@ -74,7 +74,7 @@ export function PanelGuildSwitcher({
           aria-haspopup="listbox"
           aria-expanded={open}
           className={cn(
-            "max-w-[18rem] justify-start px-2.5 font-sans text-sm font-medium normal-case tracking-normal",
+            "h-[38px] max-w-[18rem] justify-start px-2.5 font-sans text-sm font-medium normal-case tracking-normal",
             open && "border-primary text-[var(--text-accent)]",
           )}
         >

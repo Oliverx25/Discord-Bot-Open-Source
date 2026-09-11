@@ -1,14 +1,9 @@
 import { useState } from "react";
 import { PLAN_TIER_LABEL, type PanelMeUser, type PlanTier } from "@adobos/shared";
 import { ChevronDown } from "lucide-react";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-  initialsFromName,
-} from "@/components/ui/avatar";
+import { initialsFromName } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Popover } from "@/components/ui/popover";
 import { logout } from "@/lib/api/me";
 import { cn } from "@/lib/utils";
@@ -55,6 +50,59 @@ function AccountMenuItems({ onClose }: { onClose: () => void }) {
   );
 }
 
+function UserAvatarPhysical({
+  user,
+  as = "button",
+  ...props
+}: {
+  user: PanelMeUser | null;
+  as?: "button" | "span";
+} & Omit<ButtonProps, "variant" | "size" | "plate" | "children">) {
+  const url = user?.avatarUrl ?? null;
+  const label = user?.globalName || user?.username || "Account";
+
+  return (
+    <Button
+      as={as}
+      size="icon"
+      variant="secondary"
+      className="border-0 p-0 hover:border-0"
+      plate={
+        url ? (
+          <img
+            src={url}
+            alt=""
+            className="size-full origin-center scale-150 object-cover blur-[12px]"
+          />
+        ) : undefined
+      }
+      {...props}
+    >
+      {url ? (
+        <>
+          <img
+            src={url}
+            alt=""
+            className="absolute inset-0 size-full scale-125 object-cover blur-md"
+            aria-hidden
+          />
+          <img
+            src={url}
+            alt=""
+            width={38}
+            height={38}
+            className="relative size-full object-cover"
+          />
+        </>
+      ) : (
+        <span className="font-display text-xs font-bold text-[var(--text-secondary)]">
+          {user ? initialsFromName(label) : "—"}
+        </span>
+      )}
+    </Button>
+  );
+}
+
 export function PanelUserMenu({
   user,
   tier,
@@ -63,67 +111,9 @@ export function PanelUserMenu({
   tier: PlanTier;
 }) {
   const [open, setOpen] = useState(false);
-  const label = user?.globalName || user?.username || "Account";
   const paid = tier !== "free";
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-      portalled
-      align="end"
-      contentWidth={200}
-      className={menuClass}
-      trigger={
-        <button
-          type="button"
-          aria-label="Account menu"
-          aria-expanded={open}
-          className="flex items-center gap-2 rounded-md bg-transparent p-0.5 text-left outline-none hover:bg-[var(--bg-hover)] focus-visible:shadow-[var(--ring-focus)]"
-        >
-          <Avatar className="size-[38px] rounded-md border-0 bg-[var(--bg-raised)]">
-            {user?.avatarUrl ? (
-              <AvatarImage src={user.avatarUrl} alt="" className="rounded-md" />
-            ) : null}
-            <AvatarFallback className="rounded-md bg-[var(--bg-raised)] font-display text-xs font-bold text-[var(--text-secondary)]">
-              {user ? initialsFromName(label) : "—"}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden min-w-0 flex-col items-start gap-0.5 sm:flex">
-            <span className="max-w-[9rem] truncate text-[13px] font-semibold leading-tight tracking-tight">
-              {user?.username ?? ""}
-            </span>
-            <Badge
-              className={cn(
-                "h-[18px] px-1.5 text-[10px] tracking-[0.14em]",
-                paid
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-[var(--border-strong)] bg-[var(--bg-hover)] text-[var(--text-secondary)]",
-              )}
-            >
-              {PLAN_TIER_LABEL[tier]}
-            </Badge>
-          </span>
-          <ChevronDown
-            className={cn(
-              "size-4 shrink-0 text-[var(--text-muted)] transition-transform duration-[var(--dur-fast)] ease-[var(--ease-standard)]",
-              open && "rotate-180",
-            )}
-            aria-hidden
-          />
-        </button>
-      }
-    >
-      <AccountMenuItems onClose={() => setOpen(false)} />
-    </Popover>
-  );
-}
-
-/** Avatar físico de la landing: solo la foto, abre el menú de cuenta. */
-export function LandingAvatarMenu({ user }: { user: PanelMeUser }) {
-  const [open, setOpen] = useState(false);
-  const label = user.globalName || user.username || "Account";
-  const url = user.avatarUrl;
+  const url = user?.avatarUrl ?? null;
+  const label = user?.globalName || user?.username || "Account";
 
   return (
     <Popover
@@ -136,43 +126,67 @@ export function LandingAvatarMenu({ user }: { user: PanelMeUser }) {
       trigger={
         <Button
           type="button"
-          size="icon"
           variant="secondary"
           aria-label="Account menu"
+          aria-haspopup="menu"
           aria-expanded={open}
-          className="border-0 p-0 hover:border-0"
-          plate={
-            url ? (
-              <img
-                src={url}
-                alt=""
-                className="size-full origin-center scale-150 object-cover blur-[12px]"
-              />
-            ) : undefined
-          }
+          className={cn(
+            "h-[38px] justify-start gap-0 p-0 pr-2.5 font-sans font-medium normal-case tracking-normal",
+            open && "border-primary text-[var(--text-accent)]",
+          )}
         >
           {url ? (
-            <>
-              <img
-                src={url}
-                alt=""
-                className="absolute inset-0 size-full scale-125 object-cover blur-md"
-                aria-hidden
-              />
-              <img
-                src={url}
-                alt=""
-                width={38}
-                height={38}
-                className="relative size-full object-cover"
-              />
-            </>
+            <img
+              src={url}
+              alt=""
+              width={38}
+              height={38}
+              className="size-[38px] shrink-0 object-cover"
+            />
           ) : (
-            <span className="font-display text-xs font-bold text-[var(--text-secondary)]">
-              {initialsFromName(label)}
+            <span className="flex size-[38px] shrink-0 items-center justify-center bg-[var(--bg-raised)] font-display text-xs font-bold text-[var(--text-secondary)]">
+              {user ? initialsFromName(label) : "—"}
             </span>
           )}
+          <span className="hidden min-w-0 flex-1 items-center gap-2 px-2.5 sm:flex">
+            <span className="max-w-[9rem] truncate text-[13px] font-semibold leading-none tracking-tight">
+              {user?.username ?? ""}
+            </span>
+            <Badge tone={paid ? "pro" : "free"}>{PLAN_TIER_LABEL[tier]}</Badge>
+          </span>
+          <ChevronDown
+            className={cn(
+              "mr-0.5 size-[13px] shrink-0 text-[var(--text-muted)] transition-transform duration-[var(--dur-fast)] ease-[var(--ease-standard)]",
+              open && "rotate-180",
+            )}
+            aria-hidden
+          />
         </Button>
+      }
+    >
+      <AccountMenuItems onClose={() => setOpen(false)} />
+    </Popover>
+  );
+}
+
+/** Avatar físico de la landing: solo la foto, abre el menú de cuenta. */
+export function LandingAvatarMenu({ user }: { user: PanelMeUser }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      portalled
+      align="end"
+      contentWidth={200}
+      className={menuClass}
+      trigger={
+        <UserAvatarPhysical
+          user={user}
+          aria-label="Account menu"
+          aria-expanded={open}
+        />
       }
     >
       <AccountMenuItems onClose={() => setOpen(false)} />
