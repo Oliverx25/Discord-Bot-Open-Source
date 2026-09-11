@@ -15,7 +15,7 @@ const { title, description, user } = Astro.props;
 
 <BaseLayout title={title} description={description}>
   <div class="relative bg-background text-foreground">
-    <SiteHeader client:load user={user} />
+    <SiteHeader client:load transition:persist="site-header" user={user} />
     <slot />
     <SiteFooter signedIn={Boolean(user)} />
   </div>

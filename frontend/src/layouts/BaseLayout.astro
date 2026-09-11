@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from "astro:transitions";
 import "../styles/globals.css";
 
 interface Props {
@@ -13,13 +14,14 @@ const {
 ---
 
 <!doctype html>
-<html lang="en" class="dark" data-theme="dark">
+<html lang="en" class="dark" data-theme="dark" transition:animate="none">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <slot name="head" />
+    <ClientRouter fallback="swap" />
     <script is:inline>
       (function () {
         function applyThemeFromStorage() {
@@ -52,12 +54,34 @@ const {
             /* ignore */
           }
         }
+        function bindSidebarNavScroll() {
+          var nav = document.getElementById("tobot-sidebar-nav");
+          if (!nav) return;
+          var key = "tobot.sidebar-nav-scroll";
+          try {
+            var y = sessionStorage.getItem(key);
+            if (y) nav.scrollTop = Number(y);
+          } catch (_) {}
+          if (nav.dataset.scrollBound === "1") return;
+          nav.dataset.scrollBound = "1";
+          nav.addEventListener(
+            "scroll",
+            function () {
+              try {
+                sessionStorage.setItem(key, String(nav.scrollTop));
+              } catch (_) {}
+            },
+            { passive: true },
+          );
+        }
         applyThemeFromStorage();
         applySignedInHint();
+        bindSidebarNavScroll();
         document.addEventListener("astro:page-load", applyThemeFromStorage);
         document.addEventListener("astro:after-swap", applyThemeFromStorage);
         document.addEventListener("astro:page-load", applySignedInHint);
         document.addEventListener("astro:after-swap", applySignedInHint);
+        document.addEventListener("astro:page-load", bindSidebarNavScroll);
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

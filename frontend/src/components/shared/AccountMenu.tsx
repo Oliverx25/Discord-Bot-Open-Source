@@ -104,7 +104,6 @@ export function LandingAvatarMenu({ user }: { user: PanelMeUser }) {
           href="/dashboard"
           role="menuitem"
           className={itemClass}
-          data-astro-reload
           onClick={close}
         >
           Dashboard

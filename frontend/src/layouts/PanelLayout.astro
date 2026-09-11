@@ -33,16 +33,22 @@ const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
       <header
         class="relative z-50 flex h-[var(--topbar-h)] shrink-0 items-center gap-3 bg-background px-[var(--dash-pad)]"
       >
-        <PanelMobileMenu client:load />
+        <PanelMobileMenu client:load transition:persist="panel-mobile-menu" />
         <h1 class="sr-only">{title}</h1>
         <div class="min-w-0 flex-1">
           <PanelGuildSwitcher
             client:load
+            transition:persist="panel-guild"
             guilds={me.guilds}
             selected={selectedGuild}
           />
         </div>
-        <PanelUserMenu client:load user={me.user} tier={tier} />
+        <PanelUserMenu
+          client:load
+          transition:persist="panel-user"
+          user={me.user}
+          tier={tier}
+        />
       </header>
 
       {
@@ -53,6 +59,7 @@ const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
             </p>
             <a
               href={`/auth/invite?guildId=${encodeURIComponent(selectedGuild.id)}`}
+              data-astro-reload
               class="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary hover:underline"
             >
               Add to the server
@@ -71,7 +78,7 @@ const missingBot = Boolean(selectedGuild && !selectedGuild.botPresent);
                 ask for the permissions; then come back and sign in with your
                 account.
               </p>
-              <Button href="/auth/invite">Add to a server</Button>
+              <Button href="/auth/invite" reload>Add to a server</Button>
             </div>
           ) : (
             <main class="h-full overflow-y-auto px-[var(--dash-pad)] py-[var(--dash-pad)]">

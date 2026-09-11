@@ -40,24 +40,3 @@ const path = normalizePath(currentPath);
     ))
   }
 </nav>
-
-<script is:inline>
-  (function () {
-    var nav = document.getElementById("tobot-sidebar-nav");
-    if (!nav) return;
-    var key = "tobot.sidebar-nav-scroll";
-    try {
-      var y = sessionStorage.getItem(key);
-      if (y) nav.scrollTop = Number(y);
-    } catch (e) {}
-    nav.addEventListener(
-      "scroll",
-      function () {
-        try {
-          sessionStorage.setItem(key, String(nav.scrollTop));
-        } catch (e) {}
-      },
-      { passive: true },
-    );
-  })();
-</script>

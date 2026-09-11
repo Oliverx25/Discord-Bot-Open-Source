@@ -65,9 +65,7 @@ function AuthSlot({ user }: { user: PanelMeUser | null }) {
     return (
       <div className="flex items-center gap-2">
         <LandingAvatarMenu user={user} />
-        <Button href="/dashboard" reload>
-          Open dashboard
-        </Button>
+        <Button href="/dashboard">Open dashboard</Button>
       </div>
     );
   }
