@@ -9,11 +9,17 @@ export const SYSTEM_COMMAND_CATEGORY_LABELS: Record<
   SystemCommandCategory,
   string
 > = {
+  general: "General",
   moderation: "Moderation",
-  levels: "Levels",
+  community: "Community",
   economy: "Economy",
-  utilities: "Utilities",
-  forms: "Forms",
+  security: "Security",
+  roles: "Roles",
+  messages: "Messages",
+  welcome: "Welcome",
+  support: "Support",
+  automation: "Automation",
+  integrations: "Integrations",
 };
 
 export const SYSTEM_COMMAND_PARAM_TYPE_LABELS: Record<

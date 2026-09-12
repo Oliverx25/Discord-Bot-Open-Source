@@ -1,11 +1,17 @@
 /** Tipos e interfaces del catálogo de slash commands nativos (Fase 7, MAINT-01). */
 
 export type SystemCommandCategory =
+  | "general"
   | "moderation"
-  | "levels"
+  | "community"
   | "economy"
-  | "utilities"
-  | "forms";
+  | "security"
+  | "roles"
+  | "messages"
+  | "welcome"
+  | "support"
+  | "automation"
+  | "integrations";
 
 /** Tipo Discord de un parámetro slash. */
 export type SystemCommandParamType =

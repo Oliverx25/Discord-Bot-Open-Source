@@ -194,11 +194,11 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
     requiresAdminByDefault: true,
   },
 
-  // ── Levels ──────────────────────────────────────────────────
+  // ── Community ───────────────────────────────────────────────
   {
     name: "rank",
     description: "Shows the user's level, XP and rank.",
-    category: "levels",
+    category: "community",
     defaultEnabled: true,
     options: [opt("user", "USER", false, "Member to look up (optional).")],
     supportsEphemeral: true,
@@ -208,7 +208,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
   {
     name: "leaderboard",
     description: "Shows the server's XP leaderboard.",
-    category: "levels",
+    category: "community",
     defaultEnabled: true,
     options: [],
     supportsEphemeral: true,
@@ -218,7 +218,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
   {
     name: "givexp",
     description: "Grants XP to a member (admin only).",
-    category: "levels",
+    category: "community",
     defaultEnabled: true,
     options: [
       opt("user", "USER", true, "Member who receives XP."),
@@ -233,7 +233,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
   {
     name: "removexp",
     description: "Removes XP from a member (admin only).",
-    category: "levels",
+    category: "community",
     defaultEnabled: true,
     options: [
       opt("user", "USER", true, "Member to remove XP from."),
@@ -248,7 +248,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
   {
     name: "setlevel",
     description: "Forces a user's level (admin only).",
-    category: "levels",
+    category: "community",
     defaultEnabled: true,
     options: [
       opt("user", "USER", true, "Target member."),
@@ -563,12 +563,12 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
     requiresAdminByDefault: true,
   },
 
-  // ── Utilities ──────────────────────────────────────────────
+  // ── General ─────────────────────────────────────────────────
   {
     name: "userinfo",
     description:
       "Shows a user's creation date, join date, roles and permissions.",
-    category: "utilities",
+    category: "general",
     defaultEnabled: true,
     options: [opt("user", "USER", false, "Member to look up (optional).")],
     supportsEphemeral: true,
@@ -579,7 +579,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
     name: "serverinfo",
     description:
       "Shows the server's boosts, channels, roles, emojis and owner.",
-    category: "utilities",
+    category: "general",
     defaultEnabled: true,
     options: [],
     supportsEphemeral: true,
@@ -589,7 +589,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
   {
     name: "avatar",
     description: "Shows the global and server avatar in high resolution.",
-    category: "utilities",
+    category: "general",
     defaultEnabled: true,
     options: [opt("user", "USER", false, "Member to look up (optional).")],
     supportsEphemeral: true,
@@ -599,7 +599,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
   {
     name: "ping",
     description: "Shows the WebSocket latency (ms).",
-    category: "utilities",
+    category: "general",
     defaultEnabled: true,
     options: [],
     supportsEphemeral: true,
@@ -610,7 +610,7 @@ export const SYSTEM_COMMAND_CATALOG: readonly SystemCommandDefinition[] = [
     name: "help",
     description:
       "Interactive menu of the commands available to you based on your permissions.",
-    category: "utilities",
+    category: "general",
     defaultEnabled: true,
     options: [],
     supportsEphemeral: true,
